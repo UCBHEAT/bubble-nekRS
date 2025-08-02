@@ -1,0 +1,28 @@
+[GENERAL]
+#verbose = true
+polynomialOrder = 7
+startFrom = ss10.f00024
+
+numSteps = 100000
+dt = 1e-4
+writeInterval = 500 # for averaging, use 5000 for 0.75D. 
+
+timeStepper = tombo2
+subCyclingSteps = 2
+
+regularization = hpfrt + nModes=1 + scalingCoeff=0.1/${dt}
+
+[PRESSURE]
+residualTol = 1e-04
+
+[VELOCITY]
+boundaryTypeMap = inlet, outlet,wall,shl 
+rho = 1.0
+viscosity = -1e4
+residualTol = 1e-06
+
+[SCALAR00]
+boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, codedFixedValue
+residualTol = 1e-06
+rho = 1.0
+diffusivity = -1e6

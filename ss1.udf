@@ -1,0 +1,19 @@
+#ifdef __okl__
+
+#include "ss1.oudf"
+
+#endif
+
+void UDF_Setup() 
+{
+}
+
+void UDF_ExecuteStep(double time, int tstep) 
+{
+
+    if (nrs->checkpointStep) {
+    nrs->copyToNek(time, tstep);
+    nek::userchk();
+    }
+
+}

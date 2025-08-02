@@ -1,0 +1,175 @@
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+      integer iel,ifc,bc_flag
+
+      do iel=1,nelt
+      do ifc=1,2*ndim
+         bc_flag = bc(5,ifc,iel,1)
+         if (bc_flag.eq.2) boundaryID(ifc,iel) = 1
+         if (bc_flag.eq.3) boundaryID(ifc,iel) = 2
+         if (bc_flag.eq.4) boundaryID(ifc,iel) = 3
+         if (bc_flag.eq.5) boundaryID(ifc,iel) = 4
+      enddo
+      enddo
+
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine userchk
+
+      include 'SIZE'
+      include 'TOTAL'
+
+      call check_bulk()
+      call get_global_sherwood_number()
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine check_bulk
+
+      include 'SIZE'
+      include 'TOTAL'
+
+
+      ntot=nx1*ny1*nz1*nelv
+      ubar    = glsc2(vz,bm1,ntot)/volvm1
+
+      if (nid.eq.0) write(6,*) 'stream-wise ubar:',ubar
+
+c      cbar    = glsc2(t(1,1,1,1,2),bm1,ntot)/volvm1
+c      if (nid.eq.0) write(6,*) 'cbar:',cbar
+	  
+      tbar    = glsc2(t(1,1,1,1,1),bm1,ntot)/volvm1
+      if (nid.eq.0) write(6,*) 'tbar:',tbar
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+c-----------------------------------------------------------------------
+      subroutine get_global_sherwood_number()
+      include 'SIZE'
+      include 'TOTAL'
+c	  
+c calcualte global sharewood number
+c
+      real*8 gradcx(lx1,ly1,lz1,lelt)
+      real*8 gradcy(lx1,ly1,lz1,lelt)
+      real*8 gradcz(lx1,ly1,lz1,lelt)
+      real*8 gradcr(lx1,ly1,lz1,lelt)
+      real*8 cn(lx1,ly1,lz1,lelt)
+      real*8 sn1(3)
+
+      real totalAA,AAV,MTC
+      real sint2,sarea2
+      integer i,j,k,e,iside
+ 
+	  nxyz = nx1*ny1*nz1
+	  ntot = nxyz*nelt
+	  
+	  call rzero(gradcx,ntot)
+	  call rzero(gradcy,ntot)
+	  call rzero(gradcz,ntot)
+	  call rzero(gradcr,ntot)
+	 
+	  call copy(cn,t(1,1,1,1,1),ntot)
+
+	  call gradm1(gradcx,gradcy,gradcz,cn)
+	  call opcolv(gradcx,gradcy,gradcz,bm1)
+	  call opdssum(gradcx,gradcy,gradcz) 
+      call opcolv(gradcx,gradcy,gradcz,binvm1)
+	 
+      do e=1,nelt
+      do iside=1,6
+         if (bc(5,iside,e,1).eq.5) then
+		   call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,iside)
+           do k=k0,k1
+           do j=j0,j1
+           do i=i0,i1
+	
+           call getSnormal(sn1,i,j,k,iside,e)	
+	
+           gradcr(i,j,k,e) =  sn1(1)*gradcx(i,j,k,e) 
+           gradcr(i,j,k,e) =  gradcr(i,j,k,e) +  sn1(2)*gradcy(i,j,k,e) 
+           gradcr(i,j,k,e) =  gradcr(i,j,k,e) +  sn1(3)*gradcz(i,j,k,e) 
+
+           enddo
+           enddo
+           enddo
+
+         endif
+      enddo
+      enddo
+	  
+      AAV = 0.0
+      totalAA = 0.0 
+      do e=1,nelt
+      do iside=1,6
+         if (bc(5,iside,e,1).eq.5) then
+           sint2 = 0.0
+           sarea2 = 0.0
+           call surface_int(sint2,sarea2,gradcr,e,iside)
+           totalAA = totalAA  + sarea2
+           AAV  = AAV  + sint2
+         endif
+      enddo
+      enddo
+
+      totalAA = glsum(totalAA,1)
+      AAV = glsum(AAV,1)
+      gca = AAV/totalAA
+
+      Reu = 1e4
+	  Pcu = 1e6
+      Scu = Pcu/Reu
+
+      Dc = 1.0/Pcu
+
+      c_w = 1.0
+      c_b = 0.0
+	  
+      call col2(cn,vz,ntot)
+      cbar = glsc2(cn,bm1,ntot)/volvm1
+      if (nid.eq.0) write(6,*) 'cbar:',cbar
+      c_b = cbar
+
+      MTC = gca*Dc/(c_b - c_w)
+      
+      L =  1.0
+      Sh_nek = -MTC/(Dc/L)
+	  
+      Re_trans =  2300.0
+	  
+      if (Reu.gt.Re_trans) then
+       Sh_turb_PS = 0.0102*Reu**(0.9)*Scu**(1.0/3.0)      ! Pinczewski and Sideman
+      endif
+
+      if(nid.eq.0) then
+       write(6,*)  'totalAA is ', totalAA 
+       write(6,*)  'AAV is ', AAV
+       write(6,*)  'Re: ', Reu 
+       write(6,*)  'Sc: ', Scu
+       write(6,*)  'Sh_nek: ', Sh_nek
+
+c	   if (Reu.gt.Re_trans) then
+c       write(6,*)  'Sh_turb_PS: ',Sh_turb_PS       ! Pinczewski and Sideman
+c       else
+c       write(6,*)  'Sh_laminar_local_UWT: 3.66'   ! <Heat Transfer> p663
+c       endif
+
+      open(110, file="Sh_nek", status="old", 
+     & position="append", action="write")
+      write(110,*) Reu, Scu, Sh_nek
+      close(110)
+
+      endif
+  
+
+      return
+      end
+c-----------------------------------------------------------------------
