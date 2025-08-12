@@ -5,3 +5,5 @@ cmake.log
 Sh_nek
 # Generated SLURM batch file
 s.bin
+# Mesh intermediate files
+*.msh
