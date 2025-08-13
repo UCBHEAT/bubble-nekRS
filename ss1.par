@@ -1,22 +1,24 @@
 [GENERAL]
-#verbose = true
-#startFrom = ss10.f00024
+verbose = true
+# Uncomment to resume from a checkpoint.
+#startFrom = ss10.f00000
 
 polynomialOrder = 7
 numSteps = 100000
-dt = 1e-04
 writeInterval = 500 # for averaging, use 5000 for 0.75D. 
 
 timeStepper = tombo2
 subCyclingSteps = 2
+dt = targetCFL=0.5 + max=1e-04 + initial=1e-05
 
-regularization = hpfrt + nModes=1 + scalingCoeff=0.1/${dt}
+#regularization = hpfrt + nModes=1 + scalingCoeff=0.1/${dt}
+regularization = hpfrt + nModes=1 + scalingCoeff=0.1/1e-04
 
 [PRESSURE]
 residualTol = 1e-04
 
 [VELOCITY]
-boundaryTypeMap = inlet, outlet, wall, shl 
+boundaryTypeMap = inlet, outlet, wall, shl
 rho = 1.0
 viscosity = 1e-04
 residualTol = 1e-06
