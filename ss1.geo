@@ -50,8 +50,8 @@ Curve Loop(205) = {201, 202, 203, 204};
 // Make the final Surface.
 Surface(1002) = {205};
 
-// Side wall. We make it in 4 parts so that the axis dimension is properly
-// subdivided in 1D.
+// Side wall. We make it in 4 parts so that they can be part of transfinite
+// volumes with the sphere pieces.
 Line(301) = {12, 22};
 Line(302) = {13, 23};
 Line(303) = {14, 24};
@@ -60,90 +60,127 @@ Curve Loop(305) = {301, 201, -302, -101};
 Curve Loop(306) = {302, 202, -303, -102};
 Curve Loop(307) = {303, 203, -304, -103};
 Curve Loop(308) = {304, 204, -301, -104};
-Surface(1003) = {305};
-Surface(1004) = {306};
-Surface(1005) = {307};
-Surface(1006) = {308};
+Surface(3001) = {305};
+Surface(3002) = {306};
+Surface(3003) = {307};
+Surface(3004) = {308};
 
 // Bubble sphere surface.
 // Making a sphere is kind of a chore using only builtins (no OpenCASCADE).
+x = bubble_radius * Sqrt(2)/2;
 Point(41) = {0, 0, 0}; // center
-Point(42) = {bubble_radius, 0, 0}; // 12 o'clock
-Point(43) = {-bubble_radius, 0, 0}; // 6 o'clock
-Point(44) = {0, bubble_radius, 0, 0}; // 3 o'clock
-Point(45) = {0, -bubble_radius, 0, 0}; // 9 o'clock
-Point(46) = {0, 0, bubble_radius}; // north pole
-Point(47) = {0, 0, -bubble_radius}; // south pole
-Circle(401) = {42, 41, 44};
-Circle(402) = {44, 41, 43};
-Circle(403) = {43, 41, 45};
+Point(42) = {x, 0, x}; // top 12 o'clock
+Point(43) = {0, x, x}; // top 3 o'clock
+Point(44) = {-x, 0, x}; // top 6 o'clock
+Point(45) = {0, -x, x}; // top 9 o'clock
+Point(46) = {x, 0, -x}; // bottom 12 o'clock
+Point(47) = {0, x, -x}; // bottom 3 o'clock
+Point(48) = {-x, 0, -x}; // bottom 6 o'clock
+Point(49) = {0, -x, -x}; // bottom 9 o'clock
+// top face
+Circle(401) = {42, 41, 43};
+Circle(402) = {43, 41, 44};
+Circle(403) = {44, 41, 45};
 Circle(404) = {45, 41, 42};
-Circle(405) = {42, 41, 46};
-Circle(406) = {46, 41, 43};
+Curve Loop(405) = {401, 402, 403, 404};
+Surface(4001) = {405};
+// bottom face
+Circle(426) = {46, 41, 47};
+Circle(427) = {47, 41, 48};
+Circle(428) = {48, 41, 49};
+Circle(429) = {49, 41, 46};
+Curve Loop(430) = {426, 427, 428, 429};
+Surface(4006) = {430};
+// 12-3 o'clock
+//Circle(406) = {42, 41, 43};
 Circle(407) = {43, 41, 47};
-Circle(408) = {47, 41, 42};
-Circle(409) = {44, 41, 46};
-Circle(410) = {46, 41, 45};
-Circle(411) = {45, 41, 47};
-Circle(412) = {47, 41, 44};
-Curve Loop(413) = {402, 407, 412};
-Surface(1007) = {413} In Sphere {41};
-Curve Loop(414) = {-402, 409, 406};
-Surface(1008) = {414} In Sphere {41};
-Curve Loop(415) = {-403, -406, 410};
-Surface(1009) = {415} In Sphere {41};
-Curve Loop(416) = {-403, 407, -411};
-Surface(1010) = {416} In Sphere {41};
-Curve Loop(417) = {-404, 411, 408};
-Surface(1011) = {417} In Sphere {41};
-Curve Loop(418) = {404, 405, 410};
-Surface(1012) = {418} In Sphere {41};
-Curve Loop(419) = {-401, 405, -409};
-Surface(1013) = {419} In Sphere {41};
-Curve Loop(420) = {-401, -408, 412};
-Surface(1014) = {420} In Sphere {41};
+//Circle(408) = {47, 41, 46};
+//Circle(409) = {46, 41, 42};
+Circle(422) = {42, 41, 46};
+Curve Loop(410) = {401, 407, -426, -422};
+Surface(4002) = {410};
+// 3-6 o'clock
+//Circle(411) = {43, 41, 44};
+Circle(412) = {44, 41, 48};
+//Circle(413) = {48, 41, 47};
+//Circle(414) = {47, 41, 43};
+Curve Loop(415) = {402, 412, -427, -407};
+Surface(4003) = {415};
+// 6-9 o'clock
+//Circle(416) = {44, 41, 45};
+Circle(417) = {45, 41, 49};
+//Circle(418) = {49, 41, 48};
+//Circle(419) = {48, 41, 44};
+Curve Loop(420) = {403, 417, -428, -412};
+Surface(4004) = {420};
+// 9-12 o'clock
+//Circle(421) = {45, 41, 42};
+//Circle(422) = {42, 41, 46};
+//Circle(423) = {46, 41, 49};
+//Circle(424) = {49, 41, 45};
+Curve Loop(425) = {404, 422, -429, -417};
+Surface(4005) = {425};
 
-// Volume to be meshed.
-Surface Loop(1015) = {1001, 1002, 1003, 1004, 1005, 1006}; // outer surface
-Surface Loop(1016) = {1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014}; // hole
-Volume(10001) = {1015, 1016};
+// Top connector lines & surfaces
+Line(501) = {22, 42};
+Line(502) = {23, 43};
+Line(503) = {24, 44};
+Line(504) = {25, 45};
+Curve Loop(509) = {201, 502, -401, -501};
+Surface(5001) = {509};
+Curve Loop(510) = {202, 503, -402, -502};
+Surface(5002) = {510};
+Curve Loop(511) = {203, 504, -403, -503};
+Surface(5003) = {511};
+Curve Loop(512) = {204, 501, -404, -504};
+Surface(5004) = {512};
 
-// Recombine tris into quads. (This just generates a pyramid/tet hybrid mesh
-// though.)
-//Transfinite Surface{1001, 1002, 1003, 1004, 1005, 1006};
-//Recombine Surface{1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014};
+// Bottom connector lines & surfaces
+Line(505) = {12, 46};
+Line(506) = {13, 47};
+Line(507) = {14, 48};
+Line(508) = {15, 49};
+Curve Loop(513) = {101, 506, -426, -505};
+Surface(5005) = {513};
+Curve Loop(514) = {102, 507, -427, -506};
+Surface(5006) = {514};
+Curve Loop(515) = {103, 508, -428, -507};
+Surface(5007) = {515};
+Curve Loop(516) = {104, 505, -429, -508};
+Surface(5008) = {516};
 
-// Physical surfaces and volumes, for meshing and export to OpenFOAM.
-Physical Surface("inlet") = {1001};
-Physical Surface("outlet") = {1002};
-Physical Surface("wall") = {1003, 1004, 1005, 1006};
-Physical Surface("bubble") = {1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014};
-Physical Volume("fluid") = {10001};
+// Side wedges
+Curve Loop(517) = {501, 422, -505, 301}; // 12 o'clock
+Surface(5009) = {517};
+Curve Loop(518) = {502, 407, -506, 302}; // 3 o'clock
+Surface(5010) = {518};
+Curve Loop(519) = {503, 412, -507, 303}; // 6 o'clock
+Surface(5011) = {519};
+Curve Loop(520) = {504, 417, -508, 304}; // 9 o'clock
+Surface(5012) = {520};
 
-// Define a simple line for sphere wake (used for length scaling).
-Point(51) = {0, 0, 2*bubble_radius};
-Curve(501) = {41, 51};
+// Volumes
+// Top
+Surface Loop(6001) = {1002, 5001, 5002, 5003, 5004, 4001};
+Volume(60001) = {6001};
+// Bottom
+Surface Loop(6002) = {5007, 4006, 5005, 5006, 5008, 1001};
+Volume(60002) = {6002};
+// 12-3 o'clock
+Surface Loop(6003) = {5009, 5010, 4002, 3001, 5001, 5005};
+Volume(60003) = {6003};
+// 3-6 o'clock
+Surface Loop(6004) = {5010, 5011, 4003, 3002, 5002, 5006};
+Volume(60004) = {6004};
+// 6-9 o'clock
+Surface Loop(6005) = {5011, 5012, 4004, 3003, 5003, 5007};
+Volume(60005) = {6005};
+// 9-12 o'clock
+Surface Loop(6006) = {5012, 5009, 4005, 3004, 5004, 5008};
+Volume(60006) = {6006};
 
-// Set length scale field based on distance from sphere center or sphere wake
-// line.
-// Distance of bubble_radius => length of 0.01.
-// Distance of 1.2*bubble_radius => length of 0.15.
-Field[1] = Distance;
-Field[1].CurvesList = {501};
-Field[1].Sampling = 100;
-Field[2] = Threshold;
-Field[2].InField = 1;
-Field[2].SizeMin = 0.01;
-Field[2].SizeMax = 0.15;
-Field[2].DistMin = bubble_radius;
-Field[2].DistMax = bubble_radius*1.2;
-Background Field = 2;
-
-// Global refinement scale. (Divide by 2 for real scale, due to hex27/order 2
-// elements.)
-Mesh.CharacteristicLengthFactor = 10;
-
-// Ignore curvature etc -- use purely our length scale field.
-Mesh.MeshSizeFromPoints = 0;
-Mesh.MeshSizeFromCurvature = 0;
-Mesh.MeshSizeExtendFromBoundary = 0;
+// Use hex meshing
+Transfinite Line{:} = 20;
+Transfinite Surface{:};
+Recombine Surface{:};
+Transfinite Volume{:};
