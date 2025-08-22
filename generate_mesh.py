@@ -21,30 +21,30 @@ vertical_nodes_3to4 = int(node_density_ultrafine*(2*refined_zone_radius))
 vertical_nodes_4to5 = int(node_density_coarse*(domain_upstream_height - refined_zone_radius))
 radial_nodes_outer = int(node_density_fine*(domain_radius - refined_zone_radius))
 radial_nodes_inner = int(node_density_ultrafine*refined_zone_radius)
-circumferential_nodees_per_quarter = 30
+circumferential_nodes_per_quarter = 30
 
 gmsh.initialize()
 gmsh.model.add("ss1")
 
 # Layer 1
-layer_1_circle = draw_xy_plane_circle(0, 0, domain_downstream_height, domain_radius, circumferential_nodees_per_quarter)
-layer_1_hole = draw_xy_plane_circle(0, 0, domain_downstream_height, refined_zone_radius, circumferential_nodees_per_quarter)
+layer_1_circle = draw_xy_plane_circle(0, 0, domain_downstream_height, domain_radius, circumferential_nodes_per_quarter)
+layer_1_hole = draw_xy_plane_circle(0, 0, domain_downstream_height, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 2
-layer_2_circle = draw_xy_plane_circle(0, 0, domain_downstream_height/2, domain_radius, circumferential_nodees_per_quarter)
-layer_2_hole = draw_xy_plane_circle(0, 0, domain_downstream_height/2, refined_zone_radius, circumferential_nodees_per_quarter)
+layer_2_circle = draw_xy_plane_circle(0, 0, domain_downstream_height/2, domain_radius, circumferential_nodes_per_quarter)
+layer_2_hole = draw_xy_plane_circle(0, 0, domain_downstream_height/2, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 3
-washer_top = draw_xy_plane_circle(0, 0, refined_zone_radius, domain_radius, circumferential_nodees_per_quarter)
-washer_hole_top = draw_xy_plane_circle(0, 0, refined_zone_radius, refined_zone_radius, circumferential_nodees_per_quarter)
+washer_top = draw_xy_plane_circle(0, 0, refined_zone_radius, domain_radius, circumferential_nodes_per_quarter)
+washer_hole_top = draw_xy_plane_circle(0, 0, refined_zone_radius, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 4
-washer_bottom = draw_xy_plane_circle(0, 0, -refined_zone_radius, domain_radius, circumferential_nodees_per_quarter)
-washer_hole_bottom = draw_xy_plane_circle(0, 0, -refined_zone_radius, refined_zone_radius, circumferential_nodees_per_quarter)
+washer_bottom = draw_xy_plane_circle(0, 0, -refined_zone_radius, domain_radius, circumferential_nodes_per_quarter)
+washer_hole_bottom = draw_xy_plane_circle(0, 0, -refined_zone_radius, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 5
-layer_5_circle = draw_xy_plane_circle(0, 0, -domain_upstream_height, domain_radius, circumferential_nodees_per_quarter)
-layer_5_hole = draw_xy_plane_circle(0, 0, -domain_upstream_height, refined_zone_radius, circumferential_nodees_per_quarter)
+layer_5_circle = draw_xy_plane_circle(0, 0, -domain_upstream_height, domain_radius, circumferential_nodes_per_quarter)
+layer_5_hole = draw_xy_plane_circle(0, 0, -domain_upstream_height, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Volumes
 layer_1to2_outer = draw_z_washer(layer_1_circle, layer_1_hole, layer_2_circle, layer_2_hole, radial_nodes_outer, vertical_nodes_1to2)
@@ -52,7 +52,7 @@ layer_1to2_inner = draw_z_cylinder(layer_1_hole, layer_2_hole, vertical_nodes_1t
 layer_2to3_outer = draw_z_washer(layer_2_circle, layer_2_hole, washer_top, washer_hole_top, radial_nodes_outer, vertical_nodes_2to3)
 layer_2to3_inner = draw_z_cylinder(layer_2_hole, washer_hole_top, vertical_nodes_2to3)
 layer_3to4_outer = draw_z_washer(washer_top, washer_hole_top, washer_bottom, washer_hole_bottom, radial_nodes_outer, vertical_nodes_3to4)
-layer_3to4_inner = draw_z_cylinder_with_sphere_hole(washer_hole_top, washer_hole_bottom, bubble_radius, circumferential_nodees_per_quarter, vertical_nodes_3to4)
+layer_3to4_inner = draw_z_cylinder_with_sphere_hole(washer_hole_top, washer_hole_bottom, bubble_radius, circumferential_nodes_per_quarter, vertical_nodes_3to4)
 layer_4to5_outer = draw_z_washer(washer_bottom, washer_hole_bottom, layer_5_circle, layer_5_hole, radial_nodes_outer, vertical_nodes_4to5)
 layer_4to5_inner = draw_z_cylinder(washer_hole_bottom, layer_5_hole, vertical_nodes_4to5)
 
