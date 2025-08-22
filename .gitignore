@@ -5,5 +5,6 @@ cmake.log
 Sh_nek
 # Generated SLURM batch file
 s.bin
-# Mesh intermediate files
+# Don't commit the (large) mesh files
 *.msh
+*.re2
