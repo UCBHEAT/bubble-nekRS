@@ -1,23 +1,4 @@
 c-----------------------------------------------------------------------
-      subroutine usrdat2
-      include 'SIZE'
-      include 'TOTAL'
-      integer iel,ifc,bc_flag
-
-      do iel=1,nelt
-      do ifc=1,2*ndim
-         bc_flag = bc(5,ifc,iel,1)
-         if (bc_flag.eq.2) boundaryID(ifc,iel) = 1
-         if (bc_flag.eq.3) boundaryID(ifc,iel) = 2
-         if (bc_flag.eq.4) boundaryID(ifc,iel) = 3
-         if (bc_flag.eq.5) boundaryID(ifc,iel) = 4
-      enddo
-      enddo
-
-      return
-      end
-c-----------------------------------------------------------------------
-c-----------------------------------------------------------------------
       subroutine userchk
 
       include 'SIZE'
