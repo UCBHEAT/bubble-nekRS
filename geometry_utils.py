@@ -64,6 +64,29 @@ def draw_xy_plane_circle(x: float, y: float, z: float, r: float, circumferential
     return XYPlaneCircle(center, pt_12oclock, pt_3oclock, pt_6oclock, pt_9oclock,
                          arc_12to3, arc_3to6, arc_6to9, arc_9to12, curve_loop, surface)
 
+def draw_xy_plane_square(x: float, y: float, z: float, r: float, circumferential_nodes_per_quarter: int) -> XYPlaneCircle:
+    center = g.add_point(x, y, z)
+    pt_12oclock = g.add_point(x + r, y, z)
+    pt_3oclock = g.add_point(x, y + r, z)
+    pt_6oclock = g.add_point(x - r, y, z)
+    pt_9oclock = g.add_point(x, y - r, z)
+    arc_12to3 = g.add_line(pt_12oclock, pt_3oclock)
+    arc_3to6 = g.add_line(pt_3oclock, pt_6oclock)
+    arc_6to9 = g.add_line(pt_6oclock, pt_9oclock)
+    arc_9to12 = g.add_line(pt_9oclock, pt_12oclock)
+    g.synchronize()
+    m.set_transfinite_curve(arc_12to3, circumferential_nodes_per_quarter)
+    m.set_transfinite_curve(arc_3to6, circumferential_nodes_per_quarter)
+    m.set_transfinite_curve(arc_6to9, circumferential_nodes_per_quarter)
+    m.set_transfinite_curve(arc_9to12, circumferential_nodes_per_quarter)
+    curve_loop = g.add_curve_loop([arc_12to3, arc_3to6, arc_6to9, arc_9to12])
+    surface = g.add_plane_surface([curve_loop])
+    g.synchronize()
+    m.set_transfinite_surface(surface)
+    m.set_recombine(2, surface)
+    return XYPlaneCircle(center, pt_12oclock, pt_3oclock, pt_6oclock, pt_9oclock,
+                         arc_12to3, arc_3to6, arc_6to9, arc_9to12, curve_loop, surface)
+
 def draw_z_cylinder(top: XYPlaneCircle, bottom: XYPlaneCircle, vertical_nodes: int) -> ZCylinder:
     line_12oclock = g.add_line(top.pt_12oclock, bottom.pt_12oclock)
     line_3oclock = g.add_line(top.pt_3oclock, bottom.pt_3oclock)
