@@ -36,9 +36,9 @@ c-----------------------------------------------------------------------
       subroutine get_global_sherwood_number()
          include 'SIZE'
          include 'TOTAL'
-c
-c calcualte global sharewood number
-c
+
+         ! Calculate global sherwood number
+
          real*8 gradcx(lx1,ly1,lz1,lelt)
          real*8 gradcy(lx1,ly1,lz1,lelt)
          real*8 gradcz(lx1,ly1,lz1,lelt)
@@ -67,7 +67,7 @@ c
 
          do e=1,nelt
             do iside=1,6
-               if (bc(5,iside,e,1).eq.5) then
+               if (bc(5,iside,e,1).eq.4) then
                   call facind(i0,i1,j0,j1,k0,k1,nx1,ny1,nz1,iside)
                   do k=k0,k1
                      do j=j0,j1
@@ -91,7 +91,7 @@ c
          totalAA = 0.0
          do e=1,nelt
             do iside=1,6
-               if (bc(5,iside,e,1).eq.5) then
+               if (bc(5,iside,e,1).eq.4) then
                   sint2 = 0.0
                   sarea2 = 0.0
                   call surface_int(sint2,sarea2,gradcr,e,iside)
