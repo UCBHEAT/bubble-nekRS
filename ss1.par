@@ -6,7 +6,7 @@
 
 polynomialOrder = 7
 numSteps = 100000
-writeInterval = 500 # for averaging, use 5000 for 0.75D. 
+writeInterval = 500 # for averaging, use 5000 for 0.75D.
 
 timeStepper = tombo2
 subCyclingSteps = 2
@@ -20,12 +20,12 @@ residualTol = 1e-04
 
 [VELOCITY]
 boundaryTypeMap = inlet, outlet, wall, shl
-rho = 1.0
-viscosity = 1e-04
 residualTol = 1e-06
+rho = 1.0
+viscosity = -230 # = -Re
 
 [SCALAR00]
 boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, codedFixedValue
 residualTol = 1e-06
 rho = 1.0
-diffusivity = 1e-06
+diffusivity = -943 # = -Pe = -Re*Sc
