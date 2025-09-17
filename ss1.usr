@@ -143,8 +143,7 @@ c       else
 c       write(6,*)  'Sh_laminar_local_UWT: 3.66'   ! <Heat Transfer> p663
 c       endif
 
-      open(110, file="Sh_nek", status="old", 
-     & position="append", action="write")
+      open(110, file="Sh_nek", position="append", action="write")
       write(110,*) Reu, Scu, Sh_nek
       close(110)
 
