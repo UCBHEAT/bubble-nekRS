@@ -6,21 +6,21 @@ from geometry_utils import (
 
 # Parameters
 bubble_radius = 0.5
-refined_zone_radius = 0.8
+refined_zone_radius = 1.5
 domain_radius = 10
 domain_downstream_height = 20
 domain_upstream_height = 10  # upstream is on the bottom
 
-node_density_coarse = 1
-node_density_fine = 1.5
-node_density_ultrafine = 3
+node_density_coarse = 2
+node_density_fine = 4
+node_density_ultrafine = 6
 
-vertical_nodes_1to2 = int(node_density_coarse*(domain_downstream_height/2))
-vertical_nodes_2to3 = int(node_density_fine*(domain_downstream_height/2 - refined_zone_radius))
-vertical_nodes_3to4 = int(node_density_ultrafine*(2*refined_zone_radius))
+vertical_nodes_1to2 = int(node_density_coarse*(domain_downstream_height*3/4))
+vertical_nodes_2to3 = int(node_density_ultrafine*(domain_downstream_height/4 - refined_zone_radius))
+vertical_nodes_3to4 = int(node_density_fine*(2*refined_zone_radius))
 vertical_nodes_4to5 = int(node_density_coarse*(domain_upstream_height - refined_zone_radius))
-radial_nodes_outer = int(node_density_fine*(domain_radius - refined_zone_radius))
-radial_nodes_inner = int(node_density_ultrafine*refined_zone_radius)
+radial_nodes_outer = int(node_density_coarse*(domain_radius - refined_zone_radius))
+radial_nodes_inner = int(node_density_fine*refined_zone_radius)
 circumferential_nodes_per_quarter = 30
 
 gmsh.initialize()
@@ -31,8 +31,8 @@ layer_1_circle = draw_xy_plane_circle(0, 0, domain_downstream_height, domain_rad
 layer_1_hole = draw_xy_plane_square(0, 0, domain_downstream_height, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 2
-layer_2_circle = draw_xy_plane_circle(0, 0, domain_downstream_height/2, domain_radius, circumferential_nodes_per_quarter)
-layer_2_hole = draw_xy_plane_square(0, 0, domain_downstream_height/2, refined_zone_radius, circumferential_nodes_per_quarter)
+layer_2_circle = draw_xy_plane_circle(0, 0, domain_downstream_height/4, domain_radius, circumferential_nodes_per_quarter)
+layer_2_hole = draw_xy_plane_square(0, 0, domain_downstream_height/4, refined_zone_radius, circumferential_nodes_per_quarter)
 
 # Layer 3
 washer_top = draw_xy_plane_circle(0, 0, refined_zone_radius, domain_radius, circumferential_nodes_per_quarter)
