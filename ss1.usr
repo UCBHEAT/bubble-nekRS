@@ -75,9 +75,11 @@ c-----------------------------------------------------------------------
 
                            call getSnormal(sn1,i,j,k,iside,e)
 
-                           gradcr(i,j,k,e) =  sn1(1)*gradcx(i,j,k,e)
-                           gradcr(i,j,k,e) =  gradcr(i,j,k,e) +  sn1(2)*gradcy(i,j,k,e)
-                           gradcr(i,j,k,e) =  gradcr(i,j,k,e) +  sn1(3)*gradcz(i,j,k,e)
+                           gradcr(i,j,k,e) = sn1(1)*gradcx(i,j,k,e)
+                           gradcr(i,j,k,e) = gradcr(i,j,k,e) +
+     &                           sn1(2)*gradcy(i,j,k,e)
+                           gradcr(i,j,k,e) = gradcr(i,j,k,e) +
+     &                           sn1(3)*gradcz(i,j,k,e)
 
                         enddo
                      enddo
