@@ -1,5 +1,6 @@
 [GENERAL]
-verbose = true
+# Uncomment to debug per-field internal iterations.
+#verbose = true
 # Uncomment to resume from a checkpoint.
 #startFrom = ss10.f00000
 
