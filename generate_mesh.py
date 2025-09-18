@@ -57,8 +57,8 @@ layer_4to5_outer = draw_z_washer(washer_bottom, washer_hole_bottom, layer_5_circ
 layer_4to5_inner = draw_z_cylinder(washer_hole_bottom, layer_5_hole, vertical_nodes_4to5)
 
 gmsh.model.geo.synchronize()
-gmsh.model.addPhysicalGroup(2, [layer_1to2_inner.top] + layer_1to2_outer.top, name="inlet")
-gmsh.model.addPhysicalGroup(2, [layer_4to5_inner.bottom] + layer_4to5_outer.bottom, name="outlet")
+gmsh.model.addPhysicalGroup(2, [layer_4to5_inner.bottom] + layer_4to5_outer.bottom, name="inlet")
+gmsh.model.addPhysicalGroup(2, [layer_1to2_inner.top] + layer_1to2_outer.top, name="outlet")
 gmsh.model.addPhysicalGroup(2, layer_1to2_outer.side + layer_2to3_outer.side + layer_3to4_outer.side + layer_4to5_outer.side, name="walls")
 gmsh.model.addPhysicalGroup(2, layer_3to4_inner.sphere, name="sphere")
 gmsh.model.addPhysicalGroup(3, [*layer_1to2_outer.volumes, layer_1to2_inner.volume, *layer_2to3_outer.volumes,
