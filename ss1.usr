@@ -103,8 +103,11 @@ c-----------------------------------------------------------------------
             enddo
          enddo
 
+         ! area of sphere faces (sum(magSf)) [m^2]
          totalAA = glsum(totalAA,1)
+         ! sum(grad(C)*magSf) along face normals [mol/m^3/m]*[m^2]
          AAV = glsum(AAV,1)
+         ! observed avg concentration gradient [mol/m^3/m]
          gca = AAV/totalAA
 
          Reu = 1e4
@@ -121,9 +124,14 @@ c-----------------------------------------------------------------------
          if (nid.eq.0) write(6,*) 'cbar:',cbar
          c_b = cbar
 
+         ! MTC = mass flux / driving concentration difference
+         ! This code computes mass flux as (observed concentration
+         ! gradient * diffusion coefficient) by Fick's law.
          MTC = gca*Dc/(c_b - c_w)
+         ! [mol/m^3/m]*[m^2/s]/[mol/m^3] = [m^2/s]/[m] = [m/s]
 
          L =  1.0
+         ! Ultimately the diffusion coefficient cancels out here.
          Sh_nek = -MTC/(Dc/L)
 
          Re_trans =  2300.0
