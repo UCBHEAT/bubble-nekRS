@@ -1,0 +1,74 @@
+
+# nek parameter file
+#
+[GENERAL]
+#startFrom = bubble.fld
+#stopAt = numSteps
+stopAt = endTime
+#numSteps = 1 #400 #500000 #12000 #1000 #16000 #4000 #400 #400 #200000
+endTime = 3.0 #10e-4
+
+dt = 10.0e-05
+timeStepper = bdf2 #With bdf2 SF does not work well
+#variabledt = yes
+#targetCFL = 0.2
+#extrapolation = OIFS
+
+writeControl = runTime
+writeInterval = 0.5
+
+userParam01 = 0.01     #Freq of TLSR
+userParam02 = 0.001     #Freq of CLSR
+userParam03 = 2     #Pressure extrapolation order
+
+#filtering = hpfrt
+#filterModes = 1
+#filterWeight = 10.0
+
+[PROBLEMTYPE]
+equation = lowMachNS
+variableProperties = yes
+stressFormulation = yes
+
+[PRESSURE]
+residualTol = 1e-6
+residualProj = yes
+#preconditioner = semg_amg_hypre
+
+[VELOCITY]
+#residualProj = yes
+residualTol = 1e-6
+density = 1
+viscosity = -1.0 #dummy
+
+[TEMPERATURE] #cls field
+rhocp = 1.
+conductivity = 1.
+residualTol = 1e-8
+regularization = svv
+
+[SCALAR01] #tls field
+density = 1.0
+diffusivity = 1e-8 
+residualTol = 1e-8
+regularization = svv
+
+[SCALAR02] #cls re-distanacing
+density = 1.0
+diffusivity = 1e-8 
+residualTol = 1e-8
+regularization = svv
+
+[SCALAR03] #tls re-distancing field
+density = 1.0
+diffusivity = 1e-8 
+residualTol = 1e-8
+regularization = svv
+
+[SCALAR04] #curvature
+solver=none
+density = 1.0
+diffusivity = 1e-8 
+residualTol = 1e-6
+regularization = svv
+
