@@ -156,65 +156,63 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userbc(ix,iy,iz,iside,eg) ! set up boundary conditions
+      subroutine userbc(ix, iy, iz, iside, eg)
+      ! Set up boundary conditions. This subroutine is called once per
+      ! field (ifield), per element (eg), per GLL point (ix, iy, iz).
       implicit none
-      integer ix,iy,iz,iside,eg
-
+      integer ix, iy, iz, iside, eg
       include 'SIZE'
       include 'TOTAL'
       include 'NEKUSE'
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
-      integer e
-      real yplus
 
-      e = gllel(eg)
-
-      ux   = 0.0
-      uy   = 0.0
-      uz   = 0.0
-      temp = 0.0
-
-      if(ifield.eq.ifld_clsr)then
-        temp = t(ix,iy,iz,e,ifld_cls-1)
-      endif
+      ! This subroutine is not called for periodic boundaries. All of the
+      ! boundaries in the .box file are assigned as periodic, so this
+      ! function is never called.
 
       return
       end
 c-----------------------------------------------------------------------
-      subroutine useric(ix,iy,iz,eg) ! set up initial conditions
+      subroutine useric(ix, iy, iz, eg)
+      ! Set up boundary conditions. This subroutine is called once per
+      ! field (ifield), per element (eg), per GLL point (ix, iy, iz).
       implicit none
-      integer ix,iy,iz,eg,e
-
+      integer ix, iy, iz, eg
       include 'SIZE'
       include 'TOTAL'
       include 'NEKUSE'
 
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
+      ! Import namespaced global variables.
+      common /ls_usr/ ifld_cls, ifld_clsr
+      integer ifld_cls, ifld_clsr
+      common /speciestransport/ ifld_c
+      integer ifld_c
 
-      real xx,yy,heaviside,zz
+      ! Import function from lvlSet.f (included at top of this file).
+      real heaviside
 
-      e = gllel(eg)
+      ! Temporary variables.
+      real signed_distance
 
-      xx = xm1(ix,iy,iz,e)
-      yy = ym1(ix,iy,iz,e)
-      zz = zm1(ix,iy,iz,e)
+      if (ifield.eq.1) then
+        ! Field 1 is velocity.
+        ux = 0.0
+        uy = 0.0
+        uz = 0.0
+      elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr .or.
+     $        ifield.eq.ifld_c) then
+        ! Equation for a circle centered at (0, 0.5) of radius 0.25.
+        signed_distance = sqrt(x**2.0+(y-0.5)**2.0) - 0.25
 
-      ux = 0.0
-      uy = 0.0
-      uz = 0.0
-
-      temp = sqrt(xx**2.0+(yy-0.5)**2.0)-0.5/2.0
-      if(ifield.eq.ifld_tls .or. ifield.eq.ifld_tlsr)then
-        continue
-      elseif(ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr)then
-        temp = heaviside(ix,iy,iz,e,temp,0.0)
+        ! Setting temp means setting a Dirichlet (fixed-value)
+        ! constraint, and is unrelated to whether the current field
+        ! (ifield) is the temperature field.
+        !
+        ! CLS fields should be initialized to 0 inside the bubble,
+        ! 1 outside the bubble. Same for species concentration.
+        temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
       endif
+
+      ! TLS fields are derived from CLS and do not need initialization.
       
       return
       end
@@ -331,15 +329,19 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
 
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
+      ! Import namespaced global variables.
+      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
+      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
+      common /speciestransport/ ifld_c
+      integer ifld_c
 
-      ifld_cls = 2
-      ifld_tls = 3
-      ifld_clsr = 4
-      ifld_tlsr = 5
+      ! Configure field mappings.
+      ifld_cls = 2  ! temperature
+      ifld_tls = 3  ! scalar01
+      ifld_clsr = 4 ! scalar02
+      ifld_tlsr = 5 ! scalar03
+      ! scalar04 is used for 'curvature' in the .par file.
+      ifld_c = 7    ! scalar05
 
       return
       end
