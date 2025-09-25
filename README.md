@@ -15,10 +15,47 @@ cannot be run locally on a single workstation due to memory constraints.
 [anl-aurora]: https://www.alcf.anl.gov/aurora
 [ornl-frontier]: https://www.olcf.ornl.gov/frontier/
 
+## Cases
+
+### `rigid` case
+
+The `rigid` case is a nekRS case modeling a fixed bubble boundary, with the
+interior of the bubble unmeshed. The instructions below are for this case.
+
+The case is non-dimensional, and parameters have been adjusted to match a
+FLiBe-argon system at 625 C, matching [our OpenFOAM device-scale gas-liquid
+contactor (GLC) tritium extractor case][bubblecolumn].
+
+[bubblecolumn]: https://github.com/UCBHEAT/bubblecolumn
+
+### `2D` case
+
+The `2D` case is a nek5000 case modeling a dynamic bubble with boundary
+tracked using the in-development level set support. It requires [this
+fork][nekLS] of nek5000, and is based on [this example case from the
+developer of level set in nek5000][nekLS-examples].
+
+Level set is in the middle of being ported to nekRS, after which these
+instructions will apply to the `2D` case as well. In the meantime, different
+steps need to be followed to run the case as a nek5000 case instead
+of a nekRS case.
+
+Standard steps for running a nek5000 case can be followed (`genbox`, `genmap`,
+`makenek`, `./nek5000`), except you must compile with HYPRE if it is enabled
+in the case file.
+
+```
+# Support 'preconditioner = semg_amg_hypre'.
+PPLIST="HYPRE" makenek bubble
+```
+
+[nekLS]: https://github.com/nandu90/Nek5000/tree/nekLS
+[nekLS-examples]: https://github.com/nandu90/nekLS_Examples/tree/master/bubbleRise/Dodd/2D
+
 ## Running
 
-This case requires nekRS v24, which as of this writing is still in development
-and can be previewed by pulling the `next` branch.
+These cases require nekRS v24. As of this writing nekRS v25 is in release
+candidate stage, but we have not yet updated to support nekRS v25.
 
 The `nrqsub_aurora` and `nrqsub_frontier` scripts should be used to submit
 this case as a job to the queue.
@@ -80,7 +117,7 @@ Other files are generated during a simulation run:
 
 ## Mesh
 
-This case uses [Gmsh][gmsh] for mesh generation, as NekRS requires a
+This case uses [Gmsh][gmsh] for mesh generation, as nekRS requires a
 second-order hexahedral mesh. Rather than a raw .geo Gmsh script, we use the
 official Python API to properly script the complex geometry creation.
 
