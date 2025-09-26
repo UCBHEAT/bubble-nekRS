@@ -1,17 +1,18 @@
-      real function speciesSrc(ix,iy,iz,e)
+      real function speciesSrc(ix,iy,iz,eg)
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'SPECIES'
 
-      integer ix,iy,iz,e
+      integer ix,iy,iz,eg
 
       common /ls_usr/ ifld_cls,ifld_clsr,
      $                ifld_tls,ifld_tlsr 
       integer ifld_cls,ifld_clsr
       integer ifld_tls,ifld_tlsr
 
-      common /sptemp/ stmp(lx1,ly1,lz1,lelv),
+      common /speciestransport/
+     $                stmp(lx1,ly1,lz1,lelv),
      $                delta(lx1,ly1,lz1,lelv),
      $                spx(lx1,ly1,lz1,lelv),
      $                spy(lx1,ly1,lz1,lelv), 
@@ -19,14 +20,17 @@
       real stmp, delta, spx, spy, spz
       real psi
       real term1, term2
+      real He
 
       integer i,ntot
 
+      He = 0.2802
+
       ntot = lx1*ly1*lz1*nelt 
 
-      ! If ix = iy = iz = e = 1 (e.g. only on the first GLL point
-      ! on the first element), do all the work.
-      if(ix*iy*iz*e .eq. 1)then
+      ! If ix = iy = iz = eg = 1 (e.g. only on the first GLL point
+      ! on the first global element), do all the work.
+      if(ix*iy*iz*eg .eq. 1)then
         ! For each local GLL point on each local element:
         ! (This seems to be just shorthand for iterating over all 4
         ! dimensions in 1 loop (due to array ordering).)
@@ -39,10 +43,10 @@
           ! Clip to [0, 1].
           psi = max(0.0,psi)
           psi = min(1.0,psi)
-          ! What is term1? Psi-interpolated diffusion coefficient is
-          ! already handled in uservp (variable properties).
-          term1 = diffl - diffg ! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-          ! CST coefficient
+          ! Accumulation coefficient.
+          ! div(C*grad(D)) = div(term1*C*grad(alpha))
+          term1 = diffl - diffg
+          ! CST coefficient.
           term2 = (diffl - He*diffg)/(psi + He*(1.0-psi))
           stmp(i,1,1,1) = term1 - term2
         enddo
@@ -67,7 +71,7 @@
         ! spdiv = div(sp)
         call opdiv(spdiv,spx,spy,spz)
         ! Multiply spdiv by QQ^T (scatter/gather operators) to convert
-        ! from local to global coordinates... ? Or vice versa? Or
+        ! from local to global coordinates.
         ! something like that?
         call dssum(spdiv,lx1,ly1,lz1)
         ! spdiv(:) = spdiv(:) * binvm1(:)
@@ -77,4 +81,4 @@
 
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
-      speciesSrc = spdiv(ix,iy,iz,e)
+      speciesSrc = spdiv(ix,iy,iz,eg)
