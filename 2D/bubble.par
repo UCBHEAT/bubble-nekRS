@@ -47,6 +47,6 @@ regularization = svv
 # Density & diffusivity provided in uservp as variable properties.
 
 [SCALAR04] # tritium concentration
-density = 1.0
 residualTol = 1e-8
+regularization = avm
 # Density & diffusivity provided in uservp as variable properties.
