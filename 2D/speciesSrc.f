@@ -2,7 +2,6 @@
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'SPECIES'
 
       integer ix,iy,iz,eg
 
@@ -16,15 +15,18 @@
      $                delta(lx1,ly1,lz1,lelv),
      $                spx(lx1,ly1,lz1,lelv),
      $                spy(lx1,ly1,lz1,lelv), 
-     $                spz(lx1,ly1,lz1,lelv) 
-      real stmp, delta, spx, spy, spz
+     $                spz(lx1,ly1,lz1,lelv),
+     $                spdiv(lx1,ly1,lz1,lelv)
+      real stmp, delta, spx, spy, spz, spdiv
       real psi
       real term1, term2
-      real He
+      real He, diffl, diffg
 
       integer i,ntot
 
       He = 0.2802
+      diffl = 9.3525e-7
+      diffg = 5.8677e-4
 
       ntot = lx1*ly1*lz1*nelt 
 
@@ -82,3 +84,4 @@
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
       speciesSrc = spdiv(ix,iy,iz,eg)
+      endfunction

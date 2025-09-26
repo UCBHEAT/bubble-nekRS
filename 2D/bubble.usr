@@ -15,11 +15,11 @@ c-----------------------------------------------------------------------
       integer ifld_cls,ifld_clsr
       integer ifld_tls,ifld_tlsr
 
-      common /species/ ifld_c
+      common /speciestransport/ ifld_c
       integer ifld_c
 
-      real Re, We, Fr, rhoratio, muratio
-      real nuratio
+      real rhoratio, nuratio, muratio, diffratio
+      real Re, Fr, We, Sc, Pe
       real psi
       integer icalld
       save icalld
@@ -35,7 +35,7 @@ c-----------------------------------------------------------------------
 
       rhoratio = 0.535/1975
       nuratio = 9.678e-05/3.843e-6
-      muratio = nuratio*muratio
+      muratio = nuratio*rhoratio
       diffratio = 5.8677e-4/9.3525e-7
 
       Re = 230.0
@@ -43,7 +43,6 @@ c-----------------------------------------------------------------------
       We = 2.6
       Sc = 4.1
       Pe = Re*Sc
-      H = 0.002802
 
       if(ifield.eq.1)then
         psi = t(ix,iy,iz,e,ifld_cls-1)
@@ -171,7 +170,7 @@ c-----------------------------------------------------------------------
 
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
-        qvol = speciesSrc(ix, iy, iz, eg)
+        !qvol = speciesSrc(ix, iy, iz, eg)
       endif
 
       return
