@@ -124,12 +124,6 @@ c-----------------------------------------------------------------------
       ffx = sfx + svvx
       ffy = sfy + svvy - 1.0/Fr + dpdy
 
-
-      !only for visualization
-      sffx = sfx * vtrans(ix,iy,iz,e,1)*We
-      sffy = sfy * vtrans(ix,iy,iz,e,1)*We
-      t(ix,iy,iz,e,5) = sqrt(sffx*sffx+sffy*sffy)
-
       return
       end
 c-----------------------------------------------------------------------
