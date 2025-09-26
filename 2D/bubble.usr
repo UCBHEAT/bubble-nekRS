@@ -14,6 +14,9 @@ c-----------------------------------------------------------------------
       integer ifld_cls,ifld_clsr
       integer ifld_tls,ifld_tlsr
 
+      common /species/ ifld_c
+      integer ifld_c
+
       real Re, We, Fr, rhoratio, muratio
       real nuratio
       real psi
@@ -31,10 +34,12 @@ c-----------------------------------------------------------------------
 
       rhoratio = 1.21e-3
       muratio = 2.45e-4
+      diffratio = 1e3
 
       Re = 217.0
       Fr = 1.0
       We = 121.0
+      Pe = 10.0
 
       if(ifield.eq.1)then
         psi = t(ix,iy,iz,e,ifld_cls-1)
@@ -49,6 +54,10 @@ c-----------------------------------------------------------------------
         else
           vtrans0(ix,iy,iz,e) = rhoratio
         endif
+      elseif (ifield.eq.ifld_c) then
+        psi = t(ix,iy,iz,e,ifld_cls-1)
+        utrans = 1.0 ! ignore mass, c is a volumetric value
+        udiff = ((1.0-psi)*diffratio + psi)/Pe
       else
         utrans = 1.0
         udiff = 1e-10
