@@ -340,8 +340,7 @@ c-----------------------------------------------------------------------
       ifld_tls = 3  ! scalar01
       ifld_clsr = 4 ! scalar02
       ifld_tlsr = 5 ! scalar03
-      ! scalar04 is used for 'curvature' in the .par file.
-      ifld_c = 7    ! scalar05
+      ifld_c = 6    ! scalar04
 
       return
       end

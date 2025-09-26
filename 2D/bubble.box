@@ -6,13 +6,12 @@
 #========================================================
 #
 Box                                       
--32 -64                           Nelx  Nely
--0.5 0.5 1.                        x0 x1 ratio
-0 2 1.			      y0 y1 ratio
-P  ,P  ,P  ,P                     BC's for velocity
-P  ,P  ,P  ,P                     BC's for temperature
-P  ,P  ,P  ,P                     BC's for scalar01
-P  ,P  ,P  ,P                     BC's for scalar02
-P  ,P  ,P  ,P                     BC's for scalar03
-P  ,P  ,P  ,P                     BC's for scalar04
-P  ,P  ,P  ,P                     BC's for scalar05
+-32 -64                           Nelx Nely
+-0.5 0.5 1.                       x0 x1 ratio
+0 2 1.                            y0 y1 ratio
+P  ,P  ,P  ,P                     BCs for velocity
+P  ,P  ,P  ,P                     BCs for temperature (CLS)
+P  ,P  ,P  ,P                     BCs for scalar01 (TLS)
+P  ,P  ,P  ,P                     BCs for scalar02 (CLSr)
+P  ,P  ,P  ,P                     BCs for scalar03 (TLSr)
+P  ,P  ,P  ,P                     BCs for scalar04 (concentration)

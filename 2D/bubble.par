@@ -65,14 +65,8 @@ diffusivity = 1e-8
 residualTol = 1e-8
 regularization = svv
 
-[SCALAR04] #curvature
-solver=none
-density = 1.0
-diffusivity = 1e-8 
-residualTol = 1e-6
-regularization = svv
-
-[SCALAR05] # tritium concentration
+[SCALAR04] # tritium concentration
 density = 1.0
 diffusivity = 1e-8
 residualTol = 1e-8
+
