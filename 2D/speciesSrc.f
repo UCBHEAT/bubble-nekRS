@@ -3,12 +3,16 @@
       include 'SIZE'
       include 'TOTAL'
 
-      integer ix,iy,iz,el
+      integer ix, iy, iz, el
 
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
+      ! Import namespaced variables.
+      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
+     $    muratio, diffratio, diffl, diffg
+      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
+     $    diffratio, diffl, diffg
+
+      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
+      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
 
       common /speciestransport/
      $                stmp(lx1,ly1,lz1,lelv),
@@ -16,16 +20,13 @@
      $                spx(lx1,ly1,lz1,lelv),
      $                spy(lx1,ly1,lz1,lelv), 
      $                spz(lx1,ly1,lz1,lelv),
-     $                spdiv(lx1,ly1,lz1,lelv)
+     $                spdiv(lx1,ly1,lz1,lelv),
+     $                species_equation_version
       real stmp, delta, spx, spy, spz, spdiv
-      real psi
-      real term1, term2
-      real H, diffl, diffg
-      integer species_equation_version, i, ntot
+      integer species_equation_version
 
-      H = 0.2802
-      diffl = 9.3525e-7
-      diffg = 5.8677e-4
+      real psi, term1, term2
+      integer i, ntot
 
       species_equation_version = uparam(4)
       ntot = lx1*ly1*lz1*nelt
@@ -90,5 +91,5 @@
 
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
-      speciesSrc = spdiv(ix,iy,iz,el)
+      speciesSrc = spdiv(ix,iy,iz,el)/Pe
       endfunction

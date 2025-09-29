@@ -4,52 +4,36 @@
 c-----------------------------------------------------------------------
       subroutine uservp(ix,iy,iz,eg) ! set variable properties
       implicit none
-      integer ix,iy,iz,eg,e
+      integer ix,iy,iz,eg,el
      
       include 'SIZE'
       include 'TOTAL'
       include 'NEKUSE'
 
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
+      ! Import namespaced variables.
+      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr 
+      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
 
-      common /speciestransport/ ifld_c
-      integer ifld_c
+      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
+     $    muratio, diffratio
+      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio, diffratio
 
-      real rhoratio, nuratio, muratio, diffratio
-      real Re, Fr, We, Sc, Pe, H
+      common /speciestransport/ ifld_c, species_equation_version
+      integer ifld_c, species_equation_version
+
       real psi
       integer icalld
       save icalld
       data icalld /0/
-      integer species_equation_version
 
-      common /dimen/ Re,We,Fr,rhoratio
-
-      e = gllel(eg)
-
-      species_equation_version = uparam(4)
+      el = gllel(eg)
 
 !     These routine is not called by external solver
 !     To Do: change the flow, so that this routine is called
 !     similar to RANS. Will avoid confusion
 
-      rhoratio = 0.535/1975
-      nuratio = 9.678e-05/3.843e-6
-      muratio = nuratio*rhoratio
-      diffratio = 5.8677e-4/9.3525e-7
-
-      Re = 230.0
-      Fr = 1.6
-      We = 2.6
-      Sc = 4.1
-      Pe = Re*Sc
-      H = 0.2802
-
       if(ifield.eq.1)then
-        psi = t(ix,iy,iz,e,ifld_cls-1)
+        psi = t(ix,iy,iz,el,ifld_cls-1)
         psi = max(0.0,psi)
         psi = min(1.0,psi)
         utrans = (1.0-psi)*rhoratio + psi
@@ -57,19 +41,20 @@ c-----------------------------------------------------------------------
         !viscosity here
         udiff = ((1.0-psi)*muratio + psi)/Re
         if(istep.le.2)then
-          vtrans0(ix,iy,iz,e) = utrans
+          vtrans0(ix,iy,iz,el) = utrans
         else
-          vtrans0(ix,iy,iz,e) = rhoratio
+          vtrans0(ix,iy,iz,el) = rhoratio
         endif
       elseif (ifield.eq.ifld_c) then
-        psi = t(ix,iy,iz,e,ifld_cls-1)
+        psi = t(ix,iy,iz,el,ifld_cls-1)
         utrans = 1.0 ! ignore mass, c is a volumetric value
         if (species_equation_version .eq. 0) then
           ! Marschall et al (2012) version
           udiff = ((1.0-psi)*diffratio + psi)/Pe
         else
           ! Li and Su (2025) version
-          udiff = (psi/(psi+(1.0-psi)/H) + diffratio*(1.0-psi)/((1.0-psi)+psi*H))/Pe
+          udiff = (psi/(psi+(1.0-psi)/H) + diffratio*(1.0-psi)/
+     $             ((1.0-psi)+psi*H))/Pe
         endif
       else
         utrans = 1.0
@@ -134,7 +119,6 @@ c-----------------------------------------------------------------------
         icalld = 1
       endif
 
-
       call surfacetension(ix,iy,iz,e,1./We,sfx,sfy,sfz)
       
       call svv_fluid(ix,iy,iz,e,svvx,svvy,svvz)
@@ -145,12 +129,6 @@ c-----------------------------------------------------------------------
 
       ffx = sfx + svvx
       ffy = sfy + svvy - 1.0/Fr + dpdy
-
-
-      !only for visualization
-      sffx = sfx * vtrans(ix,iy,iz,e,1)*We
-      sffy = sfy * vtrans(ix,iy,iz,e,1)*We
-      t(ix,iy,iz,e,5) = sqrt(sffx*sffx+sffy*sffy)
 
       return
       end
@@ -231,6 +209,8 @@ c-----------------------------------------------------------------------
       elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr .or.
      $        ifield.eq.ifld_c) then
         ! Equation for a circle centered at (0, 0.5) of radius 0.25.
+        ! TODO: should this be unit diameter, to make dimensionless
+        ! scalings correct? If so, need to widen domain.
         signed_distance = sqrt(x**2.0+(y-0.5)**2.0) - 0.25
 
         ! Setting temp means setting a Dirichlet (fixed-value)
@@ -339,31 +319,43 @@ c-----------------------------------------------------------------------
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userqtl ! Set thermal divergence
-
-      return
-      end
-c-----------------------------------------------------------------------
-      subroutine usrdat()   ! This routine to modify element vertices
+      subroutine usrdat3() ! initialize any case/user-specific data
       implicit none
 
       include 'SIZE'
       include 'TOTAL'
+      include 'SVV'
+      include 'AVM'
 
-      return
-      end
-c-----------------------------------------------------------------------
-      subroutine usrdat2()  ! This routine to modify mesh coordinates
-      implicit none
+      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
+     $    muratio, diffratio, diffl, diffg
+      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
+     $    diffratio, diffl, diffg
 
-      include 'SIZE'
-      include 'TOTAL'
-
-      ! Import namespaced global variables.
       common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
       integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
-      common /speciestransport/ ifld_c
-      integer ifld_c
+      integer ifdebug, ifixCLSbdry
+      real farfield
+
+      common /speciestransport/ ifld_c, species_equation_version
+      integer ifld_c, species_equation_version
+
+      real eps, dt_cls_in, dt_tls_in
+      integer nsteps_cls, nsteps_tls
+
+      ! Set case parameters.
+      Re = 230.0
+      Fr = 1.6
+      We = 2.6
+      Sc = 4.1
+      Pe = Re*Sc
+      H = 0.2802
+      rhoratio = 0.535/1975
+      nuratio = 9.678e-05/3.843e-6
+      muratio = nuratio*rhoratio
+      diffratio = 5.8677e-4/9.3525e-7
+      diffl = 9.3525e-7
+      diffg = 5.8677e-4
 
       ! Configure field mappings.
       ifld_cls = 2  ! temperature
@@ -372,34 +364,16 @@ c-----------------------------------------------------------------------
       ifld_tlsr = 5 ! scalar03
       ifld_c = 6    ! scalar04
 
-      return
-      end
-c-----------------------------------------------------------------------
-      subroutine usrdat3()
-      implicit none
-
-      include 'SIZE'
-      include 'TOTAL'
-      include 'SVV'
-      include 'AVM'
-
-      real eps,dt_cls_in,dt_tls_in
-      integer nsteps_cls, nsteps_tls
-
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
-      integer ifdebug, ifixCLSbdry
-      real farfield
-
+      ! Initialize level set-specific data.
       eps = 1.5/(lx1-1.0)
       ifdebug = 0
       ifixCLSbdry = 0
       farfield = 1.0
-      call ls_init(ifld_cls, ifld_clsr,
-     $             ifld_tls, ifld_tlsr,
+      call ls_init(ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr,
      $             eps, ifdebug, ifixCLSbdry, farfield)
+
+      ! Initialize species transport-specific data.
+      species_equation_version = uparam(4)
 
 c---------------------------------------------------      
 c     This section to specify user defined parameters
@@ -452,3 +426,11 @@ c     scalar 3
       return
       end
 c---------------------------------------------------------------------
+      ! Unused user hooks still need to be implemented to make the
+      ! linker happy.
+      subroutine userqtl()
+      end
+      subroutine usrdat() ! spelling inconsistency is (sic)
+      end
+      subroutine usrdat2() ! spelling inconsistency is (sic)
+      end
