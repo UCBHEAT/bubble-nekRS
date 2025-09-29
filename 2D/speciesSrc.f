@@ -1,9 +1,9 @@
-      real function speciesSrc(ix,iy,iz,eg)
+      real function speciesSrc(ix,iy,iz,el)
       implicit none
       include 'SIZE'
       include 'TOTAL'
 
-      integer ix,iy,iz,eg
+      integer ix,iy,iz,el
 
       common /ls_usr/ ifld_cls,ifld_clsr,
      $                ifld_tls,ifld_tlsr 
@@ -20,26 +20,26 @@
       real stmp, delta, spx, spy, spz, spdiv
       real psi
       real term1, term2
-      real He, diffl, diffg
+      real H, diffl, diffg
 
       integer i,ntot
 
-      He = 0.2802
+      H = 0.2802
       diffl = 9.3525e-7
       diffg = 5.8677e-4
 
       ntot = lx1*ly1*lz1*nelt 
 
-      ! If ix = iy = iz = eg = 1 (e.g. only on the first GLL point
-      ! on the first global element), do all the work.
-      if(ix*iy*iz*eg .eq. 1)then
+      ! If ix = iy = iz = el = 1 (e.g. only on the first GLL point
+      ! on the first local element), do all the work.
+      if(ix*iy*iz*el .eq. 1)then
         ! For each local GLL point on each local element:
         ! (This seems to be just shorthand for iterating over all 4
         ! dimensions in 1 loop (due to array ordering).)
         do i=1,ntot
-          ! Scalar field value t(ix,iy,iz,ie,ifield-1) for field
+          ! Scalar field value t(ix,iy,iz,el,ifield-1) for field
           ! number ifield.  So this is reading a length ntot array
-          ! starting at ix=i, iy=1, iz=1, ie=1 from CLS field.
+          ! starting at ix=i, iy=1, iz=1, el=1 from CLS field.
           ! psi(:) = t(:, ifield=ifld_cls)
           psi = t(i,1,1,1,ifld_cls-1)
           ! Clip to [0, 1].
@@ -49,7 +49,7 @@
           ! div(C*grad(D)) = div(term1*C*grad(alpha))
           term1 = diffl - diffg
           ! CST coefficient.
-          term2 = (diffl - He*diffg)/(psi + He*(1.0-psi))
+          term2 = (H*diffl - diffg)/(H*psi + (1.0-psi))
           stmp(i,1,1,1) = term1 - term2
         enddo
         ! Multiply by current c field.
@@ -73,8 +73,7 @@
         ! spdiv = div(sp)
         call opdiv(spdiv,spx,spy,spz)
         ! Multiply spdiv by QQ^T (scatter/gather operators) to convert
-        ! from local to global coordinates.
-        ! something like that?
+        ! from global to local coordinates.
         call dssum(spdiv,lx1,ly1,lz1)
         ! spdiv(:) = spdiv(:) * binvm1(:)
         ! binvm1 is the "inverse mass matrix for velocity mesh".
@@ -83,5 +82,5 @@
 
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
-      speciesSrc = spdiv(ix,iy,iz,eg)
+      speciesSrc = spdiv(ix,iy,iz,el)
       endfunction

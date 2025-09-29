@@ -147,7 +147,7 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
       subroutine userq(ix,iy,iz,eg) ! set source term
       implicit none
-      integer ix,iy,iz,eg,e
+      integer ix,iy,iz,eg,el
 
       include 'SIZE'
       include 'TOTAL'
@@ -161,16 +161,16 @@ c-----------------------------------------------------------------------
 
       real signls, speciesSrc
 
-      e = gllel(eg)
+      el = gllel(eg)
       
       qvol = 0.0
       avol = 0.0
 
-      call limit_cls(ix,iy,iz,e)
+      call limit_cls(ix,iy,iz,el)
 
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
-        !qvol = speciesSrc(ix, iy, iz, eg)
+        qvol = speciesSrc(ix, iy, iz, el)
       endif
 
       return
