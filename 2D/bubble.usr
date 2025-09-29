@@ -19,15 +19,18 @@ c-----------------------------------------------------------------------
       integer ifld_c
 
       real rhoratio, nuratio, muratio, diffratio
-      real Re, Fr, We, Sc, Pe
+      real Re, Fr, We, Sc, Pe, H
       real psi
       integer icalld
       save icalld
       data icalld /0/
+      integer species_equation_version
 
       common /dimen/ Re,We,Fr,rhoratio
 
       e = gllel(eg)
+
+      species_equation_version = uparam(4)
 
 !     These routine is not called by external solver
 !     To Do: change the flow, so that this routine is called
@@ -43,6 +46,7 @@ c-----------------------------------------------------------------------
       We = 2.6
       Sc = 4.1
       Pe = Re*Sc
+      H = 0.2802
 
       if(ifield.eq.1)then
         psi = t(ix,iy,iz,e,ifld_cls-1)
@@ -60,7 +64,13 @@ c-----------------------------------------------------------------------
       elseif (ifield.eq.ifld_c) then
         psi = t(ix,iy,iz,e,ifld_cls-1)
         utrans = 1.0 ! ignore mass, c is a volumetric value
-        udiff = ((1.0-psi)*diffratio + psi)/Pe
+        if (species_equation_version .eq. 0) then
+          ! Marschall et al (2012) version
+          udiff = ((1.0-psi)*diffratio + psi)/Pe
+        else
+          ! Li and Su (2025) version
+          udiff = (psi/(psi+(1.0-psi)/H) + diffratio*(1.0-psi)/((1.0-psi)+psi*H))/Pe
+        endif
       else
         utrans = 1.0
         udiff = 1e-10

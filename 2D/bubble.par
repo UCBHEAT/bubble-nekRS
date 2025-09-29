@@ -12,6 +12,8 @@ dt          = 0.0001    # frequency of pressure, velocity, CLS solve
 
 userParam03 = 2         # pressure extrapolation order
 
+userParam04 = 1         # 0 = Marschall (2012) equation, 1 = Li and Su (2025) equation
+
 [PROBLEMTYPE]
 equation = lowMachNS
 variableProperties = yes

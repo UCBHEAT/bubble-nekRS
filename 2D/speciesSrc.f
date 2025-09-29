@@ -21,14 +21,14 @@
       real psi
       real term1, term2
       real H, diffl, diffg
-
-      integer i,ntot
+      integer species_equation_version, i, ntot
 
       H = 0.2802
       diffl = 9.3525e-7
       diffg = 5.8677e-4
 
-      ntot = lx1*ly1*lz1*nelt 
+      species_equation_version = uparam(4)
+      ntot = lx1*ly1*lz1*nelt
 
       ! If ix = iy = iz = el = 1 (e.g. only on the first GLL point
       ! on the first local element), do all the work.
@@ -46,8 +46,16 @@
           psi = max(0.0,psi)
           psi = min(1.0,psi)
           ! Accumulation coefficient.
-          ! div(C*grad(D)) = div(term1*C*grad(alpha))
-          term1 = diffl - diffg
+          if (species_equation_version .eq. 0) then
+            ! Marschall (2012) version
+            ! div(C*grad(D)) = div(term1*C*grad(alpha))
+            term1 = diffl - diffg
+          else
+            ! Li and Su (2025) version - with stabilization term
+            term1 = H*(diffl - diffg)/((psi*H+(1.0-psi))**2)
+            ! without stabilization term
+            !term1 = 0
+          endif
           ! CST coefficient.
           term2 = (H*diffl - diffg)/(H*psi + (1.0-psi))
           stmp(i,1,1,1) = term1 - term2
