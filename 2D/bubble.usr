@@ -301,12 +301,6 @@ c-----------------------------------------------------------------------
       delsum = glsum(delta,ntot)
       if(nio.eq.0)write(*,*)"Interface Area",delsum
 
-      call copy(sfmag,t(1,1,1,1,5),ntot)
-      call col2(sfmag,bm1,ntot)
-      sfsum = glsum(sfmag,ntot)
-
-      if(nio.eq.0)write(*,*)"Avg curv",sfsum/delsum
-
       pmin = glmin(pr,ntot)
       pmax = glmax(pr,ntot)
       if(nio.eq.0)then
