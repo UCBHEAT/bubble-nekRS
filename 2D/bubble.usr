@@ -208,10 +208,8 @@ c-----------------------------------------------------------------------
         uz = 0.0
       elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr .or.
      $        ifield.eq.ifld_c) then
-        ! Equation for a circle centered at (0, 0.5) of radius 0.25.
-        ! TODO: should this be unit diameter, to make dimensionless
-        ! scalings correct? If so, need to widen domain.
-        signed_distance = sqrt(x**2.0+(y-0.5)**2.0) - 0.25
+        ! Equation for a circle centered at (0, 1) of radius 0.5.
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
 
         ! Setting temp means setting a Dirichlet (fixed-value)
         ! constraint, and is unrelated to whether the current field
