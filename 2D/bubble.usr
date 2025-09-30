@@ -425,12 +425,11 @@ c     scalar 3
 
       return
       end
-c---------------------------------------------------------------------
-      ! Unused user hooks still need to be implemented to make the
-      ! linker happy.
-      subroutine userqtl()
-      end
-      subroutine usrdat() ! spelling inconsistency is (sic)
-      end
-      subroutine usrdat2() ! spelling inconsistency is (sic)
+
+c-----------------------------------------------------------------------
+      ! The regex in mkuserfile to auto-add unused user hooks is broken
+      ! (it thinks usrdat is present because it finds the string
+      ! "subroutine usrdat3").
+      subroutine usrdat
+      return
       end
