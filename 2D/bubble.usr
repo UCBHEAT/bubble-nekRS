@@ -328,9 +328,9 @@ c-----------------------------------------------------------------------
       include 'AVM'
 
       common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
-     $    muratio, diffratio, diffl, diffg
+     $    muratio, diffratio
       real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
-     $    diffratio, diffl, diffg
+     $    diffratio
 
       common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
       integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
@@ -354,8 +354,6 @@ c-----------------------------------------------------------------------
       nuratio = 9.678e-05/3.843e-6
       muratio = nuratio*rhoratio
       diffratio = 5.8677e-4/9.3525e-7
-      diffl = 9.3525e-7
-      diffg = 5.8677e-4
 
       ! Configure field mappings.
       ifld_cls = 2  ! temperature

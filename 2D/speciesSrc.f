@@ -7,9 +7,9 @@
 
       ! Import namespaced variables.
       common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
-     $    muratio, diffratio, diffl, diffg
+     $    muratio, diffratio
       real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
-     $    diffratio, diffl, diffg
+     $    diffratio
 
       common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
       integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
@@ -50,15 +50,15 @@
           if (species_equation_version .eq. 0) then
             ! Marschall (2012) version
             ! div(C*grad(D)) = div(term1*C*grad(alpha))
-            term1 = diffl - diffg
+            term1 = 1.0 - diffratio
           else
             ! Li and Su (2025) version - with stabilization term
-            term1 = H*(diffl - diffg)/((psi*H+(1.0-psi))**2)
+            term1 = H*(1.0 - diffratio)/((psi*H+(1.0-psi))**2)
             ! without stabilization term
             !term1 = 0
           endif
           ! CST coefficient.
-          term2 = (H*diffl - diffg)/(H*psi + (1.0-psi))
+          term2 = (H - diffratio)/(H*psi + (1.0-psi))
           stmp(i,1,1,1) = term1 - term2
         enddo
         ! Multiply by current c field.
