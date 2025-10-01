@@ -1,18 +1,47 @@
-      real function speciesSrc(ix,iy,iz,el)
+      ! Implementation of Continuum Species Transport (CST) for Nek5000
+      !
+      ! This module can be configured via userParam04 in your .par
+      ! (parameter) file.
+      !
+      ! PARAMETER 04: Continuum Species Transport equation version.
+      !   0 = Marschall (2012)
+      !   1 = Li and Su (2025)
+      ! Affects 2 terms, speciesSrc() called by userq and speciesDiff()
+      ! called by uservp.
+      
+      real function speciesDiff(ix,iy,iz,el)
+      ! Calculate the coefficient for the diffusion term in the CST
+      ! transport equation.
       implicit none
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
 
       integer ix, iy, iz, el
+      integer species_equation_version
+      real psi
 
-      ! Import namespaced variables.
-      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
-     $    muratio, diffratio
-      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
-     $    diffratio
+      psi = t(ix,iy,iz,el,ifld_cls-1)
+      species_equation_version = int(uparam(iprm_cst_ver))
+      if (species_equation_version .eq. 0) then
+        ! Marschall et al (2012) version
+        speciesDiff = ((1.0-psi)*diffratio + psi)/Pe
+      else
+        ! Li and Su (2025) version
+        speciesDiff = (psi/(psi+(1.0-psi)*solubilityratio) +
+     $      diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
+      endif
 
-      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
-      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
+      endfunction
+
+      real function speciesSrc(ix,iy,iz,el)
+      ! Calculate the source terms in the CST transport equation.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      integer ix, iy, iz, el
 
       common /speciestransport/
      $                stmp(lx1,ly1,lz1,lelv),
@@ -20,15 +49,12 @@
      $                spx(lx1,ly1,lz1,lelv),
      $                spy(lx1,ly1,lz1,lelv), 
      $                spz(lx1,ly1,lz1,lelv),
-     $                spdiv(lx1,ly1,lz1,lelv),
-     $                species_equation_version
+     $                spdiv(lx1,ly1,lz1,lelv)
       real stmp, delta, spx, spy, spz, spdiv
-      integer species_equation_version
-
+      
       real psi, term1, term2
-      integer i, ntot
+      integer i, ntot, species_equation_version
 
-      species_equation_version = uparam(4)
       ntot = lx1*ly1*lz1*nelt
 
       ! If ix = iy = iz = el = 1 (e.g. only on the first GLL point
@@ -47,18 +73,18 @@
           psi = max(0.0,psi)
           psi = min(1.0,psi)
           ! Accumulation coefficient.
+          species_equation_version = int(uparam(iprm_cst_ver))
           if (species_equation_version .eq. 0) then
             ! Marschall (2012) version
-            ! div(C*grad(D)) = div(term1*C*grad(alpha))
             term1 = 1.0 - diffratio
           else
-            ! Li and Su (2025) version - with stabilization term
-            term1 = H*(1.0 - diffratio)/((psi*H+(1.0-psi))**2)
-            ! without stabilization term
-            !term1 = 0
+            ! Li and Su (2025) version
+            term1 = ((1.0 - diffratio)/solubilityratio)
+     $               / ((psi/solubilityratio+(1.0-psi))**2)
           endif
           ! CST coefficient.
-          term2 = (H - diffratio)/(H*psi + (1.0-psi))
+          term2 = (1.0 - diffratio/solubilityratio)
+     $            / (psi/solubilityratio + (1.0-psi))
           stmp(i,1,1,1) = term1 - term2
         enddo
         ! Multiply by current c field.
