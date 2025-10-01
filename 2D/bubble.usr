@@ -1,6 +1,6 @@
       include "experimental/lvlSet.f"
       include "experimental/lserrors.f"
-      include "speciesSrc.f"
+      include "species.f"
 c-----------------------------------------------------------------------
       subroutine uservp(ix,iy,iz,eg) ! set variable properties
       implicit none
@@ -8,19 +8,10 @@ c-----------------------------------------------------------------------
      
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
       include 'NEKUSE'
 
-      ! Import namespaced variables.
-      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr 
-      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
-
-      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
-     $    muratio, diffratio
-      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio, diffratio
-
-      common /speciestransport/ ifld_c, species_equation_version
-      integer ifld_c, species_equation_version
-
+      real speciesDiff
       real psi
       integer icalld
       save icalld
@@ -48,14 +39,7 @@ c-----------------------------------------------------------------------
       elseif (ifield.eq.ifld_c) then
         psi = t(ix,iy,iz,el,ifld_cls-1)
         utrans = 1.0 ! ignore mass, c is a volumetric value
-        if (species_equation_version .eq. 0) then
-          ! Marschall et al (2012) version
-          udiff = ((1.0-psi)*diffratio + psi)/Pe
-        else
-          ! Li and Su (2025) version
-          udiff = (psi/(psi+(1.0-psi)/H) + diffratio*(1.0-psi)/
-     $             ((1.0-psi)+psi*H))/Pe
-        endif
+        udiff = speciesDiff(ix, iy, iz, el)
       else
         utrans = 1.0
         udiff = 1e-10
@@ -75,15 +59,9 @@ c-----------------------------------------------------------------------
 
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
       include 'NEKUSE'
 
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
-
-      common /dimen/ Re,We,Fr,rhoratio
-      real Re,We,Fr
       real sfx,sfy,sfz
 
       real svvx,svvy,svvz
@@ -92,7 +70,6 @@ c-----------------------------------------------------------------------
 
       real voll, volg
       real rhol, rhog
-      real rhoratio
       integer icalld
       save icalld
       data icalld /0/
@@ -139,13 +116,8 @@ c-----------------------------------------------------------------------
 
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
       include 'NEKUSE'
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
-      common /speciestransport/ ifld_c
-      integer ifld_c
 
       real signls, speciesSrc
 
@@ -171,6 +143,7 @@ c-----------------------------------------------------------------------
       integer ix, iy, iz, iside, eg
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
       include 'NEKUSE'
 
       ! This subroutine is not called for periodic boundaries. All of the
@@ -187,13 +160,8 @@ c-----------------------------------------------------------------------
       integer ix, iy, iz, eg
       include 'SIZE'
       include 'TOTAL'
+      include 'CASE'
       include 'NEKUSE'
-
-      ! Import namespaced global variables.
-      common /ls_usr/ ifld_cls, ifld_clsr
-      integer ifld_cls, ifld_clsr
-      common /speciestransport/ ifld_c
-      integer ifld_c
 
       ! Import function from lvlSet.f (included at top of this file).
       real heaviside
@@ -229,11 +197,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'TOTAL'
-
-      common /ls_usr/ ifld_cls,ifld_clsr,
-     $                ifld_tls,ifld_tlsr 
-      integer ifld_cls,ifld_clsr
-      integer ifld_tls,ifld_tlsr
+      include 'CASE'
 
       real ntlsr, nclsr
       real pta(3),ptb(3)
@@ -276,11 +240,11 @@ c-----------------------------------------------------------------------
         open(unit=200,file='pr.dat',status='unknown')
       endif
 
-      pord = uparam(3)
+      pord = uparam(iprm_pord)
       call extrappr(prext,pr,prlag(1,1,1,1,1),prlag(1,1,1,1,2),pord)
 
-      ntlsr = uparam(1) !freq of TLS re-distancing
-      nclsr = uparam(2) !freq of CLS re-distancing
+      ntlsr = uparam(iprm_tlsr_freq) ! freq of TLS re-distancing
+      nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
 
       call LS_default_driver(ntlsr,nclsr)
 
@@ -318,41 +282,10 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'SVV'
       include 'AVM'
+      include 'CASE'
 
-      common /dimen/ Re, Fr, We, Sc, Pe, H, rhoratio, nuratio,
-     $    muratio, diffratio
-      real Re, Fr, We, Sc, Pe, H, rhoratio, nuratio, muratio,
-     $    diffratio
-
-      common /ls_usr/ ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
-      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr
-      integer ifdebug, ifixCLSbdry
-      real farfield
-
-      common /speciestransport/ ifld_c, species_equation_version
-      integer ifld_c, species_equation_version
-
-      real eps, dt_cls_in, dt_tls_in
-      integer nsteps_cls, nsteps_tls
-
-      ! Set case parameters.
-      Re = 230.0
-      Fr = 1.6
-      We = 2.6
-      Sc = 4.1
-      Pe = Re*Sc
-      H = 0.2802
-      rhoratio = 0.535/1975
-      nuratio = 9.678e-05/3.843e-6
-      muratio = nuratio*rhoratio
-      diffratio = 5.8677e-4/9.3525e-7
-
-      ! Configure field mappings.
-      ifld_cls = 2  ! temperature
-      ifld_tls = 3  ! scalar01
-      ifld_clsr = 4 ! scalar02
-      ifld_tlsr = 5 ! scalar03
-      ifld_c = 6    ! scalar04
+      integer ifdebug, ifixCLSbdry, nsteps_cls, nsteps_tls
+      real farfield, eps, dt_cls_in, dt_tls_in
 
       ! Initialize level set-specific data.
       eps = 1.5/(lx1-1.0)
@@ -361,9 +294,6 @@ c-----------------------------------------------------------------------
       farfield = 1.0
       call ls_init(ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr,
      $             eps, ifdebug, ifixCLSbdry, farfield)
-
-      ! Initialize species transport-specific data.
-      species_equation_version = uparam(4)
 
 c---------------------------------------------------      
 c     This section to specify user defined parameters
