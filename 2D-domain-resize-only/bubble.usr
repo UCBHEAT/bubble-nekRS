@@ -209,7 +209,7 @@ c-----------------------------------------------------------------------
       uy = 0.0
       uz = 0.0
 
-      temp = sqrt(xx**2.0+(yy-0.5)**2.0)-0.5/2.0
+      temp = sqrt(xx**2.0+(yy-1.0)**2.0)-1.0/2.0
       if(ifield.eq.ifld_tls .or. ifield.eq.ifld_tlsr)then
         continue
       elseif(ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr)then
