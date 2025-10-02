@@ -2,7 +2,10 @@
       include "experimental/lserrors.f"
       include "species.f"
 c-----------------------------------------------------------------------
-      subroutine uservp(ix,iy,iz,eg) ! set variable properties
+      subroutine uservp(ix,iy,iz,eg)
+      ! Set variable properties.
+      ! Note that this subroutine is not called by external solvers such
+      ! as HYPRE!
       implicit none
       integer ix,iy,iz,eg,el
      
@@ -19,17 +22,11 @@ c-----------------------------------------------------------------------
 
       el = gllel(eg)
 
-!     These routine is not called by external solver
-!     To Do: change the flow, so that this routine is called
-!     similar to RANS. Will avoid confusion
-
-      if(ifield.eq.1)then
+      if (ifield.eq.ifld_v) then
         psi = t(ix,iy,iz,el,ifld_cls-1)
         psi = max(0.0,psi)
         psi = min(1.0,psi)
         utrans = (1.0-psi)*rhoratio + psi
-        !in non-dimensional form you must have kinematic 
-        !viscosity here
         udiff = ((1.0-psi)*muratio + psi)/Re
         if(istep.le.2)then
           vtrans0(ix,iy,iz,el) = utrans
@@ -42,18 +39,15 @@ c-----------------------------------------------------------------------
         udiff = speciesDiff(ix, iy, iz, el)
       else
         utrans = 1.0
-        udiff = 1e-10
-        if(ifavm(ifield-1))then
-          udiff = 1e-10       !must be tiny for hyperbolic
-        elseif(ifsvv(ifield-1))then
-          udiff = 1e-10      !must be tiny for hyperbolic
-        endif
+        udiff = 1e-10 ! must be tiny for hyperbolic equations
       endif
 
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userf(ix,iy,iz,eg) ! set acceleration term
+      subroutine userf(ix,iy,iz,eg)
+      ! Set acceleration (not force!) for the source term in the
+      ! velocity equation.
       implicit none
       integer ix,iy,iz,eg,e
 
@@ -96,59 +90,49 @@ c-----------------------------------------------------------------------
         icalld = 1
       endif
 
+      ! Compute surface tension contribution (sfx, sfy, sfz).
       call surfacetension(ix,iy,iz,e,1./We,sfx,sfy,sfz)
       
+      ! Compute SVV contribution (svvx, svvy, svvz).
       call svv_fluid(ix,iy,iz,e,svvx,svvy,svvz)
 
-      rhol = 1.0
-      ! dpdy = (1./Fr)*rhol/vtrans(ix,iy,iz,e,1)
+      ! Compute dpdy contribution.
+      !rhol = 1.0
+      !dpdy = (1./Fr)*rhol/vtrans(ix,iy,iz,e,1)
       dpdy = (1./Fr)*fh/vtrans(ix,iy,iz,e,1)
 
+      ! Set output variables.
       ffx = sfx + svvx
       ffy = sfy + svvy - 1.0/Fr + dpdy
 
       return
       end
 c-----------------------------------------------------------------------
-      subroutine userq(ix,iy,iz,eg) ! set source term
+      subroutine userq(ix, iy, iz, eg)
+      ! Set source term for all passive scalar equations.
       implicit none
-      integer ix,iy,iz,eg,el
+      integer ix, iy, iz, eg
 
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
       include 'NEKUSE'
 
-      real signls, speciesSrc
+      integer el
+      real speciesSrc
 
       el = gllel(eg)
       
       qvol = 0.0
       avol = 0.0
 
-      call limit_cls(ix,iy,iz,el)
+      ! This function checks ifield internally.
+      call limit_cls(ix, iy, iz, el)
 
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
         qvol = speciesSrc(ix, iy, iz, el)
       endif
-
-      return
-      end
-c-----------------------------------------------------------------------
-      subroutine userbc(ix, iy, iz, iside, eg)
-      ! Set up boundary conditions. This subroutine is called once per
-      ! field (ifield), per element (eg), per GLL point (ix, iy, iz).
-      implicit none
-      integer ix, iy, iz, iside, eg
-      include 'SIZE'
-      include 'TOTAL'
-      include 'CASE'
-      include 'NEKUSE'
-
-      ! This subroutine is not called for periodic boundaries. All of the
-      ! boundaries in the .box file are assigned as periodic, so this
-      ! function is never called.
 
       return
       end
@@ -169,8 +153,7 @@ c-----------------------------------------------------------------------
       ! Temporary variables.
       real signed_distance
 
-      if (ifield.eq.1) then
-        ! Field 1 is velocity.
+      if (ifield.eq.ifld_v) then
         ux = 0.0
         uy = 0.0
         uz = 0.0
@@ -194,83 +177,75 @@ c-----------------------------------------------------------------------
       end
 c-----------------------------------------------------------------------
       subroutine userchk()
+      ! User hook that is called every timestep.
+      ! Despite the naming, it isn't only called on checkpoints!
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
       real ntlsr, nclsr
-      real pta(3),ptb(3)
+      integer ntot, i
 
-      integer ntot,i
+      real cls_initial(lx1*ly1*lz1*lelv), tls_initial(lx1*ly1*lz1*lelv)
+      save cls_initial, tls_initial
+      real err, ls_volerr, rhol, ymax, glmax, glmin, circum, glsum
 
-      real exact(lx1*ly1*lz1*lelv)
-      save exact
-      real psiini(lx1,ly1,lz1,lelv)
-      save psiini
-      real err
-      
-      real ls_volerr
-      real rhol,ymax,glmax,glmin
-      real circum,glsum
-
-      common /usrdel/ delta(lx1,ly1,lz1,lelv),
-     $                sfmag(lx1,ly1,lz1,lelv) 
-      real delta, sfmag
-      real delsum, sfsum
-      real pmin, pmax
+      real delta(lx1, ly1, lz1, lelv), delsum, sfsum, pmin, pmax
       integer pord
       
-
       ntot = lx1*ly1*lz1*nelv
 
-      if(istep.eq.0)then
-        call copy(psiini,t(1,1,1,1,ifld_cls-1),ntot)
-        call copy(exact,t(1,1,1,1,ifld_tls-1),ntot)
+      ! Save initial state and set up file handles.
+      if (istep.eq.0) then
+        call copy(cls_initial,t(1,1,1,1,ifld_cls-1), ntot)
+        call copy(tls_initial,t(1,1,1,1,ifld_tls-1), ntot)
         do i=1,ntot
-          if(exact(i).ge.0.0)then
-            exact(i) = 1.0
+          if (tls_initial(i).ge.0.0) then
+            tls_initial(i) = 1.0
           else
-            exact(i) = 0.0
+            tls_initial(i) = 0.0
           endif
         enddo
-      endif
-      if(istep.eq.0 .and. nio.eq.0)then
-        open(unit=100,file='vol.dat',status='unknown')
-        open(unit=200,file='pr.dat',status='unknown')
+        if (nio.eq.0) then
+          open(unit=100, file='vol.dat')
+          open(unit=200, file='pr.dat')
+        endif
       endif
 
+      ! Perform pressure extrapolation.
       pord = uparam(iprm_pord)
-      call extrappr(prext,pr,prlag(1,1,1,1,1),prlag(1,1,1,1,2),pord)
+      call extrappr(prext, pr, prlag(1,1,1,1,1), prlag(1,1,1,1,2),
+     $              pord)
 
+      ! Perform re-distancing.
       ntlsr = uparam(iprm_tlsr_freq) ! freq of TLS re-distancing
       nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
+      call LS_default_driver(ntlsr, nclsr)
 
-      call LS_default_driver(ntlsr,nclsr)
-
-      err = ls_volerr(ifld_cls,exact,psiini)
-
-      if(nio.eq.0)then 
-        write(*,*)"Volume error",err
-        write(100,*)time,err
+      ! Print volume error diagnostics.
+      err = ls_volerr(ifld_cls, tls_initial, cls_initial)
+      if (nio.eq.0) then
+        write(*,*) "Volume error", err
+        write(100,*) time, err
       endif
-
-      if(istep.eq.nsteps .and. nio.eq.0) close(100)
-
-      ! call col2(vx,t(1,1,1,1,ifld_cls-1),ntot)
-      ! call col2(vy,t(1,1,1,1,ifld_cls-1),ntot)
       
-      call deltals(t(1,1,1,1,ifld_cls-1),delta)
-      call col2(delta,bm1,ntot)
-      delsum = glsum(delta,ntot)
-      if(nio.eq.0)write(*,*)"Interface Area",delsum
+      ! Print interface area diagnostics.
+      call deltals(t(1,1,1,1,ifld_cls-1), delta)
+      call col2(delta, bm1, ntot)
+      delsum = glsum(delta, ntot)
+      if (nio.eq.0) write(*,*) "Interface area", delsum
 
-      pmin = glmin(pr,ntot)
-      pmax = glmax(pr,ntot)
-      if(nio.eq.0)then
-        write(200,*)time,pmax-pmin
+      ! Print pressure diagnostics.
+      pmin = glmin(pr, ntot)
+      pmax = glmax(pr, ntot)
+      if (nio.eq.0) write(200,*) time, pmax-pmin
+
+      ! Clean up file handles on last time step.
+      if (istep.eq.nsteps .and. nio.eq.0) then
+        close(100)
+        close(200)
       endif
-      if(istep.eq.nsteps .and. nio.eq.0) close(200)
 
       return
       end
@@ -281,7 +256,6 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'TOTAL'
       include 'SVV'
-      include 'AVM'
       include 'CASE'
 
       integer ifdebug, ifixCLSbdry, nsteps_cls, nsteps_tls
@@ -295,61 +269,23 @@ c-----------------------------------------------------------------------
       call ls_init(ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr,
      $             eps, ifdebug, ifixCLSbdry, farfield)
 
-c---------------------------------------------------      
-c     This section to specify user defined parameters
-c     for AVM/SVV. Leave commented to use default parameters
-c     parameters. 
-
-      !fluid
+      ! SVV parameters for velocity.
       svv_c0(1) = 1.0
       svvcut(1) = (lx1-1.0)/2.0
 
-      ! svv_c0(ifld_cls) = 1.0                 !ifld_cls
-      ! svvcut(ifld_cls) = (lx1-1.0)/2.0
-      ! svv_k0(1) = 1.5
-      ! svv_k1(1) = 1.5
-      ! ifnlsvv(1) = .true.
-
-      ! avm_c1(1) = 1.0
-      ! avm_ncut(1) = 1.0
-      ! icont(1) = .false.
-      ! ifupwindsvv(ifld_cls) = .true.
-
-c     scalar 2      
-      ! svv_c0(ifld_tls) = 1.0                  !ifld_tls
-      ! svvcut(ifld_tls) = (lx1-1.0)/2.0
-      ! svv_k0(2) = 1.5
-      ! svv_k1(2) = 1.5
-      ! ifnlsvv(2) = .false.
-      ! ifupwindsvv(ifld_tls) = .true.
-
-c     scalar 3      
-      svv_c0(ifld_clsr) = 1.0                  !ifld_clsr
+      ! SVV parameters for CLSr and TLSr.
+      svv_c0(ifld_clsr) = 1.0
       svvcut(ifld_clsr) = (lx1-1.0)/2.0
-      ! svv_k0(3) = 1.5
-      ! svv_k1(3) = 1.5
-      ! ifnlsvv(3) = .false.
-      ! ifupwindsvv(ifld_clsr) = .true.
-
-c     scalar 3      
-      svv_c0(ifld_tlsr) = 1.0                  !ifld_tlsr
+      svv_c0(ifld_tlsr) = 1.0
       svvcut(ifld_tlsr) = (lx1-1.0)/3.0
-      ! svv_k0(4) = 1.5
-      ! svv_k1(4) = 1.5
-      ! ifnlsvv(4) = .false.
-      ! ifupwindsvv(ifld_tlsr) = .true.
-
-      ! avm_ncut(ifld_tlsr) = 2
-      ! avm_c1(ifld_tlsr) = 2.0
-      ! ifcont(ifld_tlsr) = .true.
 
       return
       end
 
 c-----------------------------------------------------------------------
       ! The regex in mkuserfile to auto-add unused user hooks is broken
-      ! (it thinks usrdat is present because it finds the string
-      ! "subroutine usrdat3").
+      ! (it thinks usrdat is present because the regex "subroutine
+      ! usrdat" matches on "subroutine usrdat3").
       subroutine usrdat
       return
       end
@@ -359,3 +295,7 @@ c-----------------------------------------------------------------------
       subroutine userqtl ! set thermal divergence
       return
       end
+
+      ! Note we don't provide a userbc because it isn't called for
+      ! periodic boundaries. All of the boundaries in the .box file for
+      ! this case are assigned as periodic.
