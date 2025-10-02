@@ -353,3 +353,9 @@ c-----------------------------------------------------------------------
       subroutine usrdat
       return
       end
+
+      ! The default version of this calls userqtl_scig, but in the
+      ! original bubbleRise/Dodd/2D case we had an empty userqtl.
+      subroutine userqtl ! set thermal divergence
+      return
+      end
