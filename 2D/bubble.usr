@@ -34,7 +34,6 @@ c-----------------------------------------------------------------------
           vtrans0(ix,iy,iz,el) = rhoratio
         endif
       elseif (ifield.eq.ifld_c) then
-        psi = t(ix,iy,iz,el,ifld_cls-1)
         utrans = 1.0 ! ignore mass, c is a volumetric value
         udiff = speciesDiff(ix, iy, iz, el)
       else

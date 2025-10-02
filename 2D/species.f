@@ -23,6 +23,8 @@
       real psi
 
       psi = t(ix,iy,iz,el,ifld_cls-1)
+      psi = max(0.0,psi)
+      psi = min(1.0,psi)
       species_equation_version = int(uparam(iprm_cst_ver))
       if (species_equation_version .eq. 0 .or.
      $    species_equation_version .eq. 1) then
@@ -32,6 +34,10 @@
         ! Li and Su (2025) version
         speciesDiff = (psi/(psi+(1.0-psi)*solubilityratio) +
      $      diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
+      else
+        print *, "Bad species_equation_version",
+     $        species_equation_version
+        call abort
       endif
 
       endfunction
@@ -89,11 +95,15 @@
                 ! Li and Su (2025) version
                 term1 = ((1.0 - diffratio)/solubilityratio)
      $                  / ((psi/solubilityratio+(1.0-psi))**2)
+              else
+                print *, "Bad species_equation_version",
+     $                species_equation_version
+                call abort
               endif
               ! CST coefficient.
               term2 = (1.0 - diffratio/solubilityratio)
      $                / (psi/solubilityratio + (1.0-psi))
-              stmp(i,1,1,1) = term1 - term2
+              stmp(i,1,1,1) = (term1 - term2)/Pe
             endblock
           enddo
           ! Multiply stmp by the current c field values.
@@ -127,5 +137,5 @@
 
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
-      speciesSrc = spdiv(ix,iy,iz,el)/Pe
+      speciesSrc = spdiv(ix,iy,iz,el)
       endfunction
