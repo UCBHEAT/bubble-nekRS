@@ -101,7 +101,7 @@
                 call abort
               endif
               ! CST coefficient.
-              term2 = (1.0 - diffratio/solubilityratio)
+              term2 = (1.0/solubilityratio - diffratio)
      $                / (psi/solubilityratio + (1.0-psi))
               stmp(i,1,1,1) = (term1 - term2)/Pe
             endblock
