@@ -11,11 +11,11 @@ c
       ! BASIC
       parameter (ldim=2)               ! domain dimension (2 or 3)
       parameter (lx1=6)                ! GLL points per element along each direction
-      parameter (lxd=lx1*3/2)               ! GL  points for over-integration (dealiasing) 
+      parameter (lxd=lx1*3/2)          ! GL  points for over-integration (dealiasing) 
       parameter (lx2=lx1-0)            ! GLL points for pressure (lx1 or lx1-2)
                                      
-      parameter (lelg=32*64)            ! max number of global elements
-      parameter (lpmin=40)              ! min number of MPI ranks 
+      parameter (lelg=32*64)           ! max number of global elements
+      parameter (lpmin=40)             ! min number of MPI ranks 
       parameter (lelt=lelg/lpmin + 3)  ! max number of local elements per MPI rank
       parameter (ldimt=5)              ! max auxiliary fields (temperature + scalars)
 
@@ -31,7 +31,7 @@ c
       parameter (mxprev=20)            ! max dim of projection space
       parameter (lgmres=30)            ! max dim Krylov space
       parameter (lorder=3)             ! max order in time
-      parameter (lx1m=lx1)               ! GLL points mesh solver
+      parameter (lx1m=lx1)             ! GLL points mesh solver
       parameter (lfdm=0)               ! unused 
       parameter (lelx=1,lely=1,lelz=1) ! global tensor mesh dimensions
 
