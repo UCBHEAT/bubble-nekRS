@@ -20,7 +20,8 @@
       parameter (solubilityratio = 1.3394e-4/3.75464e-7)
 
       ! Field mappings.
-      integer ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr, ifld_c
+      integer ifld_v, ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr, ifld_c
+      parameter (ifld_v = 1)    ! velocity
       parameter (ifld_cls = 2)  ! temperature = conservative level set
       parameter (ifld_tls = 3)  ! scalar01 = traditional level set
       parameter (ifld_clsr = 4) ! scalar02 = CLS internal re-distancing
