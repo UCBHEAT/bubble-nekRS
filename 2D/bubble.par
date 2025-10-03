@@ -1,29 +1,18 @@
-
-# nek parameter file
-#
 [GENERAL]
 #startFrom = bubble.fld
-#stopAt = numSteps
 stopAt = endTime
-#numSteps = 1 #400 #500000 #12000 #1000 #16000 #4000 #400 #400 #200000
-endTime = 3.0 #10e-4
-
-dt = 10.0e-05
-timeStepper = bdf2 #With bdf2 SF does not work well
-#variabledt = yes
-#targetCFL = 0.2
-#extrapolation = OIFS
-
+endTime = 3.0
+timeStepper = bdf2
 writeControl = runTime
 writeInterval = 0.5
 
-userParam01 = 0.01     #Freq of TLSR
-userParam02 = 0.001     #Freq of CLSR
-userParam03 = 2     #Pressure extrapolation order
+userParam01 = 0.01      # frequency of TLS redistancing
+userParam02 = 0.001     # frequency of CLS redistancing
+dt          = 0.0001    # frequency of pressure, velocity, CLS solve
 
-#filtering = hpfrt
-#filterModes = 1
-#filterWeight = 10.0
+userParam03 = 2         # pressure extrapolation order
+
+userParam04 = 1         # 0 = Marschall (2012) equation, 1 = Li and Su (2025) equation
 
 [PROBLEMTYPE]
 equation = lowMachNS
@@ -33,40 +22,33 @@ stressFormulation = yes
 [PRESSURE]
 residualTol = 1e-6
 residualProj = yes
-#preconditioner = semg_amg_hypre
 
 [VELOCITY]
-#residualProj = yes
 residualTol = 1e-6
-density = 1
-viscosity = -1.0 #dummy
+# Density and viscosity provided in uservp as variable properties.
 
-[TEMPERATURE] #cls field
-rhocp = 1.
-conductivity = 1.
+[TEMPERATURE] # CLS
 residualTol = 1e-8
 regularization = svv
+# Density & diffusivity (rhocp & conductivity) provided in uservp
+# as variable properties.
 
-[SCALAR01] #tls field
-density = 1.0
-diffusivity = 1e-8 
+[SCALAR01] # TLS
 residualTol = 1e-8
 regularization = svv
+# Density & diffusivity provided in uservp as variable properties.
 
-[SCALAR02] #cls re-distanacing
-density = 1.0
-diffusivity = 1e-8 
+[SCALAR02] # CLS re-distanacing (will later be hidden from user)
 residualTol = 1e-8
 regularization = svv
+# Density & diffusivity provided in uservp as variable properties.
 
-[SCALAR03] #tls re-distancing field
-density = 1.0
-diffusivity = 1e-8 
+[SCALAR03] # TLS re-distancing (will later be hidden from user)
 residualTol = 1e-8
 regularization = svv
+# Density & diffusivity provided in uservp as variable properties.
 
 [SCALAR04] # tritium concentration
-density = 1.0
-diffusivity = 1e-8
 residualTol = 1e-8
-
+regularization = avm
+# Density & diffusivity provided in uservp as variable properties.
