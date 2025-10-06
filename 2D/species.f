@@ -7,10 +7,10 @@
       !   0 = off, passive scalar advection-diffusion only
       !   1 = Marschall (2012)
       !   2 = Li and Su (2025)
-      ! Affects 2 terms, speciesDiff() called by uservp and
-      ! speciesSrc() called by userq.
+      ! Affects 2 terms, species_diff() called by uservp and
+      ! species_src() called by userq.
       
-      real function speciesDiff(ix,iy,iz,el)
+      real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
       ! transport equation.
       implicit none
@@ -29,10 +29,10 @@
       if (species_equation_version .eq. 0 .or.
      $    species_equation_version .eq. 1) then
         ! CST off or Marschall et al (2012) version
-        speciesDiff = ((1.0-psi)*diffratio + psi)/Pe
+        species_diff = ((1.0-psi)*diffratio + psi)/Pe
       elseif (species_equation_version .eq. 2) then
         ! Li and Su (2025) version
-        speciesDiff = (psi/(psi+(1.0-psi)*solubilityratio) +
+        species_diff = (psi/(psi+(1.0-psi)*solubilityratio) +
      $      diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
       else
         print *, "Bad species_equation_version",
@@ -42,7 +42,7 @@
 
       endfunction
 
-      real function speciesSrc(ix,iy,iz,el)
+      real function species_src(ix,iy,iz,el)
       ! Calculate the source terms in the CST transport equation.
       implicit none
       integer ix, iy, iz, el
@@ -60,7 +60,7 @@
       integer species_equation_version
       species_equation_version = int(uparam(iprm_cst_ver))
       if (species_equation_version .eq. 0) then
-        speciesSrc = 0.0
+        species_src = 0.0
         return
       endif
 
@@ -137,7 +137,7 @@
 
       ! For the rest of the elements/GLL points, just look up based on
       ! work already done.
-      speciesSrc = spdiv(ix,iy,iz,el)
+      species_src = spdiv(ix,iy,iz,el)
       endfunction
 
       real function integrate_gradc()
@@ -148,7 +148,8 @@
       include 'TOTAL'
       include 'CASE'
 
-      real glsum, total_area, surfaceintegral_gradc
+      real, external :: glsum
+      real total_area, surfaceintegral_gradc
 
       block
         real vec_x(lx1,ly1,lz1,lelv), vec_y(lx1,ly1,lz1,lelv),

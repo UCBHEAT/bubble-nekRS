@@ -14,7 +14,7 @@ c-----------------------------------------------------------------------
       include 'CASE'
       include 'NEKUSE'
 
-      real speciesDiff
+      real, external :: species_diff
       real psi
       integer icalld
       save icalld
@@ -35,7 +35,7 @@ c-----------------------------------------------------------------------
         endif
       elseif (ifield.eq.ifld_c) then
         utrans = 1.0 ! ignore mass, c is a volumetric value
-        udiff = speciesDiff(ix, iy, iz, el)
+        udiff = species_diff(ix, iy, iz, el)
       else
         utrans = 1.0
         udiff = 1e-10 ! must be tiny for hyperbolic equations
@@ -118,7 +118,7 @@ c-----------------------------------------------------------------------
       include 'NEKUSE'
 
       integer el
-      real speciesSrc
+      real, external :: species_src
 
       el = gllel(eg)
       
@@ -130,7 +130,7 @@ c-----------------------------------------------------------------------
 
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
-        qvol = speciesSrc(ix, iy, iz, el)
+        qvol = species_src(ix, iy, iz, el)
       endif
 
       return
@@ -146,10 +146,7 @@ c-----------------------------------------------------------------------
       include 'CASE'
       include 'NEKUSE'
 
-      ! Import function from lvlSet.f (included at top of this file).
-      real heaviside
-
-      ! Temporary variables.
+      real, external :: heaviside
       real signed_distance
 
       if (ifield.eq.ifld_v) then
@@ -247,10 +244,12 @@ c-----------------------------------------------------------------------
       endif
 
       ! Compute Sherwood number.
+      if (nio.eq.0) then
       block
         real integrate_gradc
         write(*,*) "Interface average grad(c) = ", integrate_gradc()
       endblock
+      endif
 
       return
       end
