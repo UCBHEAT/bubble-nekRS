@@ -180,15 +180,11 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'CASE'
 
-      real ntlsr, nclsr
       integer ntot, i
 
-      real cls_initial(lx1*ly1*lz1*lelv), tls_initial(lx1*ly1*lz1*lelv)
-      save cls_initial, tls_initial
-      real err, ls_volerr, rhol, ymax, glmax, glmin, circum, glsum
-
-      real delta(lx1, ly1, lz1, lelv), delsum, sfsum, pmin, pmax
-      integer pord
+      real, external :: glmax, glmin, glsum, ls_volerr
+      real, save :: cls_initial(lx1*ly1*lz1*lelv),
+     $              tls_initial(lx1*ly1*lz1*lelv)
       
       ntot = lx1*ly1*lz1*nelv
 
@@ -210,32 +206,43 @@ c-----------------------------------------------------------------------
       endif
 
       ! Perform pressure extrapolation.
-      pord = uparam(iprm_pord)
-      call extrappr(prext, pr, prlag(1,1,1,1,1), prlag(1,1,1,1,2),
-     $              pord)
+      block
+        integer pord = int(uparam(iprm_pord))
+        call extrappr(prext, pr, prlag(1,1,1,1,1), prlag(1,1,1,1,2),
+     $                pord)
+      endblock
 
       ! Perform re-distancing.
-      ntlsr = uparam(iprm_tlsr_freq) ! freq of TLS re-distancing
-      nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
-      call LS_default_driver(ntlsr, nclsr)
+      block
+        real ntlsr, nclsr
+        ntlsr = uparam(iprm_tlsr_freq) ! freq of TLS re-distancing
+        nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
+        call LS_default_driver(ntlsr, nclsr)
+      endblock
 
       ! Print volume error diagnostics.
-      err = ls_volerr(ifld_cls, tls_initial, cls_initial)
-      if (nio.eq.0) then
-        write(*,*) "Volume error", err
-        write(100,*) time, err
-      endif
+      block
+        real err = ls_volerr(ifld_cls, tls_initial, cls_initial)
+        if (nio.eq.0) then
+          write(*,*) "Volume error", err
+          write(100,*) time, err
+        endif
+      endblock
       
       ! Print interface area diagnostics.
-      call deltals(t(1,1,1,1,ifld_cls-1), delta)
-      call col2(delta, bm1, ntot)
-      delsum = glsum(delta, ntot)
-      if (nio.eq.0) write(*,*) "Interface area", delsum
+      block
+        real delta(lx1, ly1, lz1, lelv), delsum
+        call deltals(t(1,1,1,1,ifld_cls-1), delta)
+        call col2(delta, bm1, ntot)
+        delsum = glsum(delta, ntot)
+        if (nio.eq.0) write(*,*) "Interface area", delsum
+      endblock
 
       ! Print pressure diagnostics.
-      pmin = glmin(pr, ntot)
-      pmax = glmax(pr, ntot)
-      if (nio.eq.0) write(200,*) time, pmax-pmin
+      block
+        real pmin = glmin(pr, ntot), pmax = glmax(pr, ntot)
+        if (nio.eq.0) write(200,*) time, pmax-pmin
+      endblock
 
       ! Clean up file handles on last time step.
       if (istep.eq.nsteps .and. nio.eq.0) then
