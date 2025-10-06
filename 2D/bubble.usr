@@ -246,6 +246,12 @@ c-----------------------------------------------------------------------
         close(200)
       endif
 
+      ! Compute Sherwood number.
+      block
+        real integrate_gradc
+        write(*,*) "Interface average grad(c) = ", integrate_gradc()
+      endblock
+
       return
       end
 c-----------------------------------------------------------------------

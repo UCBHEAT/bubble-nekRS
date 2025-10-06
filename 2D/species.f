@@ -139,3 +139,60 @@
       ! work already done.
       speciesSrc = spdiv(ix,iy,iz,el)
       endfunction
+
+      real function integrate_gradc()
+      ! Calculate the integral of grad(c).dA over the interface defined
+      ! by the level set field, and normalize it by total surface area.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      real glsum, total_area, surfaceintegral_gradc
+
+      block
+        real vec_x(lx1,ly1,lz1,lelv), vec_y(lx1,ly1,lz1,lelv),
+     $      vec_z(lx1,ly1,lz1,lelv)
+        integer ntot
+        ntot = lx1*ly1*lz1*nelt
+
+        ! Calculate interface unit normals from TLS.
+        !   vec = nhat
+        call cls_normals(vec_x, vec_y, vec_z, ifld_tls)
+
+        ! Scale by surface area.
+        !   vec = dA
+        block
+          real delta(lx1,ly1,lz1,lelv)
+          ! Calculate surface area density from CLS, as delta.
+          ! delta = 1/(4*epsilon) (cosh(clip(atanh(2*psi - 1))))^(-2)
+          call deltals(t(1,1,1,1,ifld_cls-1), delta)
+          total_area = glsum(delta, ntot)
+          ! Multiply vector by surface area density.
+          call col2(vec_x, delta, ntot)
+          call col2(vec_y, delta, ntot)
+          call col2(vec_z, delta, ntot)
+        endblock
+
+        ! Dot with grad(c).
+        !   vec = grad(c) . dA
+        block
+          real gradc_x(lx1,ly1,lz1,lelv), gradc_y(lx1,ly1,lz1,lelv),
+     $        gradc_z(lx1,ly1,lz1,lelv)
+          ! Take grad(c) as gradc_{x,y,z}.
+          call gradm1(gradc_x, gradc_y, gradc_z, t(1,1,1,1,ifld_c-1))
+          ! Take inner product of vec by grad(c).
+          call col2(vec_x, gradc_x, ntot)
+          call col2(vec_y, gradc_y, ntot)
+          call col2(vec_z, gradc_z, ntot)
+        endblock
+
+        ! Sum across elements.
+        !  surfaceintegral_gradc = \int grad(c) . dA
+        surfaceintegral_gradc = glsum(vec_x, ntot) + glsum(vec_y, ntot)
+     $      + glsum(vec_z, ntot)
+      endblock
+
+      ! Return normalized grad(c) result.
+      integrate_gradc = surfaceintegral_gradc/total_area
+      endfunction
