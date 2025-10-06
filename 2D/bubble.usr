@@ -258,13 +258,13 @@ c-----------------------------------------------------------------------
       block
         real, external :: integrate_gradc
         real gradc, mtc, sherwood
-        ! Calculate integrate(grad(c).dA)/A.
+        ! Calculate int(grad(c).dA)/A.
         gradc = integrate_gradc()
-        ! c_source - c_sink is non-dimensionalized to 1.
+        ! (c_src-c_snk) is non-dimensionalized to 1.
         ! Liquid diffusion coefficient is 1/Pe.
-        !   MTC = mdot / (A*(c_source - c_sink))
-        !       = -D*grad(c) / (A*(c_source - c_sink))
-        !       = -(1/Pe)grad(c)/A
+        !   MTC = mdot / (A*(c_src-c_snk))
+        !       = -D*int(grad(c).dA) / (A*(c_src-c_snk))
+        !       = -(1/Pe)int(grad(c).dA)/A
         mtc = -gradc / Pe
         ! Sherwood number divides out D again.
         !   Sh = MTC / (D/L)
