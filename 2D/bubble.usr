@@ -207,7 +207,8 @@ c-----------------------------------------------------------------------
 
       ! Perform pressure extrapolation.
       block
-        integer pord = int(uparam(iprm_pord))
+        integer pord
+        pord = int(uparam(iprm_pord))
         call extrappr(prext, pr, prlag(1,1,1,1,1), prlag(1,1,1,1,2),
      $                pord)
       endblock
@@ -222,7 +223,8 @@ c-----------------------------------------------------------------------
 
       ! Print volume error diagnostics.
       block
-        real err = ls_volerr(ifld_cls, tls_initial, cls_initial)
+        real err
+        err = ls_volerr(ifld_cls, tls_initial, cls_initial)
         if (nio.eq.0) then
           write(*,*) "Volume error", err
           write(100,*) time, err
@@ -240,7 +242,9 @@ c-----------------------------------------------------------------------
 
       ! Print pressure diagnostics.
       block
-        real pmin = glmin(pr, ntot), pmax = glmax(pr, ntot)
+        real pmin, pmax
+        pmin = glmin(pr, ntot)
+        pmax = glmax(pr, ntot)
         if (nio.eq.0) write(200,*) time, pmax-pmin
       endblock
 
