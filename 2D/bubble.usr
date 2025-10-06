@@ -252,10 +252,25 @@ c-----------------------------------------------------------------------
 
       ! Compute Sherwood number.
       if (nio.eq.0) then
-      block
-        real integrate_gradc
-        write(*,*) "Interface average grad(c) = ", integrate_gradc()
-      endblock
+        block
+          real, external :: integrate_gradc
+          real gradc, mtc, sherwood
+          ! Calculate integrate(grad(c).dA)/A.
+          gradc = integrate_gradc()
+          ! c_source - c_sink is non-dimensionalized to 1.
+          ! Liquid diffusion coefficient is 1/Pe.
+          !   MTC = mdot / (A*(c_source - c_sink))
+          !       = -D*grad(c) / (A*(c_source - c_sink))
+          !       = -(1/Pe)grad(c)/A
+          mtc = -gradc / Pe
+          ! Sherwood number divides out D again.
+          !   Sh = MTC / (D/L)
+          !      = MTC / (1/Pe)
+          sherwood = mtc * Pe ! = -gradc
+          write(*,*) "Interface averaged grad(c) = ", gradc
+          write(*,*) "MTC = ", mtc
+          write(*,*) "Sh = ", sherwood
+        endblock
       endif
 
       return
