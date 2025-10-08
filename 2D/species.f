@@ -229,7 +229,7 @@
       endfunction
 
       subroutine update_ctrue()
-      ! Update ctrue (which is c, corrected for dcdy)
+      ! Update ctrue (which is c, corrected for dcdy).
       implicit none
       include 'SIZE'
       include 'TOTAL'
@@ -256,6 +256,7 @@
       include 'TOTAL'
       include 'CASE'
 
+      real i, j, k, l
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
