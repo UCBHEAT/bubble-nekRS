@@ -20,7 +20,8 @@
       parameter (solubilityratio = 1.3394e-4/3.75464e-7)
 
       ! Field mappings.
-      integer ifld_v, ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr, ifld_c
+      integer ifld_v, ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr, ifld_c,
+     $    ifld_ctrue
       parameter (ifld_v = 1)    ! velocity
       parameter (ifld_cls = 2)  ! temperature = conservative level set
       parameter (ifld_tls = 3)  ! scalar01 = traditional level set
@@ -30,7 +31,8 @@
       parameter (ifld_ctrue = 7)! scalar05 = true c (dc/dy removed)
 
       ! User parameter mappings
-      integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver
+      integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver,
+     $    iprm_dcdy
       parameter (iprm_tlsr_freq = 1) ! uparam01 = TLS redistancing freq
       parameter (iprm_clsr_freq = 2) ! uparam02 = CLS redistancing freq
       parameter (iprm_pord = 3)      ! uparam03 = p extrapolation order

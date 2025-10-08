@@ -222,6 +222,7 @@
       include 'TOTAL'
       include 'NEKUSE'
       include 'CASE'
+
       real dcdy
       dcdy = uparam(iprm_dcdy)
       jump_periodic_src = dcdy*y
@@ -235,7 +236,8 @@
       include 'NEKUSE'
       include 'CASE'
 
-      real i, j, k, l
+      real i, j, k, l, dcdy
+      dcdy = uparam(iprm_dcdy)
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
