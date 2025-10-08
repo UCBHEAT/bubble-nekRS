@@ -1,17 +1,7 @@
--2                     spatial dimension (will create box.re2)
-6                      number of fields
-#
-#    comments: two dimensional periodic hill
-#
-#========================================================
-#
-Box                                       
--32 -64                           Nelx Nely
--1 1 1.                       x0 x1 ratio
-0 4 1.                            y0 y1 ratio
-P  ,P  ,P  ,P                     BCs for velocity
-P  ,P  ,P  ,P                     BCs for temperature (CLS)
-P  ,P  ,P  ,P                     BCs for scalar01 (TLS)
-P  ,P  ,P  ,P                     BCs for scalar02 (CLSr)
-P  ,P  ,P  ,P                     BCs for scalar03 (TLSr)
-P  ,P  ,P  ,P                     BCs for scalar04 (concentration)
+-2                      spatial dimension (will create box.re2)
+7                       number of fields (velocity + T + PS1-6)
+Box 1
+-32 -64                 Nelx Nely (negative for auto distribute nodes)
+-1 1 1                  x0 x1 node_ratio
+0 4 1                   y0 y1 node_ratio
+W  ,W  ,P  ,P           boundary conditions (left, right, bottom, top)
