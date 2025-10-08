@@ -13,8 +13,11 @@
       ! PARAMETER 05: dc/dy source term coefficient for jump-periodic
       ! boundary condition.
       !   The total concentration added across the domain height will
-      !   be dc/dy*(width*height*depth) for a simple box domain. Set
-      !   to 0 to disable.
+      !   be dc/dy*(width*height*depth) for a simple box domain. This
+      !   should be a negative value if the bubble is a source for c
+      !   (so the jump-periodic BC is the "sink"), or a positive value
+      !   if the bubble is sink (so the BC is "source"). Set to 0 to
+      !   disable.
       ! Note that using the jump periodic BC will cause the c field
       ! to no longer be directly interpretable as the concentration
       ! of a vertical pipe section, due to the linear (dc/dy)*y extra
