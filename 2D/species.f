@@ -248,3 +248,25 @@
         enddo
       enddo
       end
+
+      subroutine species_sink()
+      ! Set c = 0 in the interior of the bubble.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      do i=1,lx1
+        do j=1,ly1
+          do k=1,lz1
+            do l=1,nelt
+              ! Could also blend between existing value and 0.0 by psi,
+              ! rather than apply a sharp threshold at psi = 0.5.
+              if (t(i,j,k,l,ifld_cls-1).lt.0.5) then
+                t(i,j,k,l,ifld_c-1) = 0.0
+              endif
+            enddo
+          enddo
+        enddo
+      enddo
+      end

@@ -283,6 +283,9 @@ c-----------------------------------------------------------------------
       ! Update ctrue.
       call update_ctrue()
 
+      ! Reset bubble interior concentration.
+      call species_sink()
+
       return
       end
 c-----------------------------------------------------------------------
