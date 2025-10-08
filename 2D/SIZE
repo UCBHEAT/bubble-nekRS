@@ -17,7 +17,7 @@ c
       parameter (lelg=32*64)           ! max number of global elements
       parameter (lpmin=10)             ! min number of MPI ranks 
       parameter (lelt=lelg/lpmin + 3)  ! max number of local elements per MPI rank
-      parameter (ldimt=5)              ! max auxiliary fields (temperature + scalars)
+      parameter (ldimt=6)              ! max auxiliary fields (temperature + scalars)
 
       ! OPTIONAL
       parameter (ldimt_proj=1)         ! max auxiliary fields residual projection
