@@ -294,8 +294,8 @@ c-----------------------------------------------------------------------
       include 'SVV'
       include 'CASE'
 
-      integer ifdebug, ifixCLSbdry, nsteps_cls, nsteps_tls
-      real farfield, eps, dt_cls_in, dt_tls_in
+      integer ifdebug, ifixCLSbdry
+      real farfield, eps
 
       ! Initialize level set-specific data.
       eps = 1.5/(lx1-1.0)
