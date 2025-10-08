@@ -233,7 +233,6 @@
       implicit none
       include 'SIZE'
       include 'TOTAL'
-      include 'NEKUSE'
       include 'CASE'
 
       real i, j, k, l, dcdy
@@ -242,7 +241,8 @@
         do j=1,ly1
           do k=1,lz1
             do l=1,nelt
-              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) + dcdy*y
+              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) +
+     $            dcdy*ym1(i,j,k,l)
             enddo
           enddo
         enddo
