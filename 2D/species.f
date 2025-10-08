@@ -242,7 +242,7 @@
         do j=1,ly1
           do k=1,lz1
             do l=1,nelt
-              t(i,j,k,l,ifld_ctrue) = t(i,j,k,l,ifld_c) + dcdy*y
+              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) + dcdy*y
             enddo
           enddo
         enddo
