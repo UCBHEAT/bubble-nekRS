@@ -9,6 +9,18 @@
       !   2 = Li and Su (2025)
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
+      !
+      ! PARAMETER 05: dc/dy source term coefficient for jump-periodic
+      ! boundary condition.
+      !   The total concentration added across the domain height will
+      !   be dc/dy*(width*height*depth) for a simple box domain. Set
+      !   to 0 to disable.
+      ! Note that using the jump periodic BC will cause the c field
+      ! to no longer be directly interpretable as the concentration
+      ! of a vertical pipe section, due to the linear (dc/dy)*y extra
+      ! concentration we add as a source term. Thus we add a ctrue
+      ! field (calculated only, not transported) to view the true
+      ! concentration.
       
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
@@ -196,4 +208,18 @@
 
       ! Return normalized grad(c) result.
       integrate_gradc = surfaceintegral_gradc/total_area
+      endfunction
+
+      real function jump_periodic_src(ix,iy,iz,el)
+      ! Calculate the dc/dy source term for our jump-periodic boundary
+      ! condition.
+      implicit none
+      integer ix, iy, iz, el
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'CASE'
+      real dcdy
+      dcdy = uparam(iprm_dcdy)
+      jump_periodic_src = dcdy*y
       endfunction

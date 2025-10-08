@@ -27,6 +27,7 @@
       parameter (ifld_clsr = 4) ! scalar02 = CLS internal re-distancing
       parameter (ifld_tlsr = 5) ! scalar03 = TLS internal re-distancing
       parameter (ifld_c = 6)    ! scalar04 = concentration
+      parameter (ifld_ctrue = 7)! scalar05 = true c (dc/dy removed)
 
       ! User parameter mappings
       integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver
@@ -34,3 +35,4 @@
       parameter (iprm_clsr_freq = 2) ! uparam02 = CLS redistancing freq
       parameter (iprm_pord = 3)      ! uparam03 = p extrapolation order
       parameter (iprm_cst_ver = 4)   ! uparam04 = CST version
+      parameter (iprm_dcdy = 5)      ! uparam05 = jump-periodic BC
