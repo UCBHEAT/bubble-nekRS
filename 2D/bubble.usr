@@ -133,7 +133,7 @@ c-----------------------------------------------------------------------
         qvol = species_src(ix, iy, iz, el)
 
         ! Add dc/dy jump-periodic BC term.
-        qvol += jump_periodic_src(ix, iy, iz, el)
+        qvol = qvol + jump_periodic_src(ix, iy, iz, el)
       endif
 
       return
