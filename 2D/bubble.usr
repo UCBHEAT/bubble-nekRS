@@ -274,9 +274,9 @@ c-----------------------------------------------------------------------
         !      = MTC / (1/Pe)
         sherwood = mtc * Pe ! = -gradc
         if (nio.eq.0) then
-          write(*,*) "Interface averaged grad(c) = ", gradc
-          write(*,*) "MTC = ", mtc
-          write(*,*) "Sh = ", sherwood
+          write(*,*) "Interface averaged grad(c)", gradc
+          write(*,*) "MTC", mtc
+          write(*,*) "Sh", sherwood
         endif
       endblock
 
@@ -284,7 +284,17 @@ c-----------------------------------------------------------------------
       call update_ctrue()
 
       ! Reset bubble interior concentration.
-      call species_sink()
+      block
+        real, external :: species_sink
+        real, save :: cumulative_removed = 0
+        real removed
+        removed = species_sink()
+        cumulative_removed = cumulative_removed + removed
+        if (nio.eq.0) then
+          write(*,*) "Species sink", total_removed
+          write(*,*) "(Cumulative", total_removed, ")"
+        endif
+      endblock
 
       return
       end
