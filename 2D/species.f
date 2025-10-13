@@ -256,7 +256,7 @@
       include 'TOTAL'
       include 'CASE'
 
-      real i, j, k, l
+      real i, j, k, l, removed
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
@@ -264,10 +264,19 @@
               ! Could also blend between existing value and 0.0 by psi,
               ! rather than apply a sharp threshold at psi = 0.5.
               if (t(i,j,k,l,ifld_cls-1).lt.0.5) then
+                removed = removed + t(i,j,k,l,ifld_c-1)*binvm1(i,j,k,l)
                 t(i,j,k,l,ifld_c-1) = 0.0
               endif
             enddo
           enddo
         enddo
       enddo
+
+      block
+        real total_removed
+        total_removed = glsum(removed, 1)
+        if (nio.eq.0) then
+          write(*,*) "Species sink:", total_removed
+        endif
+      endblock
       end
