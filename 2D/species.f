@@ -18,6 +18,10 @@
       !   (so the jump-periodic BC is the "sink"), or a positive value
       !   if the bubble is sink (so the BC is "source"). Set to 0 to
       !   disable.
+      !   In a non-dimensional case where c is in [0, 1] and the bubble
+      !   is expected to absorb enough species to deplete the liquid
+      !   around it faster than it rises, a good starting guess is
+      !   1.0/domain_height so that a total jump of 1.0 is added.
       ! Note that using the jump periodic BC will cause the c field
       ! to no longer be directly interpretable as the concentration
       ! of a vertical pipe section, due to the linear (dc/dy)*y extra

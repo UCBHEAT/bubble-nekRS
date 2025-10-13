@@ -13,7 +13,7 @@ dt          = 0.0001    # frequency of pressure, velocity, CLS solve
 userParam03 = 2         # pressure extrapolation order
 
 userParam04 = 2         # species transport equation (see species.f)
-userParam05 = 1.0       # dc/dy jump periodic boundary condition (see species.f)
+userParam05 = 0.125     # dc/dy jump periodic boundary condition (see species.f)
 
 [PROBLEMTYPE]
 equation = lowMachNS
