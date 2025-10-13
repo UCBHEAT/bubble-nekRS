@@ -250,13 +250,15 @@
       end
 
       subroutine species_sink()
-      ! Set c = 0 in the interior of the bubble.
+      ! Set ctrue = 0 in the interior of the bubble.
+      ! This translates to setting c = dcdy*y.
+      ! Call this before update_ctrue() in usrchk()!
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
-      real i, j, k, l, removed
+      real i, j, k, l, ctrue, removed
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
@@ -264,8 +266,9 @@
               ! Could also blend between existing value and 0.0 by psi,
               ! rather than apply a sharp threshold at psi = 0.5.
               if (t(i,j,k,l,ifld_cls-1).lt.0.5) then
-                removed = removed + t(i,j,k,l,ifld_c-1)*binvm1(i,j,k,l)
-                t(i,j,k,l,ifld_c-1) = 0.0
+                ctrue = t(i,j,k,l,ifld_c-1) - jump_periodic_src(i,j,k,l)
+                removed = removed + ctrue*binvm1(i,j,k,l)
+                t(i,j,k,l,ifld_c-1) = jump_periodic_src(i,j,k,l)
               endif
             enddo
           enddo
