@@ -149,7 +149,7 @@ c-----------------------------------------------------------------------
       include 'CASE'
       include 'NEKUSE'
 
-      real, external :: heaviside
+      real, external :: heaviside, jump_periodic_ic
       real signed_distance
 
       if (ifield.eq.ifld_v) then
@@ -168,6 +168,10 @@ c-----------------------------------------------------------------------
         ! CLS fields should be initialized to 0 inside the bubble,
         ! 1 outside the bubble. Same for species concentration.
         temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
+
+        ! Correct for jump-periodic boundary condition (change of
+        ! variables).
+        temp = temp + jump_periodic_ic(ix, iy, iz, gllel(eg))
       endif
 
       ! TLS fields are derived from CLS and do not need initialization.
@@ -287,13 +291,16 @@ c-----------------------------------------------------------------------
       block
         real, external :: species_sink
         real, save :: cumulative_removed = 0
-        real removed
+        real removed, rate
         removed = species_sink()
         cumulative_removed = cumulative_removed + removed
+        rate = cumulative_removed / time
         if (nio.eq.0) then
-          write(*,*) "Species sink", total_removed
-          write(*,*) "(Cumulative", total_removed, ")"
+          write(*,*) "Species sink", removed
+          write(*,*) "Cumulative sink", cumulative_removed
+          write(*,*) "Extraction rate", rate
         endif
+        ! TODO: update dcdy given rate every X timesteps.
       endblock
 
       return

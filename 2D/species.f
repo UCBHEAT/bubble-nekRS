@@ -224,12 +224,28 @@
       integer ix, iy, iz, el
       include 'SIZE'
       include 'TOTAL'
-      include 'NEKUSE'
       include 'CASE'
 
       real dcdy
       dcdy = uparam(iprm_dcdy)
-      jump_periodic_src = dcdy*y
+      ! (Don't use y from NEKUSE as a shorthand for ym1(i,j,k,l) as we
+      ! are called from a few different contexts, not necessarily a
+      ! per-GLL-point user hook.)
+      jump_periodic_src = dcdy*ym1(ix,iy,iz,el)
+      endfunction
+
+      real function jump_periodic_ic(ix,iy,iz,el)
+      ! Calculate the correction term that should be added to an initial
+      ! condition for ctrue to get the initial condition for c.
+      implicit none
+      integer ix, iy, iz, el
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      real dcdy
+      dcdy = uparam(iprm_dcdy)
+      jump_periodic_ic = dcdy*ym1(ix,iy,iz,el)
       endfunction
 
       subroutine update_ctrue()
@@ -239,14 +255,14 @@
       include 'TOTAL'
       include 'CASE'
 
-      real i, j, k, l, dcdy
-      dcdy = uparam(iprm_dcdy)
+      real, external :: jump_periodic_src
+      real i, j, k, l
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
             do l=1,nelt
-              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) +
-     $            dcdy*ym1(i,j,k,l)
+              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) -
+     $            jump_periodic_src(i,j,k,l)
             enddo
           enddo
         enddo
@@ -255,14 +271,14 @@
 
       real function species_sink()
       ! Set ctrue = 0 in the interior of the bubble. This translates
-      ! to setting c = dcdy*y. Returns total species removed. Call
-      ! this before update_ctrue() in usrchk()!
+      ! to setting c = dcdy*y. Returns total species removed (global
+      ! sum). Call this before update_ctrue() in usrchk()!
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
-      real, external :: jump_periodic_src
+      real, external :: jump_periodic_src, glsum
       real removed
 
       block
