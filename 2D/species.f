@@ -151,21 +151,39 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'CASE'
 
-      real psi
+      real c, psi
+      c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
       ! Clip to [0, 1].
       psi = max(0.0, psi)
       psi = min(1.0, psi)
 
-      ! Total term is of the form qvol - avol*c (where Nek has this split
-      ! so that avol can be specified implicitly to improve stability).
+      ! Total term is of the form qvol - avol*c (so that avol can be
+      ! specified implicitly to improve stability).
+      !
+      ! We need to be careful that neither term flips signs (for c<0 or
+      ! c>1), so we gate the terms with if-statements on c. The gas/
+      ! liquid are meant as sink/source and should never flip signs and
+      ! become source/sink.
+      !
+      ! We also perform some thresholding of psi -> max(0.0, psi-0.9)/0.1
+      ! and (1-psi) -> max(0.0, 0.1-psi)/0.1 to try to keep the source and
+      ! sink terms out of the two-phase boundary region. Otherwise these
+      ! terms will try to drive c=0.5 at psi=0.5, interfering with the mass
+      ! transfer under study.
 
       ! Add -c*(1-psi) term to drive bubble interior (psi=0) towards c=0.
-      avol = avol + (1-psi)
+      ! The gas will never reach c=0 because solubility equilibrium is
+      ! driving it towards c=1/H.
+      if (c .ge. 0) then
+        avol = avol + max(0.0, 0.1-psi)/0.1
+      endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
-      avol = avol + psi
-      qvol = qvol + psi
+      if (c .le. 1) then
+        avol = avol + max(0.0, psi-0.9)/0.1
+        qvol = qvol + max(0.0, psi-0.9)/0.1
+      endif
 
       return
       end
