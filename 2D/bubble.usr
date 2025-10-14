@@ -118,7 +118,7 @@ c-----------------------------------------------------------------------
       include 'NEKUSE'
 
       integer el
-      real, external :: species_src
+      real, external :: species_src, jump_periodic_src
 
       el = gllel(eg)
       
@@ -131,6 +131,9 @@ c-----------------------------------------------------------------------
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
         qvol = species_src(ix, iy, iz, el)
+
+        ! Add dc/dy jump-periodic BC terms.
+        qvol = qvol + jump_periodic_src(ix, iy, iz, el)
       endif
 
       return
@@ -146,7 +149,7 @@ c-----------------------------------------------------------------------
       include 'CASE'
       include 'NEKUSE'
 
-      real, external :: heaviside
+      real, external :: heaviside, jump_periodic_ic
       real signed_distance
 
       if (ifield.eq.ifld_v) then
@@ -271,10 +274,29 @@ c-----------------------------------------------------------------------
         !      = MTC / (1/Pe)
         sherwood = mtc * Pe ! = -gradc
         if (nio.eq.0) then
-          write(*,*) "Interface averaged grad(c) = ", gradc
-          write(*,*) "MTC = ", mtc
-          write(*,*) "Sh = ", sherwood
+          write(*,*) "Interface averaged grad(c)", gradc
+          write(*,*) "MTC", mtc
+          write(*,*) "Sh", sherwood
         endif
+      endblock
+
+      ! Update ctrue.
+      call update_ctrue()
+
+      ! Reset bubble interior concentration.
+      block
+        real, external :: species_sink
+        real, save :: cumulative_removed = 0
+        real removed, rate
+        removed = species_sink()
+        cumulative_removed = cumulative_removed + removed
+        rate = cumulative_removed / time
+        if (nio.eq.0) then
+          write(*,*) "Species sink", removed
+          write(*,*) "Cumulative sink", cumulative_removed
+          write(*,*) "Extraction rate", rate
+        endif
+        ! TODO: update dcdy given rate every X timesteps.
       endblock
 
       return
@@ -288,8 +310,8 @@ c-----------------------------------------------------------------------
       include 'SVV'
       include 'CASE'
 
-      integer ifdebug, ifixCLSbdry, nsteps_cls, nsteps_tls
-      real farfield, eps, dt_cls_in, dt_tls_in
+      integer ifdebug, ifixCLSbdry
+      real farfield, eps
 
       ! Initialize level set-specific data.
       eps = 1.5/(lx1-1.0)
@@ -308,6 +330,9 @@ c-----------------------------------------------------------------------
       svvcut(ifld_clsr) = (lx1-1.0)/2.0
       svv_c0(ifld_tlsr) = 1.0
       svvcut(ifld_tlsr) = (lx1-1.0)/3.0
+
+      ! Initialize species transport library.
+      call species_transport_init()
 
       return
       end
