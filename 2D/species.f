@@ -9,7 +9,7 @@
       !   2 = Li and Su (2025)
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
-      
+c-----------------------------------------------------------------------
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
       ! transport equation.
@@ -41,7 +41,7 @@
       endif
 
       endfunction
-
+c-----------------------------------------------------------------------
       real function species_src(ix,iy,iz,el)
       ! Calculate the source terms in the CST transport equation.
       implicit none
@@ -139,7 +139,37 @@
       ! work already done.
       species_src = spdiv(ix,iy,iz,el)
       endfunction
+c-----------------------------------------------------------------------
+      subroutine add_artificial_srcsnk(ix,iy,iz,el,qvol,avol)
+      ! Artificial sink term for the bubble interior and source term for
+      ! the liquid bulk to drive quasi-steady-state MTC & Sherwood number
+      ! equilibrium.
+      implicit none
+      integer, intent(in) :: ix, iy, iz, el
+      real, intent(inout) :: qvol, avol
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
 
+      real psi
+      psi = t(ix,iy,iz,el,ifld_cls-1)
+      ! Clip to [0, 1].
+      psi = max(0.0, psi)
+      psi = min(1.0, psi)
+
+      ! Total term is of the form qvol - avol*c (where Nek has this split
+      ! so that avol can be specified implicitly to improve stability).
+
+      ! Add -c*(1-psi) term to drive bubble interior (psi=0) towards c=0.
+      avol = avol + (1-psi)
+
+      ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
+      avol = avol + psi
+      qvol = qvol + psi
+
+      return
+      end
+c-----------------------------------------------------------------------
       real function integrate_gradc()
       ! Calculate the integral of grad(c).dA over the interface defined
       ! by the level set field, and normalize it by total surface area.

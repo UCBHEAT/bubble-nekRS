@@ -131,6 +131,9 @@ c-----------------------------------------------------------------------
       if (ifield.eq.ifld_c) then
         ! Add accumulation and CST terms.
         qvol = species_src(ix, iy, iz, el)
+        ! Add artificial source and sink terms to drive quasi-
+        ! steady-state equilibriation of MTC & Sherwood number.
+        call add_artificial_srcsnk(ix, iy, iz, el, avol, qvol)
       endif
 
       return
