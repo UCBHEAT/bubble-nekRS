@@ -132,7 +132,7 @@ c-----------------------------------------------------------------------
         ! Add accumulation and CST terms.
         qvol = species_src(ix, iy, iz, el)
 
-        ! Add dc/dy jump-periodic BC term.
+        ! Add dc/dy jump-periodic BC terms.
         qvol = qvol + jump_periodic_src(ix, iy, iz, el)
       endif
 
@@ -168,10 +168,6 @@ c-----------------------------------------------------------------------
         ! CLS fields should be initialized to 0 inside the bubble,
         ! 1 outside the bubble. Same for species concentration.
         temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
-
-        ! Correct for jump-periodic boundary condition (change of
-        ! variables).
-        temp = temp + jump_periodic_ic(ix, iy, iz, gllel(eg))
       endif
 
       ! TLS fields are derived from CLS and do not need initialization.
@@ -334,6 +330,9 @@ c-----------------------------------------------------------------------
       svvcut(ifld_clsr) = (lx1-1.0)/2.0
       svv_c0(ifld_tlsr) = 1.0
       svvcut(ifld_tlsr) = (lx1-1.0)/3.0
+
+      ! Initialize species transport library.
+      call species_transport_init()
 
       return
       end

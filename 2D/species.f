@@ -10,8 +10,8 @@
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
       !
-      ! PARAMETER 05: Initial dc/dy source term coefficient for
-      ! jump-periodic boundary condition.
+      ! PARAMETER 05: Initial dcdy = \overline{dc/dy} source term
+      ! coefficient for jump-periodic boundary condition.
       !   This should be a negative value if the bubble is a source
       !   for c (so the jump-periodic BC is the "sink"), or a positive
       !   value if the bubble is sink (so the BC is "source"). Set to
@@ -22,15 +22,15 @@
       !   1.0/domain_height so that a total jump of 1.0 is added.
       ! Note that using the jump periodic BC will cause the c field
       ! to no longer be directly interpretable as the concentration
-      ! of a vertical pipe section, due to the linear (dc/dy)*y extra
+      ! of a vertical pipe section, due to the linear (dcdy)*y extra
       ! concentration we add as a source term. Thus we add a ctrue
       ! field (calculated only, not transported) to view the true
       ! concentration.
       !
-      ! PARAMETER 06: Update frequency for dc/dy.
+      ! PARAMETER 06: Update frequency for $\overline{dc/dy}$.
       !   This should be the time interval over which the bubble
       !   extraction rate and velocity should be time-averaged and
-      !   used to produce an updated estimate for dc/dy.
+      !   used to produce an updated estimate for dcdy.
       
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
@@ -75,8 +75,8 @@
       ! Save our computation result so we can compute once (per MPI
       ! rank per timestep) and look up the result afterwards for each
       ! GLL point (ix, iy, iz, el).
-      common /speciestransport/ spdiv(lx1,ly1,lz1,lelv)
-      real spdiv
+      real spdiv(lx1,ly1,lz1,lelv)
+      save spdiv
 
       ! Parse user parameter.
       integer species_equation_version
@@ -221,34 +221,132 @@
       endfunction
 
       real function jump_periodic_src(ix,iy,iz,el)
-      ! Calculate the dc/dy source term for our jump-periodic boundary
-      ! condition.
+      ! Calculate the source terms for our jump-periodic boundary
+      ! condition. See memo "The Jump-Periodic BC for Continuum
+      ! Species Transport" for derivation.
       implicit none
       integer ix, iy, iz, el
       include 'SIZE'
       include 'TOTAL'
+      include 'NEKUSE'
       include 'CASE'
 
-      real dcdy
-      dcdy = uparam(iprm_dcdy)
-      ! (Don't use y from NEKUSE as a shorthand for ym1(i,j,k,l) as we
-      ! are called from a few different contexts, not necessarily a
-      ! per-GLL-point user hook.)
-      jump_periodic_src = dcdy*ym1(ix,iy,iz,el)
-      endfunction
+      real dcdy, delgamma_y(lx1,ly1,lz1,lelv), adv_y(lx1,ly1,lz1,lelv),
+     $    divadv(lx1,ly1,lz1,lelv)
+      save delgamma_y, adv_y, divadv
+      common /speciestransport/ dcdy
 
-      real function jump_periodic_ic(ix,iy,iz,el)
-      ! Calculate the correction term that should be added to an initial
-      ! condition for ctrue to get the initial condition for c.
-      implicit none
-      integer ix, iy, iz, el
-      include 'SIZE'
-      include 'TOTAL'
-      include 'CASE'
+      ! Run vector calculations first, once per MPI rank.
+      if (ix*iy*iz*el .eq. 1) then
+      block
+        integer i, j, k, l
+        real psi(lx1,ly1,lz1,lelv)
+        do i=1,lx1
+        do j=1,ly1
+        do k=1,lz1
+        do l=1,nelt
+          ! Calculate our version of alpha which is used by multiple
+          ! terms.
+          psi(i,j,k,l) = t(i,j,k,l,ifld_cls-1)
+          psi(i,j,k,l) = max(0.0,psi(i,j,k,l))
+          psi(i,j,k,l) = min(1.0,psi(i,j,k,l))
+        enddo
+        enddo
+        enddo
+        enddo
+        block
+          ! Calculate new term from diffusive term, which involves the
+          ! y-component of the gradient of the coefficient gamma of the
+          ! original diffusion term.
+          real gamma(lx1,ly1,lz1,lelv), delgamma_x(lx1,ly1,lz1,lelv),
+     $        delgamma_z(lx1,ly1,lz1,lelv) ! delgamma_y declared above
+          do i=1,lx1
+          do j=1,ly1
+          do k=1,lz1
+          do l=1,nelt
+          block
+            ! For brevity.
+            real a, H, D2
+            a = psi(i,j,k,l)
+            H = 1.0/solubilityratio
+            D2 = diffratio
+            gamma(i,j,k,l) = (a*H + D2*(1-a)) / (a*H + (1-a))
+          endblock
+          enddo
+          enddo
+          enddo
+          enddo
+          ! TODO: we don't need x and z derivatives, any function to do
+          ! y partial derivative only to save compute?
+          call gradm1(delgamma_x, delgamma_y, delgamma_z, gamma)
+        endblock
+        block
+          ! Calculate new terms from original advective term.
+          real delalpha_x(lx1,ly1,lz1,lelv),
+     $        delalpha_y(lx1,ly1,lz1,lelv), delalpha_z(lx1,ly1,lz1,lelv)
+          real adv_x(lx1,ly1,lz1,lelv), adv_z(lx1,ly1,lz1,lelv),
+     $        pa(lx1,ly1,lz1,lelv) ! adv_y declared above
+          block
+            ! Calculate our version of grad(alpha). See species_src()
+            ! for more explanation of what each statement does.
+            real delta(lx1,ly1,lz1,lelv)
+            call deltals(t(1,1,1,1,ifld_cls-1),delta)
+            call cls_normals(delalpha_x,delalpha_y,delalpha_z,ifld_tls)
+            call col2(delalpha_x,delta,lx1*ly1*lz1*nelt)
+            call col2(delalpha_y,delta,lx1*ly1*lz1*nelt)
+            call col2(delalpha_z,delta,lx1*ly1*lz1*nelt)
+          endblock
+          ! Original advection terms (real advection + pseudo-advection
+          ! from interfacial solubility equilibrium enforcement).
+          do i=1,lx1
+          do j=1,ly1
+          do k=1,lz1
+          do l=1,nelt
+          block
+            ! For brevity.
+            real a, H, D2
+            a = psi(i,j,k,l)
+            H = 1.0/solubilityratio
+            D2 = diffratio
+            ! Calculate pseudo-advection prefactor of grad(alpha).
+            pa(i,j,k,l) = (H-D2)/(a*H+(1-a)) + H*(1-D2)/((a*H+(1-a))**2)
+            ! Calculate full velocity + pseudo-advection vector adv.
+            adv_x(i,j,k,l) = vx(i,j,k,l)+pa(i,j,k,l)*delalpha_x(i,j,k,l)
+            adv_y(i,j,k,l) = vy(i,j,k,l)+pa(i,j,k,l)*delalpha_y(i,j,k,l)
+            adv_y(i,j,k,l) = vy(i,j,k,l)+pa(i,j,k,l)*delalpha_y(i,j,k,l)
+          endblock
+          enddo
+          enddo
+          enddo
+          enddo
+          ! Calculate divergence of adv as divadv.
+          ! See species_src() for more detailon this div(*) boilerplate.
+          call opdiv(divadv,adv_x,adv_y,adv_z)
+          call dssum(divadv,lx1,ly1,lz1)
+          call col2(divadv,binvm1,lx1*ly1*lz1*nelt)
+        endblock
+      endblock
+      endif ! end once-per-MPI-rank vector calculations
 
-      real dcdy
-      dcdy = uparam(iprm_dcdy)
-      jump_periodic_ic = dcdy*ym1(ix,iy,iz,el)
+      block
+        ! Perform per-GLL-point final assembly.
+        real from_diffusive, from_adv_1, from_adv_2
+        from_diffusive = dcdy*delgamma_y(ix,iy,iz,el)
+        from_adv_1 = -dcdy*y*divadv(ix,iy,iz,el)
+        from_adv_2 = -dcdy*adv_y(ix,iy,iz,el)
+        jump_periodic_src = from_diffusive + from_adv_1 + from_adv_2
+
+        ! Flag NaNs for debugging.
+        if (jump_periodic_src .ne. jump_periodic_src) then
+          write(*,*) "Invalid jump_periodic_src at", ix, iy, iz, el
+          write(*,*) "    from_diffusive", from_diffusive
+          write(*,*) "    from_adv_1", from_adv_1
+          write(*,*) "    from_adv_2", from_adv_2
+          write(*,*) "    additional info", dcdy,
+     $        delgamma_y(ix,iy,iz,el), divadv(ix,iy,iz,el),
+     $        adv_y(ix,iy,iz,el)
+        endif
+      endblock
       endfunction
 
       subroutine update_ctrue()
@@ -258,14 +356,15 @@
       include 'TOTAL'
       include 'CASE'
 
-      real, external :: jump_periodic_src
+      real dcdy
+      common /speciestransport/ dcdy
       real i, j, k, l
       do i=1,lx1
         do j=1,ly1
           do k=1,lz1
             do l=1,nelt
-              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) -
-     $            jump_periodic_src(i,j,k,l)
+              t(i,j,k,l,ifld_ctrue-1) = t(i,j,k,l,ifld_c-1) +
+     $            dcdy*ym1(i,j,k,l)
             enddo
           enddo
         enddo
@@ -273,15 +372,15 @@
       end
 
       real function species_sink()
-      ! Set ctrue = 0 in the interior of the bubble. This translates
-      ! to setting c = dcdy*y. Returns total species removed (global
-      ! sum). Call this before update_ctrue() in usrchk()!
+      ! Set c = 0 in the interior of the bubble. See memo "The Jump-Periodic
+      ! BC for Continuum Species Transport" for why ctrue = 0 is not possible.
+      ! Returns total species removed (global sum).
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
-      real, external :: jump_periodic_src, glsum
+      real, external :: glsum
       real removed
 
       block
@@ -293,9 +392,8 @@
               ! Could also blend between existing value and 0.0 by psi,
               ! rather than apply a sharp threshold at psi = 0.5.
               if (t(i,j,k,l,ifld_cls-1).lt.0.5) then
-                ctrue = t(i,j,k,l,ifld_c-1) - jump_periodic_src(i,j,k,l)
-                removed = removed + ctrue*binvm1(i,j,k,l)
-                t(i,j,k,l,ifld_c-1) = jump_periodic_src(i,j,k,l)
+                removed = removed + t(i,j,k,l,ifld_c-1)*bm1(i,j,k,l)
+                t(i,j,k,l,ifld_c-1) = 0
               endif
         enddo
         enddo
@@ -305,6 +403,17 @@
 
       species_sink = glsum(removed, 1)
       endfunction
+
+      subroutine species_transport_init()
+      ! Initialization routine for species transport framework. Call
+      ! in usrdat3.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      call set_dcdy(uparam(iprm_dcdy))
+      end
 
       subroutine set_dcdy(new_dcdy)
       ! Update dcdy with a new value.
