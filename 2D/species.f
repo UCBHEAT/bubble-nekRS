@@ -10,14 +10,12 @@
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
       !
-      ! PARAMETER 05: dc/dy source term coefficient for jump-periodic
-      ! boundary condition.
-      !   The total concentration added across the domain height will
-      !   be dc/dy*(width*height*depth) for a simple box domain. This
-      !   should be a negative value if the bubble is a source for c
-      !   (so the jump-periodic BC is the "sink"), or a positive value
-      !   if the bubble is sink (so the BC is "source"). Set to 0 to
-      !   disable.
+      ! PARAMETER 05: Initial dc/dy source term coefficient for
+      ! jump-periodic boundary condition.
+      !   This should be a negative value if the bubble is a source
+      !   for c (so the jump-periodic BC is the "sink"), or a positive
+      !   value if the bubble is sink (so the BC is "source"). Set to
+      !   0 to disable.
       !   In a non-dimensional case where c is in [0, 1] and the bubble
       !   is expected to absorb enough species to deplete the liquid
       !   around it faster than it rises, a good starting guess is
@@ -28,6 +26,11 @@
       ! concentration we add as a source term. Thus we add a ctrue
       ! field (calculated only, not transported) to view the true
       ! concentration.
+      !
+      ! PARAMETER 06: Update frequency for dc/dy.
+      !   This should be the time interval over which the bubble
+      !   extraction rate and velocity should be time-averaged and
+      !   used to produce an updated estimate for dc/dy.
       
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
@@ -302,3 +305,16 @@
 
       species_sink = glsum(removed, 1)
       endfunction
+
+      subroutine set_dcdy(new_dcdy)
+      ! Update dcdy with a new value.
+      implicit none
+      real new_dcdy
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      real dcdy
+      common /speciestransport/ dcdy
+      dcdy = new_dcdy
+      end

@@ -6,14 +6,16 @@ timeStepper = bdf2
 writeControl = runTime
 writeInterval = 0.5
 
+# Level set configuration
 userParam01 = 0.01      # frequency of TLS redistancing
 userParam02 = 0.001     # frequency of CLS redistancing
 dt          = 0.0001    # frequency of pressure, velocity, CLS solve
-
 userParam03 = 2         # pressure extrapolation order
 
-userParam04 = 2         # species transport equation (see species.f)
-userParam05 = 0.125     # dc/dy jump periodic boundary condition (see species.f)
+# Species transport configuration (see species.f)
+userParam04 = 2         # species transport equation version
+userParam05 = 0.125     # initial dcdy for jump-periodic BC
+userParam06 = 0.01      # frequency of sink rate-to-dcdy update
 
 [PROBLEMTYPE]
 equation = lowMachNS
