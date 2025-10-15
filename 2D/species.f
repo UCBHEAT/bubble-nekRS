@@ -151,7 +151,7 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'CASE'
 
-      real c, psi
+      real c, psi, volratio
       c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
       ! Clip to [0, 1].
@@ -172,6 +172,11 @@ c-----------------------------------------------------------------------
       ! terms will try to drive c=0.5 at psi=0.5, interfering with the mass
       ! transfer under study.
 
+      ! Weaken liquid bulk source by this arbitrary ratio, or else the bulk
+      ! returns to c=1 too fast and we don't visualize the wake of depleted
+      ! concentration that the bubble leaves behind.
+      volratio = 0.05
+
       ! Add -c*(1-psi) term to drive bubble interior (psi=0) towards c=0.
       ! The gas will never reach c=0 because solubility equilibrium is
       ! driving it towards c=1/H.
@@ -181,8 +186,8 @@ c-----------------------------------------------------------------------
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
       if (c .le. 1) then
-        avol = avol + max(0.0, psi-0.9)/0.1
-        qvol = qvol + max(0.0, psi-0.9)/0.1
+        avol = avol + (max(0.0, psi-0.9)/0.1)*volratio
+        qvol = qvol + (max(0.0, psi-0.9)/0.1)*volratio
       endif
 
       return
