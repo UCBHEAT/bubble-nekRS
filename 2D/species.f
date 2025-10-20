@@ -180,10 +180,8 @@ c-----------------------------------------------------------------------
       ! Add -c*(1-psi) term to drive bubble interior (psi=0) towards c=0.
       ! The gas will never reach c=0 because solubility equilibrium is
       ! driving it towards c=1/H.
-      ! Strengthen this sink by 1/H to bring the equilibrium timescale
-      ! closer to 1, or we will have to run for forever.
       if (c .ge. 0) then
-        avol = avol + (max(0.0, 0.1-psi)/0.1)*solubilityratio
+        avol = avol + max(0.0, 0.1-psi)/0.1
       endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
