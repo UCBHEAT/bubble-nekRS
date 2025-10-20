@@ -156,8 +156,7 @@ c-----------------------------------------------------------------------
         ux = 0.0
         uy = 0.0
         uz = 0.0
-      elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr .or.
-     $        ifield.eq.ifld_c) then
+      elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr) then
         ! Equation for a circle centered at (0, 1) of radius 0.5.
         signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
 
@@ -166,8 +165,18 @@ c-----------------------------------------------------------------------
         ! (ifield) is the temperature field.
         !
         ! CLS fields should be initialized to 0 inside the bubble,
-        ! 1 outside the bubble. Same for species concentration.
+        ! 1 outside the bubble.
         temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
+      elseif (ifield.eq.ifld_c) then
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        ! Concentration field should be initialized to c_initial
+        ! inside the bubble, 1 outside the bubble.
+        !
+        ! c_initial = (90%)1/H (ie. close to species equilibrium with
+        ! bulk c = 1) to speed up equilibriation time with the sink
+        ! term.
+        temp = heaviside(ix, iy, iz, gllel(eg), -signed_distance, 0.0)
+     $      * (0.9*solubilityratio - 1) + 1
       endif
 
       ! TLS fields are derived from CLS and do not need initialization.
