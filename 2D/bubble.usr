@@ -284,15 +284,15 @@ c-----------------------------------------------------------------------
         if (nio.eq.0) then
           write(*,*) "c_bubble_avg", c_bubble_avg
           write(*,*) "Sh", Sh
-          if (istep.eq.0 .or. mod(istep,iostep).eq.0) then
+          if (ifoutfld) then
             ! Paraview wants a file per timestep in order to
             ! interpret data as a time series that can be treated
             ! alongside the Nek5000 checkpoints.
             block
               character(len=99) filename
               integer fd
-              write(filename,*) istep/iostep
-              filename = "data." // filename // ".csv"
+              write(filename,*) ntdump
+              filename = "data." // trim(adjustl(filename)) // ".csv"
               open(newunit=fd, file=filename)
               write(fd,*) time, interface_area, c_bubble_avg, Sh
               close(fd)
