@@ -1,6 +1,6 @@
       include "experimental/lvlSet.f"
       include "experimental/lserrors.f"
-      include "species.f"
+      include "../common/species.f"
 c-----------------------------------------------------------------------
       subroutine uservp(ix,iy,iz,eg)
       ! Set variable properties.
