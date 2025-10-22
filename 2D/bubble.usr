@@ -231,7 +231,9 @@ c-----------------------------------------------------------------------
         call LS_default_driver(ntlsr, nclsr)
       endblock
 
-      ! Compute Sherwood number.
+      ! Compute Sherwood number (only at checkpoints, to save
+      ! compute).
+      if (ifoutfld) then
       block
         real delta(lx1, ly1, lz1, lelv), interface_area, Sh
         real c_bubble_avg, c_bubble_total, c_interface, c_bulk
@@ -242,29 +244,30 @@ c-----------------------------------------------------------------------
         call integrate_c(c_bubble_avg, c_bubble_total)
         c_interface = c_bubble_avg/solubilityratio
         c_bulk = 1.0
-
         ! ndot = total sink rate := c_bubble_total by our implicit
         ! sink term definition.
         Sh = c_bubble_total/(interface_area * (c_bulk - c_interface))
+
+        ! Write output on the I/O master.
         if (nio.eq.0) then
+        block
+          ! Paraview wants a file per timestep in order to
+          ! interpret data as a time series that can be treated
+          ! alongside the Nek5000 checkpoints.
+          character(len=99) filename
+          integer fd
+          write(filename,*) ntdump ! convert to string
+          filename = "data." // trim(adjustl(filename)) // ".csv"
+          open(newunit=fd, file=filename)
           write(*,*) "c_bubble_avg", c_bubble_avg
           write(*,*) "Sh", Sh
-          if (ifoutfld) then
-            ! Paraview wants a file per timestep in order to
-            ! interpret data as a time series that can be treated
-            ! alongside the Nek5000 checkpoints.
-            block
-              character(len=99) filename
-              integer fd
-              write(filename,*) ntdump
-              filename = "data." // trim(adjustl(filename)) // ".csv"
-              open(newunit=fd, file=filename)
-              write(fd,*) time, interface_area, c_bubble_avg, Sh
-              close(fd)
-            endblock
-          endif
+          write(fd,*) "time", "interface_area", "c_bubble_avg", "Sh"
+          write(fd,*) time, interface_area, c_bubble_avg, Sh
+          close(fd)
+        endblock
         endif
       endblock
+      endif
 
       return
       end
