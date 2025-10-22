@@ -193,6 +193,8 @@ c-----------------------------------------------------------------------
       include 'CASE'
 
       integer ntot, i
+      integer ntdump ! checkpoint counter
+      common /rdump/ ntdump
 
       real, external :: glmax, glmin, glsum, ls_volerr
       real, save :: cls_initial(lx1*ly1*lz1*lelv),
