@@ -250,3 +250,30 @@ c-----------------------------------------------------------------------
       ! Return normalized grad(c) result.
       integrate_gradc = surfaceintegral_gradc/total_area
       endfunction
+c-----------------------------------------------------------------------
+      subroutine integrate_c(c_bubble_avg, c_bubble_total)
+      ! Calculate the integral of c dV over the bubble and normalize it
+      ! by total volume.
+      implicit none
+      real, intent(out) :: c_bubble_avg, c_bubble_total
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+      real, external :: glsc2, glsc3
+      integer ntot
+      real one_minus_psi(lx1,ly1,lz1,nelt), total_volume
+      ntot = lx1*ly1*lz1*nelt
+      ! Compute 1-psi (volumetric gas fraction field).
+      one_minus_psi = t(1,1,1,1,ifld_cls-1)
+      call chsign(one_minus_psi, ntot)
+      call cadd(one_minus_psi, 1.0, ntot)
+      ! Clip to [0, 1].
+      one_minus_psi = max(0.0,one_minus_psi)
+      one_minus_psi = min(1.0,one_minus_psi)
+      ! Perform volume integrals.
+      c_bubble_total = glsc3(one_minus_psi, t(1,1,1,1,ifld_c-1),
+     $    bm1, ntot)
+      total_volume = glsc2(one_minus_psi, bm1, ntot)
+      ! Compute quotient.
+      c_bubble_avg = c_bubble_total/total_volume
+      end

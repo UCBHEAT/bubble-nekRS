@@ -240,19 +240,7 @@ c-----------------------------------------------------------------------
         err = ls_volerr(ifld_cls, tls_initial, cls_initial)
         if (nio.eq.0) then
           write(*,*) "Volume error", err
-          write(300,*) time, err
-        endif
-      endblock
-      
-      ! Print interface area diagnostics.
-      block
-        real delta(lx1, ly1, lz1, lelv), delsum
-        call deltals(t(1,1,1,1,ifld_cls-1), delta)
-        call col2(delta, bm1, ntot)
-        delsum = glsum(delta, ntot)
-        if (nio.eq.0) then
-          write(*,*) "Interface area", delsum
-          write(100,*) time, delsum
+          write(100,*) time, err
         endif
       endblock
 
@@ -270,27 +258,46 @@ c-----------------------------------------------------------------------
         close(200)
         close(300)
       endif
+      
+      ! Print interface area diagnostics.
+      block
+      endblock
 
       ! Compute Sherwood number.
       block
-        real, external :: integrate_gradc
-        real gradc, mtc, sherwood
-        ! Calculate int(grad(c).dA)/A.
-        gradc = integrate_gradc()
-        ! (c_src-c_snk) is non-dimensionalized to 1.
-        ! Liquid diffusion coefficient is 1/Pe.
-        !   MTC = mdot / (A*(c_src-c_snk))
-        !       = -D*int(grad(c).dA) / (A*(c_src-c_snk))
-        !       = -(1/Pe)int(grad(c).dA)/A
-        mtc = -gradc / Pe
-        ! Sherwood number divides out D again.
-        !   Sh = MTC / (D/L)
-        !      = MTC / (1/Pe)
-        sherwood = mtc * Pe ! = -gradc
+        real delta(lx1, ly1, lz1, lelv), interface_area, Sh
+        real c_bubble_avg, c_bubble_total, c_interface, c_bulk
+        call deltals(t(1,1,1,1,ifld_cls-1), delta)
+        call col2(delta, bm1, ntot)
+        interface_area = glsum(delta, ntot)
         if (nio.eq.0) then
-          write(*,*) "Interface averaged grad(c) = ", gradc
-          write(*,*) "MTC = ", mtc
-          write(*,*) "Sh = ", sherwood
+          write(*,*) "Interface area", interface_area
+          write(300,*) time, interface_area
+        endif
+
+        call integrate_c(c_bubble_avg, c_bubble_total)
+        c_interface = c_bubble_avg/solubilityratio
+        c_bulk = 1.0
+        ! ndot = total sink rate := c_bubble_total by our implicit
+        ! sink term definition.
+        Sh = c_bubble_total/(interface_area * (c_interface - c_bulk))
+        if (nio.eq.0) then
+          write(*,*) "c_bubble_avg", c_bubble_avg
+          write(*,*) "Sh", Sh
+          if (istep.eq.0 .or. mod(istep,iostep).eq.0) then
+            ! Paraview wants a file per timestep in order to
+            ! interpret data as a time series that can be treated
+            ! alongside the Nek5000 checkpoints.
+            block
+              character(len=99) filename
+              integer fd
+              write(filename,*) istep/iostep
+              filename = "data." // filename // ".csv"
+              open(newunit=fd, file=filename)
+              write(fd,*) time, interface_area, c_bubble_avg, Sh
+              close(fd)
+            endblock
+          endif
         endif
       endblock
 
