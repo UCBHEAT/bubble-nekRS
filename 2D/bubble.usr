@@ -214,7 +214,6 @@ c-----------------------------------------------------------------------
         if (nio.eq.0) then
           open(unit=100, file='volerr.dat')
           open(unit=200, file='pressurediag.dat')
-          open(unit=300, file='surfacearea.dat')
         endif
       endif
 
@@ -234,17 +233,14 @@ c-----------------------------------------------------------------------
         call LS_default_driver(ntlsr, nclsr)
       endblock
 
-      ! Print volume error diagnostics.
+      ! Record volume error diagnostics.
       block
         real err
         err = ls_volerr(ifld_cls, tls_initial, cls_initial)
-        if (nio.eq.0) then
-          write(*,*) "Volume error", err
-          write(100,*) time, err
-        endif
+        if (nio.eq.0) write(100,*) time, err
       endblock
 
-      ! Print pressure diagnostics.
+      ! Record pressure diagnostics.
       block
         real pmin, pmax
         pmin = glmin(pr, ntot)
@@ -256,12 +252,7 @@ c-----------------------------------------------------------------------
       if (istep.eq.nsteps .and. nio.eq.0) then
         close(100)
         close(200)
-        close(300)
       endif
-      
-      ! Print interface area diagnostics.
-      block
-      endblock
 
       ! Compute Sherwood number.
       block
@@ -270,17 +261,14 @@ c-----------------------------------------------------------------------
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
         call col2(delta, bm1, ntot)
         interface_area = glsum(delta, ntot)
-        if (nio.eq.0) then
-          write(*,*) "Interface area", interface_area
-          write(300,*) time, interface_area
-        endif
 
         call integrate_c(c_bubble_avg, c_bubble_total)
         c_interface = c_bubble_avg/solubilityratio
         c_bulk = 1.0
+
         ! ndot = total sink rate := c_bubble_total by our implicit
         ! sink term definition.
-        Sh = c_bubble_total/(interface_area * (c_interface - c_bulk))
+        Sh = c_bubble_total/(interface_area * (c_bulk - c_interface))
         if (nio.eq.0) then
           write(*,*) "c_bubble_avg", c_bubble_avg
           write(*,*) "Sh", Sh
