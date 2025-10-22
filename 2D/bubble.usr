@@ -213,10 +213,6 @@ c-----------------------------------------------------------------------
             tls_initial(i) = 0.0
           endif
         enddo
-        if (nio.eq.0) then
-          open(unit=100, file='volerr.dat')
-          open(unit=200, file='pressurediag.dat')
-        endif
       endif
 
       ! Perform pressure extrapolation.
@@ -234,27 +230,6 @@ c-----------------------------------------------------------------------
         nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
         call LS_default_driver(ntlsr, nclsr)
       endblock
-
-      ! Record volume error diagnostics.
-      block
-        real err
-        err = ls_volerr(ifld_cls, tls_initial, cls_initial)
-        if (nio.eq.0) write(100,*) time, err
-      endblock
-
-      ! Record pressure diagnostics.
-      block
-        real pmin, pmax
-        pmin = glmin(pr, ntot)
-        pmax = glmax(pr, ntot)
-        if (nio.eq.0) write(200,*) time, pmax-pmin
-      endblock
-
-      ! Clean up file handles on last time step.
-      if (istep.eq.nsteps .and. nio.eq.0) then
-        close(100)
-        close(200)
-      endif
 
       ! Compute Sherwood number.
       block
