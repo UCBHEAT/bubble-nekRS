@@ -176,7 +176,7 @@ c-----------------------------------------------------------------------
       ! The gas will never reach c=0 because solubility equilibrium is
       ! driving it towards c=1/H.
       if (c .ge. 0) then
-        avol = avol + (max(0.0, 0.1-psi)/0.1)*sink_str
+        qvol = qvol - (max(0.0, 0.1-psi)/0.1)*c*sink_str
       endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
