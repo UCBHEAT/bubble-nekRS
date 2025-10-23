@@ -177,6 +177,9 @@ c-----------------------------------------------------------------------
       ! driving it towards c=1/H.
       if (c .ge. 0) then
         qvol = qvol - (max(0.0, 0.1-psi)/0.1)*c*sink_str
+      else
+        ! Clip negative c which can be introduced by our sink.
+        t(ix,iy,iz,el,ifld_c-1) = 0.0
       endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
