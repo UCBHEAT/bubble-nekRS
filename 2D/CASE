@@ -34,3 +34,21 @@
       parameter (iprm_clsr_freq = 2) ! uparam02 = CLS redistancing freq
       parameter (iprm_pord = 3)      ! uparam03 = p extrapolation order
       parameter (iprm_cst_ver = 4)   ! uparam04 = CST version
+
+      ! Set a reasonable sink strength. This can be estimated from a
+      ! target c_bubble:
+      !   bubble_sink_out = bubble_interface_in
+      !   sink_str * V * c_bubble_target = A * MTC *
+      !                                    (c_bulk - H*c_bubble_target)
+      !   sink_str = (A/V) * MTC * (c_bulk/c_bubble_target - H)
+      ! For 2D, area/volume = pi*d/(pi*d^2/4) = 4/d^2 = 4.
+      !   sink_str = 4 * (~200) * (1/c_bubble_target - 0.0028)
+      !            = ~80 if targetting c_bubble ~ 10
+      real sink_str
+      parameter (sink_str = 80.0)
+
+      ! Weaken liquid bulk source by this arbitrary ratio, or else the bulk
+      ! returns to c=1 too fast and we don't visualize the wake of depleted
+      ! concentration that the bubble leaves behind.
+      real source_str
+      parameter (source_str = 0.05)

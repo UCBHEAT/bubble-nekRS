@@ -172,11 +172,9 @@ c-----------------------------------------------------------------------
         ! Concentration field should be initialized to c_initial
         ! inside the bubble, 1 outside the bubble.
         !
-        ! c_initial = (90%)1/H (ie. close to species equilibrium with
-        ! bulk c = 1) to speed up equilibriation time with the sink
-        ! term.
+        ! c_initial = (1%)1/H to speed up equilibriation time.
         temp = heaviside(ix, iy, iz, gllel(eg), -signed_distance, 0.0)
-     $      * (0.9*solubilityratio - 1) + 1
+     $      * (0.01*solubilityratio - 1) + 1
       endif
 
       ! TLS fields are derived from CLS and do not need initialization.
@@ -236,17 +234,17 @@ c-----------------------------------------------------------------------
       if (ifoutfld) then
       block
         real delta(lx1, ly1, lz1, lelv), interface_area, Sh
-        real c_bubble_avg, c_bubble_total, c_interface, c_bulk
+        real c_bubble_avg, c_bubble_total, c_iface, c_bulk
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
         call col2(delta, bm1, ntot)
         interface_area = glsum(delta, ntot)
 
         call integrate_c(c_bubble_avg, c_bubble_total)
-        c_interface = c_bubble_avg/solubilityratio
+        c_iface = c_bubble_avg/solubilityratio
         c_bulk = 1.0
-        ! ndot = total sink rate := c_bubble_total by our implicit
-        ! sink term definition.
-        Sh = c_bubble_total/(interface_area * (c_bulk - c_interface))
+        ! ndot = total sink rate = c_bubble_total*sink_str by our
+        ! implicit sink term definition.
+        Sh = c_bubble_total*sink_str/(interface_area*(c_bulk-c_iface))
 
         ! Write output on the I/O master.
         if (nio.eq.0) then
