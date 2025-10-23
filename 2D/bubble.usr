@@ -259,8 +259,9 @@ c-----------------------------------------------------------------------
           open(newunit=fd, file=filename)
           write(*,*) "c_bubble_avg", c_bubble_avg
           write(*,*) "Sh", Sh
-          write(fd,*) "time", "interface_area", "c_bubble_avg", "Sh"
-          write(fd,*) time, interface_area, c_bubble_avg, Sh
+          write(fd,*) "time,interface_area,c_bubble_avg,Sh"
+          write(fd,'(*(G0.6,:,","))')
+     $        time, interface_area, c_bubble_avg, Sh
           close(fd)
         endblock
         endif
