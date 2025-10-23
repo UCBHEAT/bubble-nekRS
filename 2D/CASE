@@ -45,7 +45,7 @@
       !   sink_str = 4 * (~200) * (1/c_bubble_target - 0.0028)
       !            = ~80 if targetting c_bubble ~ 10
       real sink_str
-      parameter (sink_str = 80.0)
+      parameter (sink_str = 0.05)
 
       ! Weaken liquid bulk source by this arbitrary ratio, or else the bulk
       ! returns to c=1 too fast and we don't visualize the wake of depleted
