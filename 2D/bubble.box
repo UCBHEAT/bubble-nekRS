@@ -6,7 +6,7 @@
 #========================================================
 #
 Box 1
--32 -192                Nelx Nely (negative for auto distribute nodes)
--1 1 1                  x0 x1 node_ratio
+-128 -192               Nelx Nely (negative for auto distribute nodes)
+-4 4 1                  x0 x1 node_ratio
 0 12 1                  y0 y1 node_ratio
 P  ,P  ,P  ,P           boundary conditions (left, right, bottom, top)
