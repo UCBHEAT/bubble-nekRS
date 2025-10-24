@@ -151,6 +151,7 @@ c-----------------------------------------------------------------------
       include 'TOTAL'
       include 'CASE'
 
+      real, external :: glsum
       real c, psi, volratio
       real sink, sink_dt, last_sink_rate
       common /speciestransport_sink/ sink, sink_dt, last_sink_rate
