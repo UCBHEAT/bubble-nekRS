@@ -157,8 +157,8 @@ c-----------------------------------------------------------------------
         uy = 0.0
         uz = 0.0
       elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr) then
-        ! Equation for a circle centered at (0, 1) of radius 0.5.
-        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        ! Equation for a circle centered at (0, 1, 0) of radius 0.5.
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0+z**2.0) - 0.5
 
         ! Setting temp means setting a Dirichlet (fixed-value)
         ! constraint, and is unrelated to whether the current field
@@ -168,7 +168,7 @@ c-----------------------------------------------------------------------
         ! 1 outside the bubble.
         temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
       elseif (ifield.eq.ifld_c) then
-        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0+z**2.0) - 0.5
         ! Concentration field should be initialized to c_initial
         ! inside the bubble, 1 outside the bubble.
         !
