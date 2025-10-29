@@ -103,6 +103,7 @@ c-----------------------------------------------------------------------
       ! Set output variables.
       ffx = sfx + svvx
       ffy = sfy + svvy - 1.0/Fr + dpdy
+      ffz = sfz + svvz
 
       return
       end
