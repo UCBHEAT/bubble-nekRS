@@ -233,18 +233,17 @@ c-----------------------------------------------------------------------
       ! compute).
       if (ifoutfld) then
       block
+        real, external :: get_sink
         real delta(lx1, ly1, lz1, lelv), interface_area, Sh
-        real c_bubble_avg, c_bubble_total, c_iface, c_bulk
+        real c_iface, c_bulk, ndot
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
         call col2(delta, bm1, ntot)
         interface_area = glsum(delta, ntot)
 
-        call integrate_c(c_bubble_avg, c_bubble_total)
-        c_iface = c_bubble_avg/solubilityratio
+        c_iface = 0.0
         c_bulk = 1.0
-        ! ndot = total sink rate = c_bubble_total*sink_str by our
-        ! implicit sink term definition.
-        Sh = c_bubble_total*sink_str/(interface_area*(c_bulk-c_iface))
+        ndot = get_sink()
+        Sh = ndot/(interface_area*(c_bulk-c_iface))
 
         ! Write output on the I/O master.
         if (nio.eq.0) then
@@ -257,11 +256,10 @@ c-----------------------------------------------------------------------
           write(filename,*) ntdump ! convert to string
           filename = "data." // trim(adjustl(filename)) // ".csv"
           open(newunit=fd, file=filename)
-          write(*,*) "c_bubble_avg", c_bubble_avg
           write(*,*) "Sh", Sh
-          write(fd,*) "time,interface_area,c_bubble_avg,Sh"
+          write(fd,*) "time,interface_area,ndot,Sh"
           write(fd,'(*(G0.6,:,","))')
-     $        time, interface_area, c_bubble_avg, Sh
+     $        time, interface_area, ndot, Sh
           close(fd)
         endblock
         endif

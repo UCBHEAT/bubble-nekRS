@@ -152,11 +152,24 @@ c-----------------------------------------------------------------------
       include 'CASE'
 
       real c, psi, volratio
+      real sink, sink_dt, last_sink_rate
+      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
       c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
       ! Clip to [0, 1].
       psi = max(0.0, psi)
       psi = min(1.0, psi)
+      if (ix*iy*iz*el.eq.1) then
+          ! Calculate sink rate and reset sink/sink_dt on checkpoint.
+          if (ifoutfld) then
+            last_sink_rate = glsum(sink, 1)/sink_dt
+            sink = 0.0
+            sink_dt = dt
+          else
+            sink_dt = sink_dt + dt
+          endif
+      endif
+
 
       ! Total term is of the form qvol - avol*c (so that avol can be
       ! specified implicitly to improve stability).
@@ -166,19 +179,19 @@ c-----------------------------------------------------------------------
       ! liquid are meant as sink/source and should never flip signs and
       ! become source/sink.
       !
-      ! We also perform some thresholding of psi -> max(0.0, psi-0.9)/0.1
-      ! and (1-psi) -> max(0.0, 0.1-psi)/0.1 to try to keep the source and
-      ! sink terms out of the two-phase boundary region. Otherwise these
-      ! terms will try to drive c=0.5 at psi=0.5, interfering with the mass
-      ! transfer under study.
+      ! We also perform some thresholding of psi -> max(0.0, psi-0.9)/
+      ! 0.1 and (1-psi) -> max(0.0, 0.1-psi)/0.1 to try to keep the
+      ! source and sink terms out of the two-phase boundary region.
+      ! Otherwise these terms will try to drive c=0.5 at psi=0.5,
+      ! interfering with the mass transfer under study.
 
-      ! Add -c*(1-psi) term to drive bubble interior (psi=0) towards c=0.
-      ! The gas will never reach c=0 because solubility equilibrium is
-      ! driving it towards c=1/H.
-      if (c .ge. 0) then
-        qvol = qvol - (max(0.0, 0.1-psi)/0.1)*c*sink_str
-      else
-        ! Clip negative c which can be introduced by our sink.
+      ! Simply set bubble interior (psi=0) to 0. No need for gradual
+      ! biasing towards 0 like we do for the source term, because
+      ! diffusion in the gas is effectively instantaneous so we don't
+      ! need to worry about preserving a trail/depletion profile on
+      ! the gas side.
+      if (psi .le. 0.5) then
+        sink = sink + c*bm1(ix,iy,iz,el)
         t(ix,iy,iz,el,ifld_c-1) = 0.0
       endif
 
@@ -190,6 +203,23 @@ c-----------------------------------------------------------------------
 
       return
       end
+c-----------------------------------------------------------------------
+      real function get_sink()
+      ! Return the rate of specie removed.
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      real, external :: glsum
+      real sink, sink_dt, last_sink_rate
+      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
+      get_sink = last_sink_rate
+      !get_sink = glsum(sink, 1)/sink_dt
+      if (nio.eq.0) then
+        write(*,*) "DEBUG SINK", get_sink, sink_dt, last_sink_rate
+      endif
+      endfunction
 c-----------------------------------------------------------------------
       real function integrate_gradc()
       ! Calculate the integral of grad(c).dA over the interface defined
