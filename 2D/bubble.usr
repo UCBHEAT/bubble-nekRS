@@ -203,8 +203,9 @@ c-----------------------------------------------------------------------
           endif
         enddo
         if (nio.eq.0) then
-          open(unit=100, file='vol.dat')
-          open(unit=200, file='pr.dat')
+          open(unit=100, file='volerr.dat')
+          open(unit=200, file='pressurediag.dat')
+          open(unit=300, file='surfacearea.dat')
         endif
       endif
 
@@ -230,7 +231,7 @@ c-----------------------------------------------------------------------
         err = ls_volerr(ifld_cls, tls_initial, cls_initial)
         if (nio.eq.0) then
           write(*,*) "Volume error", err
-          write(100,*) time, err
+          write(300,*) time, err
         endif
       endblock
       
@@ -240,7 +241,10 @@ c-----------------------------------------------------------------------
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
         call col2(delta, bm1, ntot)
         delsum = glsum(delta, ntot)
-        if (nio.eq.0) write(*,*) "Interface area", delsum
+        if (nio.eq.0) then
+          write(*,*) "Interface area", delsum
+          write(100,*) time, delsum
+        endif
       endblock
 
       ! Print pressure diagnostics.
@@ -255,6 +259,7 @@ c-----------------------------------------------------------------------
       if (istep.eq.nsteps .and. nio.eq.0) then
         close(100)
         close(200)
+        close(300)
       endif
 
       ! Compute Sherwood number.
