@@ -153,24 +153,16 @@ c-----------------------------------------------------------------------
 
       real, external :: glsum
       real c, psi, volratio
-      real sink, sink_dt, last_sink_rate
-      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
+      real sink, sink_dt
+      common /speciestransport_sink/ sink, sink_dt
       c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
       ! Clip to [0, 1].
       psi = max(0.0, psi)
       psi = min(1.0, psi)
       if (ix*iy*iz*el.eq.1) then
-          ! Calculate sink rate and reset sink/sink_dt on checkpoint.
-          if (ifoutfld) then
-            last_sink_rate = glsum(sink, 1)/sink_dt
-            sink = 0.0
-            sink_dt = dt
-          else
-            sink_dt = sink_dt + dt
-          endif
+        sink_dt = sink_dt + dt
       endif
-
 
       ! Total term is of the form qvol - avol*c (so that avol can be
       ! specified implicitly to improve stability).
@@ -206,20 +198,27 @@ c-----------------------------------------------------------------------
       end
 c-----------------------------------------------------------------------
       real function get_sink()
-      ! Return the rate of specie removed.
+      ! Return the rate of specie removed. This function has side
+      ! effects (resets counters) and should not be called repeatedly.
+      !
+      ! This is called from userchk, gated on ifoutfld ("is this step
+      ! a checkpoint?"), before add_artificial_srcsink is called from
+      ! useric. So the value it returns is non-inclusive of the extract
+      ! from the current (checkpoint) timestep. The extract from the
+      ! current timestep will be included in the next checkpoint's
+      ! get_sink() call.
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
       real, external :: glsum
-      real sink, sink_dt, last_sink_rate
-      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
-      get_sink = last_sink_rate
-      !get_sink = glsum(sink, 1)/sink_dt
-      if (nio.eq.0) then
-        write(*,*) "DEBUG SINK", get_sink, sink_dt, last_sink_rate
-      endif
+      real sink, sink_dt
+      common /speciestransport_sink/ sink, sink_dt
+      ! Calculate sink rate and reset sink/sink_dt.
+      get_sink = glsum(sink, 1)/sink_dt
+      sink = 0.0
+      sink_dt = 0.0
       endfunction
 c-----------------------------------------------------------------------
       real function integrate_gradc()
