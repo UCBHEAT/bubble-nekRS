@@ -279,7 +279,7 @@ c-----------------------------------------------------------------------
       integrate_gradc = surfaceintegral_gradc/total_area
       endfunction
 c-----------------------------------------------------------------------
-      function integrate_c_bulk()
+      real function integrate_c_bulk()
       ! Calculate the integral of c dV over the liquid and normalize it
       ! by total volume.
       implicit none
