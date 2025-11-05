@@ -234,7 +234,7 @@ c-----------------------------------------------------------------------
       ! compute).
       if (ifoutfld) then
       block
-        real, external :: get_sink
+        real, external :: get_sink, integrate_c_bulk
         real delta(lx1, ly1, lz1, lelv), interface_area, MTC, Sh
         real c_iface, c_bulk, ndot
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
@@ -242,7 +242,7 @@ c-----------------------------------------------------------------------
         interface_area = glsum(delta, ntot)
 
         c_iface = 0.0
-        c_bulk = 1.0
+        c_bulk = integrate_c_bulk()
         ndot = get_sink()
         MTC = ndot/(interface_area*(c_bulk-c_iface))
         Sh = MTC*Pe
