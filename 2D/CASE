@@ -1,8 +1,2 @@
       include "../common/CASE"
       ! Include any 2D-specific case parameters here.
-
-      ! Scale liquid bulk source by >=5 rise periods to get c_bulk =
-      ! 1.00 within 3 digits of precision (e^-5 = 0.0067).
-      !   source_str = 5*rise_velocity/domain_height
-      real source_str
-      parameter (source_str = 5./12)
