@@ -183,9 +183,14 @@ c-----------------------------------------------------------------------
       ! diffusion in the gas is effectively instantaneous so we don't
       ! need to worry about preserving a trail/depletion profile on
       ! the gas side.
-      if (psi .le. 0.5) then
-        sink = sink + c*bm1(ix,iy,iz,el)
-        t(ix,iy,iz,el,ifld_c-1) = 0.0
+      !if (psi .le. 0.5) then
+        !sink = sink + c*bm1(ix,iy,iz,el)
+        !t(ix,iy,iz,el,ifld_c-1) = 0.0
+      if (c .ge. 0) then
+        sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+     $          bm1(ix,iy,iz,el)*dt
+        ! Add sink explicitly as implicit sink reduces stability.
+        qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
       endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
