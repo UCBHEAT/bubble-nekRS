@@ -178,19 +178,19 @@ c-----------------------------------------------------------------------
       ! Otherwise these terms will try to drive c=0.5 at psi=0.5,
       ! interfering with the mass transfer under study.
 
-      ! Simply set bubble interior (psi=0) to 0. No need for gradual
-      ! biasing towards 0 like we do for the source term, because
-      ! diffusion in the gas is effectively instantaneous so we don't
-      ! need to worry about preserving a trail/depletion profile on
-      ! the gas side.
-      !if (psi .le. 0.5) then
-        !sink = sink + c*bm1(ix,iy,iz,el)
-        !t(ix,iy,iz,el,ifld_c-1) = 0.0
+      ! Add -c*(1-psi) term to drive bubble (psi=0) towards c=0. Do
+      ! this as an explicit term; implicit sinks reduce stability.
       if (c .ge. 0) then
         sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
      $          bm1(ix,iy,iz,el)*dt
-        ! Add sink explicitly as implicit sink reduces stability.
         qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
+      else
+        ! Clip c field to avoid flipping sign of CST term. Count
+        ! this as negative extraction to preserve conservation.
+        sink = sink - (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+     $          bm1(ix,iy,iz,el)*dt
+        c = 0.0
+        t(ix,iy,iz,el,ifld_c-1) = 0.0
       endif
 
       ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
