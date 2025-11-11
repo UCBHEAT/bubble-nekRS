@@ -10,11 +10,13 @@ if [[ "$1" == "-r" ]]; then
     echo "Requeuing..."
 fi
 
+desc=$(cat JOB_DESC || echo "job")
+
 echo -e "$1\n$PWD" > SESSION.NAME
 echo "#PBS -A CFDAPM" > $1.batch
 echo "#PBS -l select=$2:mpiprocs=128" >> $1.batch
 echo "#PBS -l walltime=$3" >> $1.batch
-echo "#PBS -N job" >> $1.batch
+echo "#PBS -N $desc" >> $1.batch
 echo "#PBS -q backfill" >> $1.batch
 echo "set -euo pipefail" >> $1.batch
 echo "module load intel-oneapi-mpi/2021.15" >> $1.batch
