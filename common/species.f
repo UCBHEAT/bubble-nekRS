@@ -9,6 +9,17 @@
       !   2 = Li and Su (2025)
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
+      !
+      ! PARAMETER 05: sink term mode for bubble interior.
+      !   0 = off, no sink term
+      !   1 = soft sink, add dc/dt = -sink_str*c explicit sink inside
+      !       psi<0.1 with linear psi activation
+      !   2 = hard sink, set c=0 inside psi<0.5
+      !
+      ! PARAMETER 06: source term mode for liquid bulk.
+      !   0 = off, no source term
+      !   1 = soft sink, add dc/dt = source_str*(1-c) implicit source
+      !       inside psi>0.9 with linear psi activation
 c-----------------------------------------------------------------------
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
@@ -155,14 +166,21 @@ c-----------------------------------------------------------------------
       real c, psi, volratio
       real sink, sink_dt
       common /speciestransport_sink/ sink, sink_dt
+      integer sinkmode, sourcemode
+
       c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
-      ! Clip to [0, 1].
-      psi = max(0.0, psi)
-      psi = min(1.0, psi)
       if (ix*iy*iz*el.eq.1) then
         sink_dt = sink_dt + dt
       endif
+
+      ! Clip to [0, 1].
+      psi = max(0.0, psi)
+      psi = min(1.0, psi)
+
+      ! Parse user parameters.
+      sinkmode = int(uparam(iprm_sinkmode))
+      sourcemode = int(uparam(iprm_sourcemode))
 
       ! Total term is of the form qvol - avol*c (so that avol can be
       ! specified implicitly to improve stability).
@@ -178,25 +196,36 @@ c-----------------------------------------------------------------------
       ! Otherwise these terms will try to drive c=0.5 at psi=0.5,
       ! interfering with the mass transfer under study.
 
-      ! Add -c*(1-psi) term to drive bubble (psi=0) towards c=0. Do
-      ! this as an explicit term; implicit sinks reduce stability.
-      if (c .ge. 0) then
-        sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
-     $          bm1(ix,iy,iz,el)*dt
-        qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
-      else
-        ! Clip c field to avoid flipping sign of CST term. Count
-        ! this as negative extraction to preserve conservation.
-        sink = sink - (max(0.0, 0.1-psi)/0.1)*sink_str*c*
-     $          bm1(ix,iy,iz,el)*dt
-        c = 0.0
-        t(ix,iy,iz,el,ifld_c-1) = 0.0
+      if (sinkmode .eq. 2) then
+        ! Hard sink -- set everything to zero within psi<0.5.
+        if (psi .le. 0.5) then
+          sink = sink + c*bm1(ix,iy,iz,el)
+          c = 0.0
+          t(ix,iy,iz,el,ifld_c-1) = 0.0
+        endif
+      elseif (sinkmode .eq. 1) then
+        ! Add -c*(1-psi) term to drive bubble (psi=0) towards c=0. Do
+        ! this as an explicit term; implicit sinks reduce stability.
+        if (c .ge. 0) then
+          sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+      $          bm1(ix,iy,iz,el)*dt
+          qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
+        else
+          ! Clip c field to avoid flipping sign of CST term. Count
+          ! this as negative extraction to preserve conservation.
+          sink = sink - (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+      $          bm1(ix,iy,iz,el)*dt
+          c = 0.0
+          t(ix,iy,iz,el,ifld_c-1) = 0.0
+        endif
       endif
 
-      ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
-      if (c .le. 1) then
-        avol = avol + (max(0.0, psi-0.9)/0.1)*source_str
-        qvol = qvol + (max(0.0, psi-0.9)/0.1)*source_str
+      if (sourcemode .eq. 1) then
+        ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
+        if (c .le. 1) then
+          avol = avol + (max(0.0, psi-0.9)/0.1)*source_str
+          qvol = qvol + (max(0.0, psi-0.9)/0.1)*source_str
+        endif
       endif
 
       return
