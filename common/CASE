@@ -29,7 +29,8 @@
       parameter (ifld_c = 6)    ! scalar04 = concentration
 
       ! User parameter mappings
-      integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver
+      integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver,
+     $    iprm_sinkmode, iprm_sourcemode
       parameter (iprm_tlsr_freq = 1) ! uparam01 = TLS redistancing freq
       parameter (iprm_clsr_freq = 2) ! uparam02 = CLS redistancing freq
       parameter (iprm_pord = 3)      ! uparam03 = p extrapolation order
