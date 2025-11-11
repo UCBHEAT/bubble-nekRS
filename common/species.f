@@ -208,13 +208,13 @@ c-----------------------------------------------------------------------
         ! this as an explicit term; implicit sinks reduce stability.
         if (c .ge. 0) then
           sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
-      $          bm1(ix,iy,iz,el)*dt
+     $           bm1(ix,iy,iz,el)*dt
           qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
         else
           ! Clip c field to avoid flipping sign of CST term. Count
           ! this as negative extraction to preserve conservation.
           sink = sink - (max(0.0, 0.1-psi)/0.1)*sink_str*c*
-      $          bm1(ix,iy,iz,el)*dt
+     $           bm1(ix,iy,iz,el)*dt
           c = 0.0
           t(ix,iy,iz,el,ifld_c-1) = 0.0
         endif
