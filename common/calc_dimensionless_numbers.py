@@ -22,12 +22,12 @@ class Phase:
 
 flibe = Phase("FLiBe(625C,1bar)", rho=1975., D=9.3525e-7, kH=3.75464e-7, nu=3.843e-6)
 flinak = Phase("FLiNaK(625C,1bar)", rho=2019, D=1.07566e-8, kH=3.7966e-5, nu=4.1537e-3/2019) # see footnotes
-water = Phase("water(20C,1bar)", rho=998.2, D=2.01e-9, kH=33.0, nu=1.e-3/998.2) # from [Marschall12]
+water = Phase("water(20C,1bar,oxygen)", rho=998.2, D=2.01e-9, kH=1.243e-5, nu=1.e-3/998.2) # from [Marschall12], see footnotes for kH validation
 ar = Phase("Ar(625C,1bar)", rho=0.535, D=5.8677e-4, kH=1./(R*898.15), nu=9.578e-5) # from NIST WebBook, H2-Ar diffusion coefficient from [MarreroMason72]
 he = Phase("He(625C,1bar)", rho=0.05359, D=1.5547e-4, kH=1./(R*898.15), nu=4.2785e-5/0.05359) # from NIST WebBook, H2-He diffusion coefficient from [MarreroMason72], see footnotes
-air = Phase("air(20C,1bar)", rho=1.122, D=1.916e-5, kH=1., nu=1.824e-5/1.122) # from [Marschall12]
-#water25 = Phase("water(25C,1bar)", rho=997., D=1.97e-9, kH=3.49e-4, nu=8.927e-7)
-#co2 = Phase("CO2(25C,1bar)", rho=1.784, D=1.381e-5, kH=1./(R*298.15), nu=8.369e-6)
+air = Phase("air(20C,1bar,oxygen)", rho=1.122, D=1.916e-5, kH=1./(R*293.15), nu=1.824e-5/1.122) # from [Marschall12]
+#water_25C = Phase("water(25C,1bar,CO2)", rho=997., D=1.97e-9, kH=3.49e-4, nu=8.927e-7)
+#co2_25C = Phase("CO2(25C,1bar,CO2)", rho=1.784, D=1.381e-5, kH=1./(R*298.15), nu=8.369e-6)
 
 combos = [
     # liquid, gas, surface tension, bubble diameter, bubble velocity
@@ -95,11 +95,28 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
       ! Correlations (valid={correlation_validity}):
       ! Brauer71 = {Brauer71:.4g}
       ! HongBrauer84 = {HongBrauer84:.4g}""")
+    if True:
+        # Calculate terminal velocity (simple)
+        V = (4./3)*np.pi*((d/2)**3)
+        A = np.pi*((d/2)**2)
+        Cd = 0.5 # sphere drag coefficient
+        u2 = np.sqrt(2*(liquid.rho-gas.rho)*V*g / (liquid.rho*A*Cd))
+        print(f"! u from simple calc = {u2}")
 
 for combo in combos:
     calc_dimensionless_numbers(*combo)
 
 # Footnotes
+
+# Water-air-O2 at 20C kH
+# [Marschall12] uses "He=33" (H=1/33); we confirm that here.
+# NIST: kH(T) = kH(25C) exp(C1 * (1/T - 1/298.15))
+#   kH(25C) = 1.3e-5 mol/(m^3 Pa)
+#   C1 = 1500 K
+# => kH(20C) = (1.3e-5 mol/(m^3 Pa)) exp(-1500*(1/293.15 - 1/298.15))
+#            = 1.193e-5 mol/(m^3 Pa)
+# which results in solubilityratio=34.39, not 33.
+# To match Marschall12's values, we use kH=1.35e-5 mol/(m^3 Pa).
 
 # FLiNaK properties from [RomatoskiHu17].
 # rho = 2579-0.624T
@@ -112,8 +129,8 @@ for combo in combos:
 # D = 8.7e-10*exp(-50000/(RT))
 #    = 1.07566e-12
 # (this appears to be misspecified in the original Fukada and Morisaki paper
-# as m^2/s when it is really cm^2/s cm^2/s, and Humrickhouse and Fuerst did
-# not fix it. It is correct on everyone's plots.)
+# as m^2/s when it is really cm^2/s, and Humrickhouse and Fuerst did not fix
+# it. It is correct on everyone's plots.)
 #    = 1.07566e-8 m^2/s
 # FLiNaK surface tension from Janz (1988)
 # sigma = 0.2726 - 1.014e-4*T
