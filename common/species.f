@@ -37,9 +37,11 @@ c-----------------------------------------------------------------------
       psi = max(0.0,psi)
       psi = min(1.0,psi)
       species_equation_version = int(uparam(iprm_cst_ver))
-      if (species_equation_version .eq. 0 .or.
-     $    species_equation_version .eq. 1) then
-        ! CST off or Marschall et al (2012) version
+      if (species_equation_version .eq. 0) then
+        ! CST off - use liquid diffusivity all the way up to boundary
+        species_diff = 1.0/Pe
+      elseif (species_equation_version .eq. 1) then
+        ! Marschall et al (2012) version
         species_diff = ((1.0-psi)*diffratio + psi)/Pe
       elseif (species_equation_version .eq. 2) then
         ! Li and Su (2025) version
