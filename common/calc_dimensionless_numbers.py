@@ -102,6 +102,13 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
         Cd = 0.5 # sphere drag coefficient
         u2 = np.sqrt(2*(liquid.rho-gas.rho)*V*g / (liquid.rho*A*Cd))
         print(f"! u from simple calc = {u2}")
+        # Calculate Kolmogorov scale
+        epsilon = u*g
+        lambda_k = ((liquid.nu**3)/epsilon)**0.25
+        lambda_kd = ((liquid.D**3)/epsilon)**0.25
+        print(f"! Bubble rise specific turbulent KE dissipation rate = {epsilon} J/kg")
+        print(f"! Kolmogorov scale lambda_k = {lambda_k*10**3} mm")
+        print(f"! Mass transfer Kolmogorov scale lambda_kd = {lambda_kd*10**3} mm")
 
 for combo in combos:
     calc_dimensionless_numbers(*combo)
