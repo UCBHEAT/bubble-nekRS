@@ -293,7 +293,7 @@ c-----------------------------------------------------------------------
       real one_minus_psi(lx1,ly1,lz1,nelt), total_volume
       ntot = lx1*ly1*lz1*nelt
       ! Compute 1-psi (volumetric gas fraction field).
-      one_minus_psi = t(1,1,1,1,ifld_cls-1)
+      one_minus_psi = t(:,:,:,:,ifld_cls-1)
       call chsign(one_minus_psi, ntot)
       call cadd(one_minus_psi, 1.0, ntot)
       ! Clip to [0, 1].
