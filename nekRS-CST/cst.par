@@ -1,0 +1,31 @@
+[GENERAL]
+# Uncomment to debug per-field internal iterations.
+#verbose = true
+# Uncomment to resume from a checkpoint.
+#startFrom = ss10.f00000
+
+polynomialOrder = 7
+numSteps = 100000
+writeInterval = 500 # for averaging, use 5000 for 0.75D.
+
+timeStepper = tombo2
+subCyclingSteps = 2
+dt = targetCFL=0.5 + max=1e-04 + initial=1e-05
+
+#regularization = hpfrt + nModes=1 + scalingCoeff=0.1/${dt}
+regularization = hpfrt + nModes=1 + scalingCoeff=0.1/1e-04
+
+[PRESSURE]
+residualTol = 1e-04
+
+[VELOCITY]
+boundaryTypeMap = inlet, outlet, wall, shl
+residualTol = 1e-06
+rho = 1.0
+viscosity = -230 # = -Re
+
+[SCALAR00]
+boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, codedFixedValue
+residualTol = 1e-06
+rho = 1.0
+diffusivity = -943 # = -Pe = -Re*Sc
