@@ -20,7 +20,7 @@ class Phase:
     def mu(self):
         return self.rho*self.nu
 
-flibe = Phase("FLiBe(625C,1bar)", rho=1975., D=9.3525e-7, kH=3.75464e-7, nu=3.843e-6)
+flibe = Phase("FLiBe(625C,1bar)", rho=1975., D=3.343e-9, kH=3.75464e-7, nu=3.843e-6)
 flinak = Phase("FLiNaK(625C,1bar)", rho=2019, D=1.07566e-8, kH=3.7966e-5, nu=4.1537e-3/2019) # see footnotes
 water = Phase("water(20C,1bar,oxygen)", rho=998.2, D=2.01e-9, kH=1.243e-5, nu=1.e-3/998.2) # from [Marschall12], see footnotes for kH validation
 ar = Phase("Ar(625C,1bar)", rho=0.535, D=5.8677e-4, kH=1./(R*898.15), nu=9.578e-5) # from NIST WebBook, H2-Ar diffusion coefficient from [MarreroMason72]
