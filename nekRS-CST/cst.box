@@ -1,17 +1,10 @@
--2                     spatial dimension (will create box.re2)
-6                      number of fields
-#
-#    comments: two dimensional periodic hill
-#
-#========================================================
-#
+cst.rea
+-3                      spatial dimension (will create box.re2)
+2                       number of velocity + scalar fields
 Box                                       
--20 -20                            Nelx  Nely
-0 1 1.                        x0 x1 ratio
-0 1 1.			      y0 y1 ratio
-W  ,W  ,W  ,W                     BC's
-t  ,t  ,t  ,t   
-I  ,I  ,I  ,I   
-t  ,t  ,t  ,t   
-I  ,I  ,I  ,I   
-I  ,I  ,I  ,I   
+-20 -20 -20             Nelx Nely Nelz
+0 1 1.                  x0 x1 ratio
+0 1 1.			        y0 y1 ratio
+0 1 1.			        z0 z1 ratio
+W  ,W  ,W  ,W  ,P  ,P   BCs
+I  ,I  ,I  ,I  ,P  ,P   BCs

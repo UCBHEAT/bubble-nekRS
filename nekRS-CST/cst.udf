@@ -1,19 +1,70 @@
 #ifdef __okl__
 
-#include "ss1.oudf"
+#include "cst.oudf"
 
 #endif
 
+static occa::kernel constantFillKernel;
+static occa::kernel weightedMixingKernel;
+static occa::kernel speciesDiffKernel;
+static occa::kernel speciesSourceKernel;
+
+void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
+{
+    constantFillKernel = udfBuildKernel(kernelInfo, "constantFill");
+    weightedMixingKernel = udfBuildKernel(kernelInfo, "weightedMixing");
+    speciesDiffKernel = udfBuildKernel(kernelInfo, "speciesDiff");
+    speciesSourceKernel = udfBuildKernel(kernelInfo, "speciesSource");
+}
+
 void UDF_Setup() 
 {
+    udf.properties = &customProperties;
+    udf.sEqnSource = &customSource;
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
+}
 
-    if (nrs->checkpointStep) {
-    nrs->copyToNek(time, tstep);
-    nek::userchk();
-    }
+void customProperties(nrs_t* nrs, float t, occa::memory o_U, occa::memory o_S,
+        occa::memory o_Up, occa::memory o_Sp)
+{
+    mesh_t* mesh = nrs->mesh;
+    const occa::memory o_psi = o_S.slice(scalarid_psi*nrs->fieldOffset*sizeof(dfloat));
+    const occa::memory o_c = o_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
 
+    // Properties for momentum transport equation
+    const occa::memory o_udiff = o_Up.slice((0 + 2*0)
+            *(nrs->fieldOffset)*sizeof(dfloat));
+    const occa::memory o_utrans = o_Up.slice((1 + 2*0)
+            *(nrs->fieldOffset)*sizeof(dfloat));
+
+    // mu = ((1.0-psi)*muratio + psi)/Re
+    weightedMixingKernel(mesh->Nelements, o_psi, muratio, Re, o_udiff)
+    // rho = (1.0-psi)*rhoratio + psi
+    weightedMixingKernel(mesh->Nelements, o_psi, rhoratio, 1.0, o_udiff)
+
+    // Properties for species transport equation
+    const occa::memory o_cdiff = o_Sp.slice((0 + 2*scalarid_c)
+            *(cds->fieldOffset)*sizeof(dfloat));
+    const occa::memory o_ctrans = o_Sp.slice((1 + 2*scalarid_c)
+            *(cds->fieldOffset)*sizeof(dfloat));
+
+    // D = (psi/(psi+(1.0-psi)*solubilityratio) +
+    //     diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
+    speciesDiffKernel(mesh->Nelements, o_psi, solubilityratio, diffratio, Pe,
+            o_cdiff);
+    // No transport coefficient in c equation.
+    constantFillKernel(mesh->Nelements, 1.0, o_ctrans);
+}
+
+void customSource(nrs_t *nrs, dfloat time, occa::memory o_S, occa::memory o_S_S)
+{
+    mesh_t* mesh = nrs->mesh;
+    const occa::memory o_psi = o_S.slice(scalarid_psi*nrs->fieldOffset*sizeof(dfloat));
+    const occa::memory o_c = o_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
+    const occa::memory o_S_c = o_S_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
+
+    speciesSourceKernel(nrs->mesh->Nelements, o_c, o_psi, o_S_c);
 }

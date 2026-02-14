@@ -1,34 +1,128 @@
+#include <cmath>
+
+// OCCA kernels used in customProperties and customSource.
+
+@kernel void constantFill(const dlong Nelements, const dfloat value,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer)
+    {
+        for (int n = 0; n < p_Np; ++n; @inner)
+        {
+            out[e*p_Np + n] = value;
+        }
+    }
+}
+
+@kernel void weightedMixing(const dlong Nelements, @restrict dfloat *psi,
+        const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer)
+    {
+        for (int n = 0; n < p_Np; ++n; @inner)
+        {
+            const int i = e*p_Np + n;
+            out[i] = ((1-psi[i])*ratio + psi[i])/ratio;
+        }
+    }
+}
+
+@kernel void speciesDiff(const dlong Nelements, @restrict dfloat *psi,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer)
+    {
+        for (int n = 0; n < p_Np; ++n; @inner)
+        {
+            const int i = e*p_Np + n;
+            const dfloat p = psi[i];
+            out[i] = (p/(p+(1.0-p)*solubilityratio) +
+                    diffratio*(1.0-p)/((1.0-p)+p/solubilityratio))/Pe;
+        }
+    }
+}
+
+@kernel void speciesSource(const dlong Nelements,
+        @restrict dfloat *psi, @restrict dfloat *c,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer)
+    {
+        // Calculate all the scalar coefficients.
+        @exclusive dfloat p;
+        @exclusive dfloat coeff;
+        for (int n = 0; n < p_Np; ++n; @inner)
+        {
+            const int i = e*p_Np + n;
+            const dfloat p = psi[i];
+            const dfloat term1 = ((1.0 - diffratio)/solubilityratio)
+                   / std::pow(p/solubilityratio+(1.0-p), 2)
+            const dfloat term2 = (1.0/solubilityratio - diffratio)
+                    / (p/solubilityratio + (1.0-p))
+
+            coeff = (term1 - term2)/Pe;
+            coeff *= c[i];
+        }
+        // Multiply by our version of "grad(alpha)".
+        @exclusive dfloat cst_flux_x;
+        @exclusive dfloat cst_flux_y;
+        @exclusive dfloat cst_flux_z;
+        for (int n = 0; n < p_Np; ++n; @inner)
+        {
+            // Calculate surface area density from CLS, as delta.
+            // delta = 1/(4*epsilon) (cosh(clip(atanh(2*psi - 1))))^(-2)
+            const dfloat epsilon = 1.0; // TODO
+            const dfloat delta = std::pow(std::cosh(clip(std::atanh(2*p-1))), -2)/(4*epsilon);
+
+            // Calculate interface unit normals from TLS, as unit_normal_{x,y,z}.
+            dfloat unit_normal_x = 1.0;
+            dfloat unit_normal_y = 1.0;
+            dfloat unit_normal_z = 1.0; // TODO get from TLS
+
+            // Multiply interface normal * surface area * (accumulation
+            // and CST coefficients), as sp{x,y,z}.
+            dfloat cst_flux_x = unit_normal_x * delta * coeff;
+            dfloat cst_flux_y = unit_normal_y * delta * coeff;
+            dfloat cst_flux_z = unit_normal_z * delta * coeff;
+        }
+/*
+          ! Take the divergence of (spx, spy, spz), as spdiv.
+          call opdiv(spdiv,spx,spy,spz)
+          ! Multiply spdiv by QQ^T (scatter/gather operators) to
+          ! convert from global to local coordinates.
+          call dssum(spdiv,lx1,ly1,lz1)
+          ! Multiply spdiv by binvm1, the "inverse mass matrix for
+          ! velocity mesh", as spdiv.
+          call col2(spdiv,binvm1,ntot)
+*/
+        }
+    }
+}
+
 // Boundary conditions
-void codedFixedValueVelocity(bcData *bc)
+
+void scalarDirichletConditions(bcData *bc)
+{
+  bc->s = 0.0;
+  if(bc->id==4)  bc->s = 1.0;
+}
+
+void velocityDirichletConditions(bcData *bc)
 {
   bc->u = 0.0;
   bc->v = 0.0;
   bc->w = 1.0;
 }
 
-// Boundary conditions
-void codedFixedGradientVelocity(bcData *bc)
+void scalarNeumannConditions(bcData *bc)
+{
+  bc->flux =0.0;
+}
+
+void velocityNeumannConditions(bcData *bc)
 {
   bc->tr1 = 0.0;
   bc->tr2 = 0.0;
-}
-
-// Stabilized outflow (Dong et al)
-void codedFixedValuePressure(bcData *bc)
-{
-  const dfloat iU0delta = 20.0;
-  const dfloat un = bc->u * bc->nx + bc->v * bc->ny + bc->w * bc->nz;
-  const dfloat s0 = 0.5 * (1.0 - tanh(un * iU0delta));
-  bc->p = -0.5 * (bc->u * bc->u + bc->v * bc->v + bc->w * bc->w) * s0;
-}
-
-void codedFixedValueScalar(bcData *bc)
-{
-  bc->s = 0.0;
-  if(bc->id==4)  bc->s = 1.0;
-}
-
-void codedFixedGradientScalar(bcData *bc)
-{
-  bc->flux =0.0;
 }

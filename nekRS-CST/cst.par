@@ -2,7 +2,7 @@
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
-#startFrom = ss10.f00000
+#startFrom = cst.f00000
 
 polynomialOrder = 7
 numSteps = 100000
@@ -19,13 +19,14 @@ regularization = hpfrt + nModes=1 + scalingCoeff=0.1/1e-04
 residualTol = 1e-04
 
 [VELOCITY]
-boundaryTypeMap = inlet, outlet, wall, shl
+#boundaryTypeMap = inlet, outlet, wall, wall
+boundaryTypeMap = wall, wall, wall, wall
 residualTol = 1e-06
-rho = 1.0
 viscosity = -230 # = -Re
 
 [SCALAR00]
-boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, codedFixedValue
+#boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, zeroGradient
+boundaryTypeMap = zeroGradient, zeroGradient, zeroGradient, zeroGradient
 residualTol = 1e-06
 rho = 1.0
 diffusivity = -943 # = -Pe = -Re*Sc
