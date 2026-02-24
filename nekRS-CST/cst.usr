@@ -19,11 +19,36 @@ c-----------------------------------------------------------------------
       end
 c-----------------------------------------------------------------------
       subroutine usrdat2
+        include 'SIZE'
+        include 'TOTAL'
 
-         include 'SIZE'
-         include 'TOTAL'
+        ! kludge for periodic bc in z, part 1
+        do iel=1,nelt
+          cbc(5,iel,1) = 'P  '
+          cbc(6,iel,1) = 'P  '
+        enddo
 
-         return
+        ! Fix "Size of scalar02 boundaryTypeMap (4) does not match
+        ! number of boundary IDs in mesh (0)!".
+        !
+        ! genbox/genmap bug? This doesn't happen with gmsh meshes.
+        do iel=1,nelt
+          do ifc=1,2*ndim
+            if (cbc(ifc,iel,1) .eq. '1  ') then
+              boundaryID(ifc,iel) = 1
+            endif
+            if (cbc(ifc,iel,1) .eq. '2  ') then
+              boundaryID(ifc,iel) = 2
+            endif
+            if (cbc(ifc,iel,1) .eq. '3  ') then
+              boundaryID(ifc,iel) = 3
+            endif
+            if (cbc(ifc,iel,1) .eq. '4  ') then
+              boundaryID(ifc,iel) = 4
+            endif
+          enddo
+        enddo
+        return
       end
 c-----------------------------------------------------------------------
       subroutine check_bulk
@@ -176,5 +201,21 @@ c           endif
          endif
 
          return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrsetvert(glo_num,nel,nx,ny,nz) ! to modify glo_num
+        integer*8 glo_num(1)
+
+        ! kludge for periodic bc in z, part 2
+        nxy  = nx*ny
+        nxyz = nx*ny*nz
+        do iel = 1,nel
+          ioff = nxyz*(iel-1)
+          do ixy = 1,nxy
+            glo_num(ioff + nxy*(nz-1) + ixy) = glo_num(ioff + ixy)
+          enddo
+        enddo
+
+        return
       end
 c-----------------------------------------------------------------------

@@ -1,10 +1,8 @@
-cst.rea
--3                      spatial dimension (will create box.re2)
-2                       number of velocity + scalar fields
-Box                                       
--20 -20 -20             Nelx Nely Nelz
+-3                      spatial dimension
+1                       number of velocity + scalar fields
+Box
+-20 -20 -1              Nelx Nely Nelz
 0 1 1.                  x0 x1 ratio
-0 1 1.			        y0 y1 ratio
-0 1 1.			        z0 z1 ratio
-W  ,W  ,W  ,W  ,P  ,P   BCs
-I  ,I  ,I  ,I  ,P  ,P   BCs
+0 1 1.                  y0 y1 ratio
+0 1 1.                  z0 z1 ratio
+1  ,2  ,3  ,4  ,W  ,W   velocity BCs, these don't matter (set in .par instead)

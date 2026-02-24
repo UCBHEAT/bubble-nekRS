@@ -4,67 +4,38 @@
 
 #endif
 
-static occa::kernel constantFillKernel;
-static occa::kernel weightedMixingKernel;
-static occa::kernel speciesDiffKernel;
-static occa::kernel speciesSourceKernel;
+#include "util.hpp"
+#include "customhooks.hpp"
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
-    constantFillKernel = udfBuildKernel(kernelInfo, "constantFill");
-    weightedMixingKernel = udfBuildKernel(kernelInfo, "weightedMixing");
-    speciesDiffKernel = udfBuildKernel(kernelInfo, "speciesDiff");
-    speciesSourceKernel = udfBuildKernel(kernelInfo, "speciesSource");
+    kernelInfo.define("p_PI") = M_PI;
 }
 
 void UDF_Setup() 
 {
-    udf.properties = &customProperties;
-    udf.sEqnSource = &customSource;
+    nrs->userProperties = &customProperties;
+    nrs->userSource = &customSource;
+
+    if (platform->options.getArgs("RESTART FILE NAME").empty()) {
+        // Apply initial conditions.
+        auto [x, y, z] = nrs->meshV->xyzHost();
+        std::vector<dfloat> psi(nrs->fieldOffset, 0.0);
+        std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
+        std::vector<dfloat> c(nrs->fieldOffset, 0.0);
+        for (int n = 0; n < nrs->meshV->Nlocal; n++) {
+            psi[n] = heaviside(0.5 - y[n], eps_cls);
+            phi[n] = 0.5 - y[n];
+            c[n] = heaviside(0.5 - y[n], eps_cls);
+        }
+
+        // Copy to device memory.
+        nrs->scalar->o_solution("psi").copyFrom(psi.data(), psi.size());
+        nrs->scalar->o_solution("phi").copyFrom(phi.data(), phi.size());
+        nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
+    }
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
-}
-
-void customProperties(nrs_t* nrs, float t, occa::memory o_U, occa::memory o_S,
-        occa::memory o_Up, occa::memory o_Sp)
-{
-    mesh_t* mesh = nrs->mesh;
-    const occa::memory o_psi = o_S.slice(scalarid_psi*nrs->fieldOffset*sizeof(dfloat));
-    const occa::memory o_c = o_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
-
-    // Properties for momentum transport equation
-    const occa::memory o_udiff = o_Up.slice((0 + 2*0)
-            *(nrs->fieldOffset)*sizeof(dfloat));
-    const occa::memory o_utrans = o_Up.slice((1 + 2*0)
-            *(nrs->fieldOffset)*sizeof(dfloat));
-
-    // mu = ((1.0-psi)*muratio + psi)/Re
-    weightedMixingKernel(mesh->Nelements, o_psi, muratio, Re, o_udiff)
-    // rho = (1.0-psi)*rhoratio + psi
-    weightedMixingKernel(mesh->Nelements, o_psi, rhoratio, 1.0, o_udiff)
-
-    // Properties for species transport equation
-    const occa::memory o_cdiff = o_Sp.slice((0 + 2*scalarid_c)
-            *(cds->fieldOffset)*sizeof(dfloat));
-    const occa::memory o_ctrans = o_Sp.slice((1 + 2*scalarid_c)
-            *(cds->fieldOffset)*sizeof(dfloat));
-
-    // D = (psi/(psi+(1.0-psi)*solubilityratio) +
-    //     diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
-    speciesDiffKernel(mesh->Nelements, o_psi, solubilityratio, diffratio, Pe,
-            o_cdiff);
-    // No transport coefficient in c equation.
-    constantFillKernel(mesh->Nelements, 1.0, o_ctrans);
-}
-
-void customSource(nrs_t *nrs, dfloat time, occa::memory o_S, occa::memory o_S_S)
-{
-    mesh_t* mesh = nrs->mesh;
-    const occa::memory o_psi = o_S.slice(scalarid_psi*nrs->fieldOffset*sizeof(dfloat));
-    const occa::memory o_c = o_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
-    const occa::memory o_S_c = o_S_S.slice(scalarid_c*nrs->fieldOffset*sizeof(dfloat));
-
-    speciesSourceKernel(nrs->mesh->Nelements, o_c, o_psi, o_S_c);
 }

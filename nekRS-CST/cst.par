@@ -5,28 +5,39 @@
 #startFrom = cst.f00000
 
 polynomialOrder = 7
-numSteps = 100000
-writeInterval = 500 # for averaging, use 5000 for 0.75D.
-
+numSteps = 20000
+#writeInterval = 500
+writeInterval = 1
 timeStepper = tombo2
-subCyclingSteps = 2
-dt = targetCFL=0.5 + max=1e-04 + initial=1e-05
+dt = 1e-4
 
-#regularization = hpfrt + nModes=1 + scalingCoeff=0.1/${dt}
-regularization = hpfrt + nModes=1 + scalingCoeff=0.1/1e-04
+scalars = psi, phi, c
 
-[PRESSURE]
-residualTol = 1e-04
+[FLUID VELOCITY]
+solver = none
 
-[VELOCITY]
-#boundaryTypeMap = inlet, outlet, wall, wall
-boundaryTypeMap = wall, wall, wall, wall
+[SCALAR PSI]
+# CLS (conservative level set), domain: [0, 1]
+solver = none
+
+[SCALAR PHI]
+# TLS (traditional level set), domain: (-infty, infty)
+solver = none
+
+[SCALAR C]
+# Species concentration
+boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
 residualTol = 1e-06
-viscosity = -230 # = -Re
+#regularization = svv+scalingCoeff=2.0+filterPower=6.0
+transportCoeff = 1.0
+diffusionCoeff = 1e-12
 
-[SCALAR00]
-#boundaryTypeMap = codedFixedValue, zeroGradient, zeroGradient, zeroGradient
-boundaryTypeMap = zeroGradient, zeroGradient, zeroGradient, zeroGradient
-residualTol = 1e-06
-rho = 1.0
-diffusivity = -943 # = -Pe = -Re*Sc
+#timestepping for 100000 steps ...
+#
+#step=1        SCALAR c            : iter 038  resNorm0 4.44e+01  resNorm 9.51e-05
+#step=1        t= 1.00000000e-05  dt=1.0e-05  CFL= 0.000
+#step=1        elapsedStep= 6.61e-01s  elapsedStepSum= 6.61140e-01s
+#::
+#Aborting in /home/ben/Development/nekRS-LS/src/core/linearSolver/cg.hpp:L84
+#solve:
+#scalar02 unreasonable initial residual norm!
