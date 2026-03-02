@@ -34,16 +34,15 @@ void customSource(double t)
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
-    interfaceUnitNormals(mesh->Nelements, o_phi, o_cstVectorX, o_cstVectorY, o_cstVectorZ);
-    // // Workaround for test purposes -- set interface normal vector field to constant (0, 1, 0) vector field.
-    // constantFill(mesh->Nelements, 0.0, o_cstVectorX);
-    // constantFill(mesh->Nelements, 1.0, o_cstVectorY);
-    // constantFill(mesh->Nelements, 0.0, o_cstVectorZ);
+    interfaceNormals(mesh->Nelements, o_phi, o_psi, o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    scalar->o_solution("debug1").copyFrom(o_cstVectorY);
 
     // Calculate CST vector field.
     speciesSource(mesh->Nelements, o_c, o_psi, solubilityratio, diffratio, Pe,
         o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    scalar->o_solution("debug2").copyFrom(o_cstVectorY);
 
     // Source term is the divergence of the above vector field.
     opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, scalar->o_explicitTerms("c"));
+    scalar->o_solution("debug3").copyFrom(scalar->o_explicitTerms("c"));
 }

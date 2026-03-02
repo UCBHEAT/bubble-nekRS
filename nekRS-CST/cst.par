@@ -5,13 +5,12 @@
 #startFrom = cst.f00000
 
 polynomialOrder = 7
-numSteps = 20000
-#writeInterval = 500
-writeInterval = 1
+numSteps = 8000
+writeInterval = 100
 timeStepper = tombo2
 dt = 1e-4
 
-scalars = psi, phi, c
+scalars = psi, phi, c, debug1, debug2, debug3
 
 [FLUID VELOCITY]
 solver = none
@@ -29,15 +28,10 @@ solver = none
 boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
 residualTol = 1e-06
 #regularization = svv+scalingCoeff=2.0+filterPower=6.0
-transportCoeff = 1.0
-diffusionCoeff = 1e-12
 
-#timestepping for 100000 steps ...
-#
-#step=1        SCALAR c            : iter 038  resNorm0 4.44e+01  resNorm 9.51e-05
-#step=1        t= 1.00000000e-05  dt=1.0e-05  CFL= 0.000
-#step=1        elapsedStep= 6.61e-01s  elapsedStepSum= 6.61140e-01s
-#::
-#Aborting in /home/ben/Development/nekRS-LS/src/core/linearSolver/cg.hpp:L84
-#solve:
-#scalar02 unreasonable initial residual norm!
+[SCALAR DEBUG1]
+solver = none
+[SCALAR DEBUG2]
+solver = none
+[SCALAR DEBUG3]
+solver = none

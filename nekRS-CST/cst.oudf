@@ -1,4 +1,5 @@
 #include <cmath>
+#include <algorithm>
 #include "util.hpp"
 // OCCA kernels used in customProperties and customSource.
 
@@ -69,28 +70,36 @@
  * 
  * @param Nelements number of elements local to this CPU node
  * @param phi traditional level set (TLS) scalar field
- * @param nx, ny, nz input: grad(phi), output: interface unit normal vector
+ * @param psi conservative level set (CLS) scalar field
+ * @param nx, ny, nz input: grad(phi), output: interface normal vector
  * 
  * @see https://github.com/nandu90/nrsLS_Examples/blob/v25/circles/circles.oudf
  */
-@kernel void interfaceUnitNormals(const dlong Nelements, @restrict const dfloat *phi,
+@kernel void interfaceNormals(const dlong Nelements, @restrict const dfloat *phi, @restrict const dfloat *psi,
         @restrict dfloat *nx, @restrict dfloat *ny, @restrict dfloat *nz)
 {
     for (dlong e = 0; e < Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
+
+            // Calculate interface direction as normalization of grad(phi) (gradient of TLS field).
             const dfloat mag2 = nx[i]*nx[i] + ny[i]*ny[i] + nz[i]*nz[i];
             const dfloat mag  = sqrt(mag2);
 
-            if (mag > 1e-12) {
-                const dfloat sign = tanh(phi[i] / 0.5);
-                nx[i] = sign * nx[i] / mag;
-                ny[i] = sign * ny[i] / mag;
-                nz[i] = sign * nz[i] / mag;
-            } else {
+            // Calculate surface area density from psi (CLS field).
+            const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*deltael*eps_cls);
+            // equivalent to (1-std::pow(clip(2*psi[i]-1, -1.0, 1.0), 2))/(4*deltael*eps_cls)
+            // not sure why original implementation used cosh(atanh(x))^(-2) rather than 1-x^2
+
+            // Interface normal = surface area density * interface direction.
+            if (mag <= 1e-12) {
                 nx[i] = 0.0;
                 ny[i] = 0.0;
                 nz[i] = 0.0;
+            } else {
+                nx[i] = delta * nx[i] / mag;
+                ny[i] = delta * ny[i] / mag;
+                nz[i] = delta * nz[i] / mag;
             }
         }
     }
@@ -101,15 +110,16 @@
  * source term.
  * 
  * @param Nelements number of elements local to this CPU node
+ * @param c species concentration scalar field
  * @param psi conservative level set (CLS) scalar field
  * @param solubilityratio ratio of Henry solubilities (gas/liquid)
  * @param diffratio ratio of mass diffusivities (gas/liquid)
  * @param Pe Peclet number
- * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface unit normal vectors,
+ * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface normal vectors,
  *     output: CST pseudo-advective flux
  */
 @kernel void speciesSource(const dlong Nelements,
-        @restrict dfloat *psi, @restrict dfloat *c,
+        @restrict const dfloat *c, @restrict const dfloat *psi,
         const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
         @restrict dfloat *cst_flux_x, @restrict dfloat *cst_flux_y, @restrict dfloat *cst_flux_z)
 {
@@ -124,16 +134,10 @@
                     / (psi[i]/solubilityratio + (1.0-psi[i]));
             const dfloat coeff = c[i]*(term1 - term2)/Pe;
 
-            // Calculate surface area density from CLS, as delta.
-            // delta = 1/(4*epsilon) (cosh(clip(atanh(2*psi - 1))))^(-2)
-            //const dfloat delta = std::pow(std::cosh(clip(std::atanh(2*psi[i]-1))), -2)/(4*eps_cls);
-            // TODO: add back clip()
-            const dfloat delta = std::pow(std::cosh(std::atanh(2*psi[i]-1)), -2)/(4*eps_cls);
-
             // Write output CST flux (for the next OCCA kernel to take divergence).
-            cst_flux_x[i] *= delta * coeff;
-            cst_flux_y[i] *= delta * coeff;
-            cst_flux_z[i] *= delta * coeff;
+            cst_flux_x[i] *= coeff;
+            cst_flux_y[i] *= coeff;
+            cst_flux_z[i] *= coeff;
         }
     }
 }
