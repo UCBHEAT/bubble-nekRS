@@ -12,21 +12,6 @@ const double deltael = 0.05;
 // TODO: calculate from actual polynomial order (mesh->Np) rather than hardcoding.
 const double eps_cls = 0.2143;
 
-// // FLiBe(625C,1bar)/Ar(625C,1bar)/3.12mm/0.29 m/s
-// const double Re = 231.4;
-// const double Fr = 1.633;
-// const double We = 2.667;
-// const double Sc = 1150;
-// const double Pe = 231.4*1150; // = 2.66e+05
-// const double Mo = 2.479e-09;
-
-// these may be inverted? double check
-// const double rhoratio = 0.0002709;
-// const double nuratio = 24.92;
-// const double muratio = 24.92*0.0002709;
-// const double diffratio = 1.755e+05;
-// const double solubilityratio = 356.7;
-
 // Water/air/artificial solute
 const double charl = 0.01;
 const double gdim = 9.81;
@@ -36,10 +21,10 @@ const double mul = 1e-3;
 const double mug = 1.824e-5;
 const double diffl = 0.2e-4;
 const double diffg = 1.0e-4;
-static double udim = diffl/charl;
+static double udim = diffl/charl; // diffusive scaling
 static double Re = rhol*udim*charl/mul;
-static double Sc = mul/rhol/diffl;
-static double Pe = Re*Sc; // = 1 in our diffl-based non-dimensionalization
+static double Sc = mul/rhol/diffl; // = 1/Re in diffusive scaling
+static double Pe = Re*Sc; // = 1 in diffusive scaling
 static double rhoratio = rhog/rhol;
 static double muratio = mug/mul;
 static double nuratio = muratio/rhoratio;
