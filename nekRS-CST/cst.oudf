@@ -84,7 +84,7 @@
 
             // Calculate interface direction as normalization of grad(phi) (gradient of TLS field).
             const dfloat mag2 = nx[i]*nx[i] + ny[i]*ny[i] + nz[i]*nz[i];
-            const dfloat mag  = sqrt(mag2);
+            const dfloat mag  = std::sqrt(mag2);
 
             // Calculate surface area density from psi (CLS field).
             const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*deltael*eps_cls);
