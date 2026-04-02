@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "cst.box" | genbox
+mv box.re2 cst.re2
+echo -e "cst\n" | genmap
