@@ -2,9 +2,11 @@
 *.nek5000
 cmake.log
 .cache/
+__pycache__/
 Sh_nek
 # Generated SLURM batch file
 s.bin
 # Don't commit the (large) mesh files
 *.msh
 *.re2
+*.ma2

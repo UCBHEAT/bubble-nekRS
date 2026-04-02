@@ -103,6 +103,7 @@ c-----------------------------------------------------------------------
       ! Set output variables.
       ffx = sfx + svvx
       ffy = sfy + svvy - 1.0/Fr + dpdy
+      ffz = sfz + svvz
 
       return
       end
@@ -157,8 +158,8 @@ c-----------------------------------------------------------------------
         uy = 0.0
         uz = 0.0
       elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr) then
-        ! Equation for a circle centered at (0, 1) of radius 0.5.
-        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        ! Equation for a circle centered at (0, 1, 0) of radius 0.5.
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0+z**2.0) - 0.5
 
         ! Setting temp means setting a Dirichlet (fixed-value)
         ! constraint, and is unrelated to whether the current field
@@ -168,7 +169,7 @@ c-----------------------------------------------------------------------
         ! 1 outside the bubble.
         temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
       elseif (ifield.eq.ifld_c) then
-        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0+z**2.0) - 0.5
         ! Concentration field should be initialized to c_initial
         ! inside the bubble, 1 outside the bubble.
         !
@@ -233,7 +234,7 @@ c-----------------------------------------------------------------------
       ! compute).
       if (ifoutfld) then
       block
-        real, external :: get_sink
+        real, external :: get_sink, integrate_c_bulk
         real delta(lx1, ly1, lz1, lelv), interface_area, MTC, Sh
         real c_iface, c_bulk, ndot
         call deltals(t(1,1,1,1,ifld_cls-1), delta)
@@ -241,7 +242,7 @@ c-----------------------------------------------------------------------
         interface_area = glsum(delta, ntot)
 
         c_iface = 0.0
-        c_bulk = 1.0
+        c_bulk = integrate_c_bulk()
         ndot = get_sink()
         MTC = ndot/(interface_area*(c_bulk-c_iface))
         Sh = MTC*Pe

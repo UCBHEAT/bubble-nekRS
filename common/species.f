@@ -9,6 +9,17 @@
       !   2 = Li and Su (2025)
       ! Affects 2 terms, species_diff() called by uservp and
       ! species_src() called by userq.
+      !
+      ! PARAMETER 05: sink term mode for bubble interior.
+      !   0 = off, no sink term
+      !   1 = soft sink, add dc/dt = -sink_str*c explicit sink inside
+      !       psi<0.1 with linear psi activation
+      !   2 = hard sink, set c=0 inside psi<0.5
+      !
+      ! PARAMETER 06: source term mode for liquid bulk.
+      !   0 = off, no source term
+      !   1 = soft sink, add dc/dt = source_str*(1-c) implicit source
+      !       inside psi>0.9 with linear psi activation
 c-----------------------------------------------------------------------
       real function species_diff(ix,iy,iz,el)
       ! Calculate the coefficient for the diffusion term in the CST
@@ -26,9 +37,11 @@ c-----------------------------------------------------------------------
       psi = max(0.0,psi)
       psi = min(1.0,psi)
       species_equation_version = int(uparam(iprm_cst_ver))
-      if (species_equation_version .eq. 0 .or.
-     $    species_equation_version .eq. 1) then
-        ! CST off or Marschall et al (2012) version
+      if (species_equation_version .eq. 0) then
+        ! CST off - use liquid diffusivity all the way up to boundary
+        species_diff = 1.0/Pe
+      elseif (species_equation_version .eq. 1) then
+        ! Marschall et al (2012) version
         species_diff = ((1.0-psi)*diffratio + psi)/Pe
       elseif (species_equation_version .eq. 2) then
         ! Li and Su (2025) version
@@ -153,24 +166,23 @@ c-----------------------------------------------------------------------
 
       real, external :: glsum
       real c, psi, volratio
-      real sink, sink_dt, last_sink_rate
-      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
+      real sink, sink_dt
+      common /speciestransport_sink/ sink, sink_dt
+      integer sinkmode, sourcemode
+
       c = t(ix,iy,iz,el,ifld_c-1)
       psi = t(ix,iy,iz,el,ifld_cls-1)
+      if (ix*iy*iz*el.eq.1) then
+        sink_dt = sink_dt + dt
+      endif
+
       ! Clip to [0, 1].
       psi = max(0.0, psi)
       psi = min(1.0, psi)
-      if (ix*iy*iz*el.eq.1) then
-          ! Calculate sink rate and reset sink/sink_dt on checkpoint.
-          if (ifoutfld) then
-            last_sink_rate = glsum(sink, 1)/sink_dt
-            sink = 0.0
-            sink_dt = dt
-          else
-            sink_dt = sink_dt + dt
-          endif
-      endif
 
+      ! Parse user parameters.
+      sinkmode = int(uparam(iprm_sinkmode))
+      sourcemode = int(uparam(iprm_sourcemode))
 
       ! Total term is of the form qvol - avol*c (so that avol can be
       ! specified implicitly to improve stability).
@@ -186,40 +198,63 @@ c-----------------------------------------------------------------------
       ! Otherwise these terms will try to drive c=0.5 at psi=0.5,
       ! interfering with the mass transfer under study.
 
-      ! Simply set bubble interior (psi=0) to 0. No need for gradual
-      ! biasing towards 0 like we do for the source term, because
-      ! diffusion in the gas is effectively instantaneous so we don't
-      ! need to worry about preserving a trail/depletion profile on
-      ! the gas side.
-      if (psi .le. 0.5) then
-        sink = sink + c*bm1(ix,iy,iz,el)
-        t(ix,iy,iz,el,ifld_c-1) = 0.0
+      if (sinkmode .eq. 2) then
+        ! Hard sink -- set everything to zero within psi<0.5.
+        if (psi .le. 0.5) then
+          sink = sink + c*bm1(ix,iy,iz,el)
+          c = 0.0
+          t(ix,iy,iz,el,ifld_c-1) = 0.0
+        endif
+      elseif (sinkmode .eq. 1) then
+        ! Add -c*(1-psi) term to drive bubble (psi=0) towards c=0. Do
+        ! this as an explicit term; implicit sinks reduce stability.
+        if (c .ge. 0) then
+          sink = sink + (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+     $           bm1(ix,iy,iz,el)*dt
+          qvol = qvol - (max(0.0, 0.1-psi)/0.1)*sink_str*c
+        else
+          ! Clip c field to avoid flipping sign of CST term. Count
+          ! this as negative extraction to preserve conservation.
+          sink = sink - (max(0.0, 0.1-psi)/0.1)*sink_str*c*
+     $           bm1(ix,iy,iz,el)*dt
+          c = 0.0
+          t(ix,iy,iz,el,ifld_c-1) = 0.0
+        endif
       endif
 
-      ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
-      if (c .le. 1) then
-        avol = avol + (max(0.0, psi-0.9)/0.1)*source_str
-        qvol = qvol + (max(0.0, psi-0.9)/0.1)*source_str
+      if (sourcemode .eq. 1) then
+        ! Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
+        if (c .le. 1) then
+          avol = avol + (max(0.0, psi-0.9)/0.1)*source_str
+          qvol = qvol + (max(0.0, psi-0.9)/0.1)*source_str
+        endif
       endif
 
       return
       end
 c-----------------------------------------------------------------------
       real function get_sink()
-      ! Return the rate of specie removed.
+      ! Return the rate of specie removed. This function has side
+      ! effects (resets counters) and should not be called repeatedly.
+      !
+      ! This is called from userchk, gated on ifoutfld ("is this step
+      ! a checkpoint?"), before add_artificial_srcsink is called from
+      ! useric. So the value it returns is non-inclusive of the extract
+      ! from the current (checkpoint) timestep. The extract from the
+      ! current timestep will be included in the next checkpoint's
+      ! get_sink() call.
       implicit none
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
 
       real, external :: glsum
-      real sink, sink_dt, last_sink_rate
-      common /speciestransport_sink/ sink, sink_dt, last_sink_rate
-      get_sink = last_sink_rate
-      !get_sink = glsum(sink, 1)/sink_dt
-      if (nio.eq.0) then
-        write(*,*) "DEBUG SINK", get_sink, sink_dt, last_sink_rate
-      endif
+      real sink, sink_dt
+      common /speciestransport_sink/ sink, sink_dt
+      ! Calculate sink rate and reset sink/sink_dt.
+      get_sink = glsum(sink, 1)/sink_dt
+      sink = 0.0
+      sink_dt = 0.0
       endfunction
 c-----------------------------------------------------------------------
       real function integrate_gradc()
@@ -280,29 +315,26 @@ c-----------------------------------------------------------------------
       integrate_gradc = surfaceintegral_gradc/total_area
       endfunction
 c-----------------------------------------------------------------------
-      subroutine integrate_c(c_bubble_avg, c_bubble_total)
-      ! Calculate the integral of c dV over the bubble and normalize it
+      real function integrate_c_bulk()
+      ! Calculate the integral of c dV over the liquid and normalize it
       ! by total volume.
       implicit none
-      real, intent(out) :: c_bubble_avg, c_bubble_total
       include 'SIZE'
       include 'TOTAL'
       include 'CASE'
       real, external :: glsc2, glsc3
       integer ntot
-      real one_minus_psi(lx1,ly1,lz1,nelt), total_volume
+      real psi(lx1,ly1,lz1,nelt), total_volume, c_bulk_total
       ntot = lx1*ly1*lz1*nelt
-      ! Compute 1-psi (volumetric gas fraction field).
-      one_minus_psi = t(:,:,:,:,ifld_cls-1)
-      call chsign(one_minus_psi, ntot)
-      call cadd(one_minus_psi, 1.0, ntot)
+      psi = t(1,1,1,1,ifld_cls-1)
       ! Clip to [0, 1].
-      one_minus_psi = max(0.0,one_minus_psi)
-      one_minus_psi = min(1.0,one_minus_psi)
+      psi = max(0.0,psi)
+      psi = min(1.0,psi)
+      ! Apply same thresholding we apply in the source term.
+      psi = max(0.0, psi-0.9)/0.1
       ! Perform volume integrals.
-      c_bubble_total = glsc3(one_minus_psi, t(1,1,1,1,ifld_c-1),
-     $    bm1, ntot)
-      total_volume = glsc2(one_minus_psi, bm1, ntot)
+      c_bulk_total = glsc3(psi, t(1,1,1,1,ifld_c-1), bm1, ntot)
+      total_volume = glsc2(psi, bm1, ntot)
       ! Compute quotient.
-      c_bubble_avg = c_bubble_total/total_volume
-      end
+      integrate_c_bulk = c_bulk_total/total_volume
+      endfunction
