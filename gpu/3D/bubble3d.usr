@@ -1,0 +1,34 @@
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+        include 'SIZE'
+        include 'TOTAL'
+
+        ! Fix "Size of scalar02 boundaryTypeMap (6) does not match
+        ! number of boundary IDs in mesh (0)!".
+        !
+        ! genbox/genmap bug? This doesn't happen with gmsh meshes.
+        do iel=1,nelt
+          do ifc=1,2*ndim
+            if (cbc(ifc,iel,1) .eq. '1  ') then
+              boundaryID(ifc,iel) = 1
+            endif
+            if (cbc(ifc,iel,1) .eq. '2  ') then
+              boundaryID(ifc,iel) = 2
+            endif
+            if (cbc(ifc,iel,1) .eq. '3  ') then
+              boundaryID(ifc,iel) = 3
+            endif
+            if (cbc(ifc,iel,1) .eq. '4  ') then
+              boundaryID(ifc,iel) = 4
+            endif
+            if (cbc(ifc,iel,1) .eq. '5  ') then
+              boundaryID(ifc,iel) = 5
+            endif
+            if (cbc(ifc,iel,1) .eq. '6  ') then
+              boundaryID(ifc,iel) = 6
+            endif
+          enddo
+        enddo
+        return
+      end
+c-----------------------------------------------------------------------

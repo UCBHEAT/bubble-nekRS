@@ -1,0 +1,143 @@
+#include <cmath>
+#include <algorithm>
+#include "util.hpp"
+// OCCA kernels used in customProperties and customSource.
+
+/**
+ * Constant fill. Should be equivalent to platform->linAlg->fill(Nelements, value, out).
+ *
+ * @param Nelements number of elements local to this CPU node
+ * @param value constant to fill with
+ * @param out scalar field to fill
+ */
+@kernel void constantFill(const dlong Nelements, const dfloat value,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            out[e*p_Np + n] = value;
+        }
+    }
+}
+
+/**
+ * Compute two-phase property ((1-psi)*ratio + psi)/divisor.
+ *
+ * @param Nelements number of elements local to this CPU node
+ * @param psi conservative level set (CLS) scalar field
+ * @param ratio gas property/liquid property ratio
+ * @param divisor non-dimensionalization
+ * @param out output two-phase mixed value for this property
+ */
+@kernel void weightedMixing(const dlong Nelements, @restrict dfloat *psi,
+        const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            out[i] = ((1-psi[i])*ratio + psi[i])/divisor;
+        }
+    }
+}
+
+/**
+ * Compute the coefficient of the implicit diffusion term in the CST
+ * equation.
+ * 
+ * @param Nelements number of elements local to this CPU node
+ * @param psi conservative level set (CLS) scalar field
+ * @param solubilityratio ratio of Henry solubilities (gas/liquid)
+ * @param diffratio ratio of mass diffusivities (gas/liquid)
+ * @param Pe Peclet number
+ * @param out output CST diffusion term coefficient
+ */
+@kernel void speciesDiff(const dlong Nelements, @restrict dfloat *psi,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            const dfloat p = psi[i];
+            out[i] = (p/(p+(1.0-p)*solubilityratio) +
+                    diffratio*(1.0-p)/((1.0-p)+p/solubilityratio))/Pe;
+        }
+    }
+}
+
+/**
+ * Computes interface normal vectors using the TLS (traditional level set) field phi.
+ * 
+ * @param Nelements number of elements local to this CPU node
+ * @param phi traditional level set (TLS) scalar field
+ * @param psi conservative level set (CLS) scalar field
+ * @param nx, ny, nz input: grad(phi), output: interface normal vector
+ * 
+ * @see https://github.com/nandu90/nrsLS_Examples/blob/v25/circles/circles.oudf
+ */
+@kernel void interfaceNormals(const dlong Nelements, @restrict const dfloat *phi, @restrict const dfloat *psi,
+        @restrict dfloat *nx, @restrict dfloat *ny, @restrict dfloat *nz)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Calculate interface direction as normalization of grad(phi) (gradient of TLS field).
+            const dfloat mag2 = nx[i]*nx[i] + ny[i]*ny[i] + nz[i]*nz[i];
+            const dfloat mag  = std::sqrt(mag2);
+
+            // Calculate surface area density from psi (CLS field).
+            const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*deltael*eps_cls);
+            // equivalent to (1-std::pow(clip(2*psi[i]-1, -1.0, 1.0), 2))/(4*deltael*eps_cls)
+            // not sure why original implementation used cosh(atanh(x))^(-2) rather than 1-x^2
+
+            // Interface normal = surface area density * interface direction.
+            if (mag <= 1e-12) {
+                nx[i] = 0.0;
+                ny[i] = 0.0;
+                nz[i] = 0.0;
+            } else {
+                nx[i] = delta * nx[i] / mag;
+                ny[i] = delta * ny[i] / mag;
+                nz[i] = delta * nz[i] / mag;
+            }
+        }
+    }
+}
+
+/**
+ * Compute the pseudo-advection term in the CST equation, as an explicit
+ * source term.
+ * 
+ * @param Nelements number of elements local to this CPU node
+ * @param c species concentration scalar field
+ * @param psi conservative level set (CLS) scalar field
+ * @param solubilityratio ratio of Henry solubilities (gas/liquid)
+ * @param diffratio ratio of mass diffusivities (gas/liquid)
+ * @param Pe Peclet number
+ * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface normal vectors,
+ *     output: CST pseudo-advective flux
+ */
+@kernel void speciesSource(const dlong Nelements,
+        @restrict const dfloat *c, @restrict const dfloat *psi,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *cst_flux_x, @restrict dfloat *cst_flux_y, @restrict dfloat *cst_flux_z)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Calculate scalar coefficient.
+            const dfloat term1 = ((1.0 - diffratio)/solubilityratio)
+                   / std::pow(psi[i]/solubilityratio+(1.0-psi[i]), 2);
+            const dfloat term2 = (1.0/solubilityratio - diffratio)
+                    / (psi[i]/solubilityratio + (1.0-psi[i]));
+            const dfloat coeff = c[i]*(term1 - term2)/Pe;
+
+            // Write output CST flux (for the next OCCA kernel to take divergence).
+            cst_flux_x[i] *= coeff;
+            cst_flux_y[i] *= coeff;
+            cst_flux_z[i] *= coeff;
+        }
+    }
+}

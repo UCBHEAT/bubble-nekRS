@@ -1,0 +1,42 @@
+#ifdef __okl__
+
+#include "cst.oudf"
+
+#endif
+
+#include "util.hpp"
+#include "customhooks.hpp"
+
+void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
+{
+    kernelInfo.define("p_PI") = M_PI;
+}
+
+void UDF_Setup() 
+{
+    nrs->userProperties = &customProperties;
+    nrs->userSource = &customSource;
+
+    if (platform->options.getArgs("RESTART FILE NAME").empty()) {
+        // Apply initial conditions.
+        auto [x, y, z] = nrs->meshV->xyzHost();
+        std::vector<dfloat> psi(nrs->fieldOffset, 0.0);
+        std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
+        std::vector<dfloat> c(nrs->fieldOffset, 0.0);
+        for (int n = 0; n < nrs->meshV->Nlocal; n++) {
+            dfloat r = std::sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
+            psi[n] = heaviside(r-0.5, eps_cls);
+            phi[n] = r-0.5;
+            c[n] = heaviside(r-0.5, eps_cls);
+        }
+
+        // Copy to device memory.
+        nrs->scalar->o_solution("psi").copyFrom(psi.data(), psi.size());
+        nrs->scalar->o_solution("phi").copyFrom(phi.data(), phi.size());
+        nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
+    }
+}
+
+void UDF_ExecuteStep(double time, int tstep) 
+{
+}

@@ -1,0 +1,37 @@
+[GENERAL]
+# Uncomment to debug per-field internal iterations.
+#verbose = true
+# Uncomment to resume from a checkpoint.
+#startFrom = bubble3d.f00000
+
+polynomialOrder = 7
+numSteps = 8000
+writeInterval = 100
+timeStepper = tombo2
+dt = 1e-4
+
+scalars = psi, phi, c, debug1, debug2, debug3
+
+[FLUID VELOCITY]
+solver = none
+
+[SCALAR PSI]
+# CLS (conservative level set), domain: [0, 1]
+solver = none
+
+[SCALAR PHI]
+# TLS (traditional level set), domain: (-infty, infty)
+solver = none
+
+[SCALAR C]
+# Species concentration
+boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+residualTol = 1e-06
+#regularization = svv+scalingCoeff=2.0+filterPower=6.0
+
+[SCALAR DEBUG1]
+solver = none
+[SCALAR DEBUG2]
+solver = none
+[SCALAR DEBUG3]
+solver = none
