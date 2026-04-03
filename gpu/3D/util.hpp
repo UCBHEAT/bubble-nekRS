@@ -4,6 +4,19 @@
 // TODO: calculate from mesh on-demand, as in
 // https://github.com/nandu90/Nek5000/blob/nekLS/core/experimental/lvlSet.f#L587
 const double deltael = 0.08333333333;
+/*
+    dfloat deltael = 0.0;
+    for (dlong i = 0; i < mesh->Nelements; i++) {
+       deltael += tmp[i];
+    }
+    MPI_Allreduce(MPI_IN_PLACE, &deltael, 1, MPI_DFLOAT, MPI_SUM, platform->comm.mpiComm);
+    dlong N = mesh->Nelements;
+    MPI_Allreduce(MPI_IN_PLACE, &N, 1, MPI_DLONG, MPI_SUM, platform->comm.mpiComm);
+    deltael /= N;
+    if(platform->comm.mpiRank == 0)
+      printf("Average element length = %.4e\n",deltael);
+  }
+*/
 
 // Recommended value is epsilon = 1.5/(lx1-1.0), e.g.
 //   polynomial order 5: 0.3
@@ -16,6 +29,7 @@ const double eps_cls = 0.2143;
 static double Re = 231.4;
 static double Sc = 1150;
 static double Pe = Re*Sc;
+static double Fr = 1.633;
 static double rhoratio = 0.002709;
 static double muratio = 24.92;
 static double nuratio = muratio/rhoratio;

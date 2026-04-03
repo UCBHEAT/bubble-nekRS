@@ -24,6 +24,7 @@ void customSource(double t)
 {
     mesh_t* mesh = nrs->meshV;
     scalar_t* scalar = nrs->scalar.get();
+    fluidSolver_t* fluid = nrs->fluid.get();
     const occa::memory o_psi = scalar->o_solution("psi");
     const occa::memory o_phi = scalar->o_solution("phi");
     const occa::memory o_c = scalar->o_solution("c");
@@ -31,6 +32,7 @@ void customSource(double t)
     occa::memory o_cstVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_uSourceY = fluid->o_explicitTerms().slice(1*nrs->fieldOffset, nrs->fieldOffset);
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
@@ -45,4 +47,7 @@ void customSource(double t)
     // Source term is the divergence of the above vector field.
     opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, scalar->o_explicitTerms("c"));
     scalar->o_solution("debug3").copyFrom(scalar->o_explicitTerms("c"));
+
+    // Buoyancy source term for the U equation.
+    weightedMixing(mesh->Nelements, o_psi, 1e64, 1e64*Fr*Fr*rhoratio, o_uSourceY);
 }

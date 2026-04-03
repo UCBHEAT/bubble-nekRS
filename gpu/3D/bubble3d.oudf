@@ -141,3 +141,38 @@
         }
     }
 }
+
+/**
+ * Force the velocity to zero inside the sphere defined by level set.
+ * 
+ * @param Nelements number of elements local to this CPU node
+ * @param fieldOffset offset between vector field components
+ * @param psi conservative level set (CLS) scalar field
+ * @param U velocity vector field to wipe
+ */
+@kernel void wipeVelocityInsideSphere(const dlong Nelements, const dlong fieldOffset,
+        @restrict const dfloat *psi, @restrict dfloat *U)
+{
+    for (dlong e = 0; e < Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            U[i + 0*fieldOffset] *= psi[i];
+            U[i + 1*fieldOffset] *= psi[i];
+            U[i + 2*fieldOffset] *= psi[i];
+        }
+    }
+}
+
+/**
+ * Inlet/outlet boundary conditions for this case.
+ * 
+ * @param bcData values to apply at this boundary condition
+ */
+void udfDirichlet(bcData *bc)
+{
+  if (isField("fluid velocity")) {
+    bc->uxFluid = 0.0;
+    bc->uyFluid = -1.0;
+    bc->uzFluid = 0.0;
+  }
+}

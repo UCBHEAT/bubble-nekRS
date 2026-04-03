@@ -96,12 +96,15 @@ c-----------------------------------------------------------------------
       call svv_fluid(ix,iy,iz,e,svvx,svvy,svvz)
 
       ! Compute dpdy contribution.
+      ! This is the pressure gradient from the bottom of the tank to the top, holding the liquid column up so it doesn't accelerate towards the ground.
+      ! fh is the global average density of the column, and vtrans is the local density.
       !rhol = 1.0
       !dpdy = (1./Fr)*rhol/vtrans(ix,iy,iz,e,1)
       dpdy = (1./Fr)*fh/vtrans(ix,iy,iz,e,1)
 
       ! Set output variables.
       ffx = sfx + svvx
+      ! The non-dimensionalized gravitational body force term should be -1.0/(Fr*Fr)?
       ffy = sfy + svvy - 1.0/Fr + dpdy
       ffz = sfz + svvz
 

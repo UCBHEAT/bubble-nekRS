@@ -13,7 +13,8 @@ dt = 1e-4
 scalars = psi, phi, c, debug1, debug2, debug3
 
 [FLUID VELOCITY]
-solver = none
+boundaryTypeMap = wall, wall, outlet, inlet, wall, wall
+residualTol = 1e-06
 
 [SCALAR PSI]
 # CLS (conservative level set), domain: [0, 1]
