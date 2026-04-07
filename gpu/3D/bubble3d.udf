@@ -5,36 +5,60 @@
 #endif
 
 #include "util.hpp"
+
+static caseinfo_t info;
+
 #include "customhooks.hpp"
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
     kernelInfo.define("p_PI") = M_PI;
-
     platform->options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
     platform->options.setArgs("FLUID PRESSURE ELLIPTIC PRECO COEFF FIELD", "TRUE");
 }
 
 void UDF_Setup() 
 {
+    mesh_t *mesh = nrs->meshV;
+
     nrs->userProperties = &customProperties;
     nrs->userSource = &customSource;
 
+    // These must be calculated and passed to device kernels as arguments, as the mesh
+    // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
+    // cannot set them as defines.
+    info.Nelements = mesh->Nelements;
+    info.fieldOffset = nrs->fieldOffset;
+    // Set the average element length.
+    // If we assume everything is homogenous this can just be x-length / x-elements.
+    // Can also be calculated without this assumption using a device kernel. See:
+    // https://github.com/nandu90/nrsLS_Examples/blob/v25/zalesak/zalesak.oudf#L49
+    // https://github.com/nandu90/nrsLS_Examples/blob/v25/zalesak/zalesak.udf#L65
+    // although that code seems to be a bit different (takes 3D diagonal) than the
+    // original Nek5000 implementation (takes longest of the 12 edges):
+    // https://github.com/nandu90/Nek5000/blob/nekLS/core/experimental/lvlSet.f#L587
+    info.deltael = 1.0/std::cbrt(mesh->NelementsGlobal/16); // 2x2x4 domain
+    // Target interface thickness.
+    // Recommended value is epsilon = 1.5/(lx1-1.0), e.g.
+    //   polynomial order 5: 0.3
+    //   polynomial order 7: 0.2143
+    // etc.
+    info.eps_cls = 1.5/(mesh->Nq-1);
+    printf("deltael=%f eps_cls=%f\n", info.deltael, info.eps_cls);
+
     if (platform->options.getArgs("RESTART FILE NAME").empty()) {
         // Apply initial conditions.
-        auto [x, y, z] = nrs->meshV->xyzHost();
+        auto [x, y, z] = mesh->xyzHost();
         std::vector<dfloat> psi(nrs->fieldOffset, 0.0);
         std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
         std::vector<dfloat> c(nrs->fieldOffset, 0.0);
         std::vector<dfloat> Uy(nrs->fieldOffset, 0.0);
-        std::vector<dfloat> fy(nrs->fieldOffset, 0.0);
-        for (int n = 0; n < nrs->meshV->Nlocal; n++) {
+        for (int n = 0; n < mesh->Nlocal; n++) {
             dfloat r = std::sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
-            psi[n] = heaviside(r-0.5, eps_cls);
+            psi[n] = heaviside(r-0.5, info.deltael, info.eps_cls);
             phi[n] = r-0.5;
-            c[n] = heaviside(r-0.5, eps_cls);
+            c[n] = psi[n];
             Uy[n] = -psi[n];
-            fy[n] = (1-psi[n])/(Fr*Fr*rhoratio); // this is static so we set it here instead of customSource
         }
 
         // Copy to device memory.
@@ -42,11 +66,10 @@ void UDF_Setup()
         nrs->scalar->o_solution("phi").copyFrom(phi.data(), phi.size());
         nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
         nrs->fluid->o_solution().slice(1*nrs->fieldOffset).copyFrom(Uy.data(), Uy.size());
-        nrs->fluid->o_explicitTerms().slice(1*nrs->fieldOffset).copyFrom(fy.data(), fy.size());
     }
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
-    wipeVelocityInsideSphere(nrs->meshV->Nelements, nrs->fieldOffset, nrs->scalar->o_solution("psi"), nrs->fluid->o_U);
+    wipeVelocityInsideSphere(info, nrs->scalar->o_solution("psi"), nrs->fluid->o_U);
 }

@@ -7,17 +7,17 @@ void customProperties(double t)
     // Properties for momentum transport equation
     const occa::memory o_psi = scalar->o_solution("psi");
     // mu = ((1.0-psi)*muratio + psi)/Re
-    weightedMixing(mesh->Nelements, o_psi, muratio, Re, fluid->o_diffusionCoeff());
+    weightedMixing(info, o_psi, muratio, Re, fluid->o_diffusionCoeff());
     // rho = (1.0-psi)*rhoratio + psi
-    weightedMixing(mesh->Nelements, o_psi, rhoratio, 1.0, fluid->o_transportCoeff());
+    weightedMixing(info, o_psi, rhoratio, 1.0, fluid->o_transportCoeff());
 
     // Properties for species transport equation
     // D = (psi/(psi+(1.0-psi)*solubilityratio) +
     //     diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
-    speciesDiff(mesh->Nelements, o_psi, solubilityratio, diffratio, Pe,
+    speciesDiff(info, o_psi, solubilityratio, diffratio, Pe,
             scalar->o_diffusionCoeff("c"));
     // No transport coefficient in c equation.
-    constantFill(mesh->Nelements, 1.0, scalar->o_transportCoeff("c"));
+    constantFill(info, 1.0, scalar->o_transportCoeff("c"));
 }
 
 void customSource(double t)
@@ -36,11 +36,11 @@ void customSource(double t)
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
-    interfaceNormals(mesh->Nelements, o_phi, o_psi, o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    interfaceNormals(info, o_phi, o_psi, o_cstVectorX, o_cstVectorY, o_cstVectorZ);
     scalar->o_solution("debug1").copyFrom(o_cstVectorY);
 
     // Calculate CST vector field.
-    speciesSource(mesh->Nelements, o_c, o_psi, solubilityratio, diffratio, Pe,
+    speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe,
         o_cstVectorX, o_cstVectorY, o_cstVectorZ);
     scalar->o_solution("debug2").copyFrom(o_cstVectorY);
 
@@ -49,5 +49,5 @@ void customSource(double t)
     scalar->o_solution("debug3").copyFrom(scalar->o_explicitTerms("c"));
 
     // Buoyancy source term for the U equation.
-    weightedMixing(mesh->Nelements, o_psi, 1e64, 1e64*Fr*Fr*rhoratio, o_uSourceY);
+    weightedMixing(info, o_psi, 1e64, 1e64*Fr*Fr*rhoratio, o_uSourceY);
 }

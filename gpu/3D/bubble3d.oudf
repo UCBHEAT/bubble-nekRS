@@ -6,14 +6,14 @@
 /**
  * Constant fill. Should be equivalent to platform->linAlg->fill(Nelements, value, out).
  *
- * @param Nelements number of elements local to this CPU node
+ * @param info common data about the case
  * @param value constant to fill with
  * @param out scalar field to fill
  */
-@kernel void constantFill(const dlong Nelements, const dfloat value,
+@kernel void constantFill(const caseinfo_t info, const dfloat value,
         @restrict dfloat *out)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             out[e*p_Np + n] = value;
         }
@@ -23,16 +23,16 @@
 /**
  * Compute two-phase property ((1-psi)*ratio + psi)/divisor.
  *
- * @param Nelements number of elements local to this CPU node
+ * @param info common data about the case
  * @param psi conservative level set (CLS) scalar field
  * @param ratio gas property/liquid property ratio
  * @param divisor non-dimensionalization
  * @param out output two-phase mixed value for this property
  */
-@kernel void weightedMixing(const dlong Nelements, @restrict dfloat *psi,
+@kernel void weightedMixing(const caseinfo_t info, @restrict dfloat *psi,
         const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
             out[i] = ((1-psi[i])*ratio + psi[i])/divisor;
@@ -44,18 +44,18 @@
  * Compute the coefficient of the implicit diffusion term in the CST
  * equation.
  * 
- * @param Nelements number of elements local to this CPU node
+ * @param info common data about the case
  * @param psi conservative level set (CLS) scalar field
  * @param solubilityratio ratio of Henry solubilities (gas/liquid)
  * @param diffratio ratio of mass diffusivities (gas/liquid)
  * @param Pe Peclet number
  * @param out output CST diffusion term coefficient
  */
-@kernel void speciesDiff(const dlong Nelements, @restrict dfloat *psi,
+@kernel void speciesDiff(const caseinfo_t info, @restrict dfloat *psi,
         const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
         @restrict dfloat *out)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
             const dfloat p = psi[i];
@@ -68,17 +68,17 @@
 /**
  * Computes interface normal vectors using the TLS (traditional level set) field phi.
  * 
- * @param Nelements number of elements local to this CPU node
+ * @param info common data about the case
  * @param phi traditional level set (TLS) scalar field
  * @param psi conservative level set (CLS) scalar field
  * @param nx, ny, nz input: grad(phi), output: interface normal vector
  * 
  * @see https://github.com/nandu90/nrsLS_Examples/blob/v25/circles/circles.oudf
  */
-@kernel void interfaceNormals(const dlong Nelements, @restrict const dfloat *phi, @restrict const dfloat *psi,
+@kernel void interfaceNormals(const caseinfo_t info, @restrict const dfloat *phi, @restrict const dfloat *psi,
         @restrict dfloat *nx, @restrict dfloat *ny, @restrict dfloat *nz)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
 
@@ -87,8 +87,8 @@
             const dfloat mag  = std::sqrt(mag2);
 
             // Calculate surface area density from psi (CLS field).
-            const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*deltael*eps_cls);
-            // equivalent to (1-std::pow(clip(2*psi[i]-1, -1.0, 1.0), 2))/(4*deltael*eps_cls)
+            const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*info.deltael*info.eps_cls);
+            // equivalent to (1-std::pow(clip(2*psi[i]-1, -1.0, 1.0), 2))/(4*info.deltael*info.eps_cls)
             // not sure why original implementation used cosh(atanh(x))^(-2) rather than 1-x^2
 
             // Interface normal = surface area density * interface direction.
@@ -109,7 +109,7 @@
  * Compute the pseudo-advection term in the CST equation, as an explicit
  * source term.
  * 
- * @param Nelements number of elements local to this CPU node
+ * @param info common data about the case
  * @param c species concentration scalar field
  * @param psi conservative level set (CLS) scalar field
  * @param solubilityratio ratio of Henry solubilities (gas/liquid)
@@ -118,12 +118,12 @@
  * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface normal vectors,
  *     output: CST pseudo-advective flux
  */
-@kernel void speciesSource(const dlong Nelements,
+@kernel void speciesSource(const caseinfo_t info,
         @restrict const dfloat *c, @restrict const dfloat *psi,
         const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
         @restrict dfloat *cst_flux_x, @restrict dfloat *cst_flux_y, @restrict dfloat *cst_flux_z)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
 
@@ -145,20 +145,19 @@
 /**
  * Force the velocity to zero inside the sphere defined by level set.
  * 
- * @param Nelements number of elements local to this CPU node
- * @param fieldOffset offset between vector field components
+ * @param info common data about the case
  * @param psi conservative level set (CLS) scalar field
  * @param U velocity vector field to wipe
  */
-@kernel void wipeVelocityInsideSphere(const dlong Nelements, const dlong fieldOffset,
+@kernel void wipeVelocityInsideSphere(const caseinfo_t info,
         @restrict const dfloat *psi, @restrict dfloat *U)
 {
-    for (dlong e = 0; e < Nelements; ++e; @outer) {
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
-            U[i + 0*fieldOffset] *= psi[i];
-            U[i + 1*fieldOffset] *= psi[i];
-            U[i + 2*fieldOffset] *= psi[i];
+            U[i + 0*info.fieldOffset] *= psi[i];
+            U[i + 1*info.fieldOffset] *= psi[i];
+            U[i + 2*info.fieldOffset] *= psi[i];
         }
     }
 }
