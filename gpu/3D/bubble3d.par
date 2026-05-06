@@ -1,34 +1,50 @@
+userSections = tlsr, clsr, lvlset
+
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
 #startFrom = bubble3d.f00000
 
-polynomialOrder = 7
-numSteps = 8000
-writeInterval = 100
+polynomialOrder = 5
+numSteps = 100
+writeInterval = 1
 timeStepper = tombo2
 dt = 1e-4
 
-scalars = psi, phi, c, debug1, debug2, debug3
+scalars = tls, cls, c, debug1, debug2, debug3
 
 [FLUID VELOCITY]
 boundaryTypeMap = wall, wall, outlet, inlet, wall, wall
-residualTol = 1e-06
+regularization = svv+svvCoeff=1.0+filterPower=4.0
+residualTol = 1e-6
 
-[SCALAR PSI]
-# CLS (conservative level set), domain: [0, 1]
-solver = none
+[FLUID PRESSURE]
+residualTol = 1e-4
 
-[SCALAR PHI]
+[SCALAR TLS]
 # TLS (traditional level set), domain: (-infty, infty)
-solver = none
+boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+svvCoeff=0.1+filterPower=2.0
+
+[SCALAR CLS]
+# CLS (conservative level set), domain: [0, 1]
+boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+svvCoeff=0.1+filterPower=2.0
 
 [SCALAR C]
 # Species concentration
 boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
-residualTol = 1e-06
-#regularization = svv+scalingCoeff=2.0+filterPower=6.0
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+svvCoeff=0.1+filterPower=2.0
 
 [SCALAR DEBUG1]
 solver = none
@@ -36,3 +52,16 @@ solver = none
 solver = none
 [SCALAR DEBUG3]
 solver = none
+
+[TLSR]
+solveFrequency = 1e-2
+regularization = svv+scalingCoeff=2.0+filterPower=6.0
+residualTol = 1e-8
+
+[CLSR]
+solveFrequency = 1e-3
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+
+[LVLSET]
+interfaceWidthFactor = 1.5

@@ -4,6 +4,7 @@
 
 #endif
 
+#include "lvlSet.hpp"
 #include "util.hpp"
 
 static caseinfo_t info;
@@ -13,8 +14,13 @@ static caseinfo_t info;
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
     kernelInfo.define("p_PI") = M_PI;
-    platform->options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
-    platform->options.setArgs("FLUID PRESSURE ELLIPTIC PRECO COEFF FIELD", "TRUE");
+}
+
+void UDF_Setup0(MPI_Comm comm, setupAide &options)
+{
+    options.setArgs("FLUID PRESSURE RHO SPLITTING", "TRUE");
+    options.setArgs("FLUID PRESSURE RHO SPLITTING FILTER", "TRUE");
+    options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
 }
 
 void UDF_Setup() 
@@ -55,21 +61,24 @@ void UDF_Setup()
         std::vector<dfloat> Uy(nrs->fieldOffset, 0.0);
         for (int n = 0; n < mesh->Nlocal; n++) {
             dfloat r = std::sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
-            psi[n] = heaviside(r-0.5, info.deltael, info.eps_cls);
+            psi[n] = smoothed_heaviside(r-0.5, info.deltael, info.eps_cls);
             phi[n] = r-0.5;
             c[n] = psi[n];
             Uy[n] = -psi[n];
         }
 
         // Copy to device memory.
-        nrs->scalar->o_solution("psi").copyFrom(psi.data(), psi.size());
-        nrs->scalar->o_solution("phi").copyFrom(phi.data(), phi.size());
+        nrs->scalar->o_solution("cls").copyFrom(psi.data(), psi.size());
+        nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
         nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
         nrs->fluid->o_solution().slice(1*nrs->fieldOffset).copyFrom(Uy.data(), Uy.size());
     }
+
+    lvlSet::setup();
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
-    wipeVelocityInsideSphere(info, nrs->scalar->o_solution("psi"), nrs->fluid->o_U);
+    //wipeVelocityInsideSphere(info, nrs->scalar->o_solution("psi"), nrs->fluid->o_U);
+    lvlSet::solve(time);
 }

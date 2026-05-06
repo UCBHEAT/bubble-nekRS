@@ -5,6 +5,7 @@ static double Re = 231.4;
 static double Sc = 1150;
 static double Pe = Re*Sc;
 static double Fr = 1.633;
+static double We = 2.667;
 static double rhoratio = 0.002709;
 static double muratio = 24.92;
 static double nuratio = muratio/rhoratio;
@@ -32,7 +33,7 @@ typedef struct caseinfo {
  * @param epsilon step function width
  * @returns output between 0 and 1
  */
-inline double heaviside(double phi, double deltael, double epsilon) {
+inline double smoothed_heaviside(double phi, double deltael, double epsilon) {
     return 0.5*(std::tanh(phi/(2.0*deltael*epsilon))+1.0);
 }
 

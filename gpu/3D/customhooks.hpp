@@ -5,7 +5,7 @@ void customProperties(double t)
     scalar_t* scalar = nrs->scalar.get();
 
     // Properties for momentum transport equation
-    const occa::memory o_psi = scalar->o_solution("psi");
+    const occa::memory o_psi = scalar->o_solution("cls");
     // mu = ((1.0-psi)*muratio + psi)/Re
     weightedMixing(info, o_psi, muratio, Re, fluid->o_diffusionCoeff());
     // rho = (1.0-psi)*rhoratio + psi
@@ -25,14 +25,15 @@ void customSource(double t)
     mesh_t* mesh = nrs->meshV;
     scalar_t* scalar = nrs->scalar.get();
     fluidSolver_t* fluid = nrs->fluid.get();
-    const occa::memory o_psi = scalar->o_solution("psi");
-    const occa::memory o_phi = scalar->o_solution("phi");
+    const occa::memory o_psi = scalar->o_solution("cls");
+    const occa::memory o_phi = scalar->o_solution("tls");
     const occa::memory o_c = scalar->o_solution("c");
     occa::memory o_cstVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
     occa::memory o_cstVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_uSourceY = fluid->o_explicitTerms().slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_uSource = fluid->o_explicitTerms();
+    occa::memory o_uSourceY = o_uSource.slice(1*nrs->fieldOffset, nrs->fieldOffset);
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
@@ -50,4 +51,7 @@ void customSource(double t)
 
     // Buoyancy source term for the U equation.
     weightedMixing(info, o_psi, 1e64, 1e64*Fr*Fr*rhoratio, o_uSourceY);
+
+    // Surface tension term for the U equation.
+    lvlSet::applySurfaceTensionAcc(We, o_uSource);
 }
