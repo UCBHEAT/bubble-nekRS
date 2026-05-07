@@ -7,8 +7,7 @@
 #include "lvlSet.hpp"
 #include "util.hpp"
 
-static caseinfo_t info;
-
+#include "case.hpp"
 #include "customhooks.hpp"
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
@@ -30,53 +29,71 @@ void UDF_Setup()
     nrs->userProperties = &customProperties;
     nrs->userSource = &customSource;
 
-    // These must be calculated and passed to device kernels as arguments, as the mesh
-    // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
-    // cannot set them as defines.
-    info.Nelements = mesh->Nelements;
-    info.fieldOffset = nrs->fieldOffset;
-    // Set the average element length.
-    // If we assume everything is homogenous this can just be x-length / x-elements.
-    // Can also be calculated without this assumption using a device kernel. See:
-    // https://github.com/nandu90/nrsLS_Examples/blob/v25/zalesak/zalesak.oudf#L49
-    // https://github.com/nandu90/nrsLS_Examples/blob/v25/zalesak/zalesak.udf#L65
-    // although that code seems to be a bit different (takes 3D diagonal) than the
-    // original Nek5000 implementation (takes longest of the 12 edges):
-    // https://github.com/nandu90/Nek5000/blob/nekLS/core/experimental/lvlSet.f#L587
-    info.deltael = 1.0/std::cbrt(mesh->NelementsGlobal/16); // 2x2x4 domain
-    // Target interface thickness.
-    // Recommended value is epsilon = 1.5/(lx1-1.0), e.g.
-    //   polynomial order 5: 0.3
-    //   polynomial order 7: 0.2143
-    // etc.
-    info.eps_cls = 1.5/(mesh->Nq-1);
-    printf("deltael=%f eps_cls=%f\n", info.deltael, info.eps_cls);
-    // TODO: calculate rho_average via volume integral
-    info.rho_average = 1.0;
+    lvlSet::setup();
 
     if (platform->options.getArgs("RESTART FILE NAME").empty()) {
         // Apply initial conditions.
         auto [x, y, z] = mesh->xyzHost();
-        std::vector<dfloat> psi(nrs->fieldOffset, 0.0);
         std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
-        std::vector<dfloat> c(nrs->fieldOffset, 0.0);
         for (int n = 0; n < mesh->Nlocal; n++) {
-            dfloat r = std::sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
-            psi[n] = smoothed_heaviside(r-0.5, info.deltael, info.eps_cls);
+            dfloat r = sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
             phi[n] = r-0.5;
-            c[n] = psi[n];
         }
 
         // Copy to device memory.
-        nrs->scalar->o_solution("cls").copyFrom(psi.data(), psi.size());
         nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
-        nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
+
+        // Generate psi and c initial conditions from phi.
+        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
+        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
     }
 
-    lvlSet::setup();
+    // These must be calculated and passed to device kernels as arguments, as the mesh
+    // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
+    // cannot set them as defines.
+    /*dfloat liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
+            nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
+    dfloat gas_volume = mesh->volume - info.liquid_volume;*/
+    info.Nelements = mesh->Nelements;//mesh->Nlocal;
+    info.fieldOffset = nrs->fieldOffset;
+    //info.rho_average = (info.liquid_volume + diffratio*(info.gas_volume))/(mesh->volume);
+    info.rho_average = 1;
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
     lvlSet::solve(time);
+/*
+    // TODO: calculate MTC via volume integral(diffusion and CST fluxes . interface normals)/(c_bulk - c_bubble)
+    occa::memory o_interfaceNormalVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
+    occa::memory o_interfaceNormalVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_interfaceNormalVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_interfaceNormalVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
+    occa::memory o_cstDiffVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
+    occa::memory o_cstSrcVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+
+    // Calculate interface unit normals.
+    opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_interfaceNormalVector);
+    interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_interfaceNormalVectorX, o_interfaceNormalVectorY, o_interfaceNormalVectorZ);
+
+    // Calculate CST diffusion flux.
+    opSEM::strongGrad(mesh, nrs->fieldOffset, o_c, o_cstDiffVector);
+    // multiply by scalar->o_diffusionCoeff("c")
+
+    // Calculate CST source flux.
+    // copy o_interfaceNormalVector to o_cstSrcVector
+    speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe, o_cstSrcVectorX, o_cstSrcVectorY, o_cstSrcVectorZ);
+
+    o_memory diffusion_and_cst_fluxes = platform->device.malloc<dfloat>(nrs->fieldOffset);
+    // ...
+    o_memory interface_flux = platform->device.malloc<dfloat>(nrs->fieldOffset);
+    platform->linAlg->dotProduct(mesh->Nlocal, diffusion_and_cst_fluxes, interface_normals, interface_flux);
+    dfloat mtc = platform->linAlg->innerProd(mesh->Nlocal, interface_flux, mesh->o_Jw, platform->comm.mpiComm());
+*/
 }

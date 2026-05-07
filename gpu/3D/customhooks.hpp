@@ -17,7 +17,7 @@ void customProperties(double t)
     speciesDiff(info, o_psi, solubilityratio, diffratio, Pe,
             scalar->o_diffusionCoeff("c"));
     // No transport coefficient in c equation.
-    constantFill(info, 1.0, scalar->o_transportCoeff("c"));
+    platform->linAlg->fill(mesh->Nlocal, 1.0, scalar->o_transportCoeff("c"));
 }
 
 void customSource(double t)
@@ -39,7 +39,7 @@ void customSource(double t)
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
-    interfaceNormals(info, o_phi, o_psi, o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_cstVectorX, o_cstVectorY, o_cstVectorZ);
     scalar->o_solution("debug1").copyFrom(o_cstVectorY);
 
     // Calculate CST vector field.

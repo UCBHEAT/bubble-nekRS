@@ -1,24 +1,5 @@
-#include <cmath>
-#include <algorithm>
 #include "util.hpp"
 // OCCA kernels used in customProperties and customSource.
-
-/**
- * Constant fill. Should be equivalent to platform->linAlg->fill(Nelements, value, out).
- *
- * @param info common data about the case
- * @param value constant to fill with
- * @param out scalar field to fill
- */
-@kernel void constantFill(const caseinfo_t info, const dfloat value,
-        @restrict dfloat *out)
-{
-    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
-        for (int n = 0; n < p_Np; ++n; @inner) {
-            out[e*p_Np + n] = value;
-        }
-    }
-}
 
 /**
  * Compute two-phase property ((1-psi)*ratio + psi)/divisor.
@@ -94,12 +75,12 @@
  * 
  * @param info common data about the case
  * @param phi traditional level set (TLS) scalar field
- * @param psi conservative level set (CLS) scalar field
+ * @param delta surface area density scalar field
  * @param nx, ny, nz input: grad(phi), output: interface normal vector
  * 
  * @see https://github.com/nandu90/nrsLS_Examples/blob/v25/circles/circles.oudf
  */
-@kernel void interfaceNormals(const caseinfo_t info, @restrict const dfloat *phi, @restrict const dfloat *psi,
+@kernel void interfaceNormals(const caseinfo_t info, @restrict const dfloat *phi, @restrict const dfloat *delta,
         @restrict dfloat *nx, @restrict dfloat *ny, @restrict dfloat *nz)
 {
     for (dlong e = 0; e < info.Nelements; ++e; @outer) {
@@ -108,12 +89,7 @@
 
             // Calculate interface direction as normalization of grad(phi) (gradient of TLS field).
             const dfloat mag2 = nx[i]*nx[i] + ny[i]*ny[i] + nz[i]*nz[i];
-            const dfloat mag  = std::sqrt(mag2);
-
-            // Calculate surface area density from psi (CLS field).
-            const dfloat delta = std::pow(std::cosh(std::atanh(clip(2*psi[i]-1, -1.0, 1.0))), -2)/(4*info.deltael*info.eps_cls);
-            // equivalent to (1-std::pow(clip(2*psi[i]-1, -1.0, 1.0), 2))/(4*info.deltael*info.eps_cls)
-            // not sure why original implementation used cosh(atanh(x))^(-2) rather than 1-x^2
+            const dfloat mag  = sqrt(mag2);
 
             // Interface normal = surface area density * interface direction.
             if (mag <= 1e-12) {
@@ -121,9 +97,9 @@
                 ny[i] = 0.0;
                 nz[i] = 0.0;
             } else {
-                nx[i] = delta * nx[i] / mag;
-                ny[i] = delta * ny[i] / mag;
-                nz[i] = delta * nz[i] / mag;
+                nx[i] = delta[i] * nx[i] / mag;
+                ny[i] = delta[i] * ny[i] / mag;
+                nz[i] = delta[i] * nz[i] / mag;
             }
         }
     }
@@ -153,7 +129,7 @@
 
             // Calculate scalar coefficient.
             const dfloat term1 = ((1.0 - diffratio)/solubilityratio)
-                   / std::pow(psi[i]/solubilityratio+(1.0-psi[i]), 2);
+                   / pow(psi[i]/solubilityratio+(1.0-psi[i]), 2);
             const dfloat term2 = (1.0/solubilityratio - diffratio)
                     / (psi[i]/solubilityratio + (1.0-psi[i]));
             const dfloat coeff = c[i]*(term1 - term2)/Pe;
