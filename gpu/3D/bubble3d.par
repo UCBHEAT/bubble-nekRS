@@ -7,15 +7,15 @@ userSections = tlsr, clsr, lvlset
 #startFrom = bubble3d.f00000
 
 polynomialOrder = 5
-numSteps = 100
-writeInterval = 1
+numSteps = 10000
+writeInterval = 100
 timeStepper = tombo2
 dt = 1e-4
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
 [FLUID VELOCITY]
-boundaryTypeMap = wall, wall, outlet, inlet, wall, wall
+boundaryTypeMap = none
 regularization = svv+svvCoeff=1.0+filterPower=4.0
 residualTol = 1e-6
 
@@ -24,7 +24,7 @@ residualTol = 1e-4
 
 [SCALAR TLS]
 # TLS (traditional level set), domain: (-infty, infty)
-boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
@@ -32,7 +32,7 @@ regularization = svv+svvCoeff=0.1+filterPower=2.0
 
 [SCALAR CLS]
 # CLS (conservative level set), domain: [0, 1]
-boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
@@ -40,7 +40,7 @@ regularization = svv+svvCoeff=0.1+filterPower=2.0
 
 [SCALAR C]
 # Species concentration
-boundaryTypeMap = zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann, zeroNeumann
+boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
@@ -54,13 +54,15 @@ solver = none
 solver = none
 
 [TLSR]
+boundaryTypeMap = none
 solveFrequency = 1e-2
-regularization = svv+scalingCoeff=2.0+filterPower=6.0
+regularization = svv+svvCoeff=2.0+filterPower=6.0
 residualTol = 1e-8
 
 [CLSR]
+boundaryTypeMap = none
 solveFrequency = 1e-3
-regularization = svv+scalingCoeff=1.0+filterPower=4.0
+regularization = svv+svvCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 
 [LVLSET]

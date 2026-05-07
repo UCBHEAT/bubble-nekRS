@@ -51,6 +51,8 @@ void UDF_Setup()
     // etc.
     info.eps_cls = 1.5/(mesh->Nq-1);
     printf("deltael=%f eps_cls=%f\n", info.deltael, info.eps_cls);
+    // TODO: calculate rho_average via volume integral
+    info.rho_average = 1.0;
 
     if (platform->options.getArgs("RESTART FILE NAME").empty()) {
         // Apply initial conditions.
@@ -58,20 +60,17 @@ void UDF_Setup()
         std::vector<dfloat> psi(nrs->fieldOffset, 0.0);
         std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
         std::vector<dfloat> c(nrs->fieldOffset, 0.0);
-        std::vector<dfloat> Uy(nrs->fieldOffset, 0.0);
         for (int n = 0; n < mesh->Nlocal; n++) {
             dfloat r = std::sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1) + z[n]*z[n]);
             psi[n] = smoothed_heaviside(r-0.5, info.deltael, info.eps_cls);
             phi[n] = r-0.5;
             c[n] = psi[n];
-            Uy[n] = -psi[n];
         }
 
         // Copy to device memory.
         nrs->scalar->o_solution("cls").copyFrom(psi.data(), psi.size());
         nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
         nrs->scalar->o_solution("c").copyFrom(c.data(), c.size());
-        nrs->fluid->o_solution().slice(1*nrs->fieldOffset).copyFrom(Uy.data(), Uy.size());
     }
 
     lvlSet::setup();
@@ -79,6 +78,5 @@ void UDF_Setup()
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
-    //wipeVelocityInsideSphere(info, nrs->scalar->o_solution("psi"), nrs->fluid->o_U);
     lvlSet::solve(time);
 }

@@ -28,10 +28,12 @@ void customSource(double t)
     const occa::memory o_psi = scalar->o_solution("cls");
     const occa::memory o_phi = scalar->o_solution("tls");
     const occa::memory o_c = scalar->o_solution("c");
+    occa::memory o_cSource = scalar->o_explicitTerms("c");
     occa::memory o_cstVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
     occa::memory o_cstVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    const occa::memory o_rho = fluid->o_transportCoeff();
     occa::memory o_uSource = fluid->o_explicitTerms();
     occa::memory o_uSourceY = o_uSource.slice(1*nrs->fieldOffset, nrs->fieldOffset);
 
@@ -46,12 +48,12 @@ void customSource(double t)
     scalar->o_solution("debug2").copyFrom(o_cstVectorY);
 
     // Source term is the divergence of the above vector field.
-    opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, scalar->o_explicitTerms("c"));
-    scalar->o_solution("debug3").copyFrom(scalar->o_explicitTerms("c"));
+    opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, o_cSource);
+    scalar->o_solution("debug3").copyFrom(o_cSource);
 
-    // Buoyancy source term for the U equation.
-    weightedMixing(info, o_psi, 1e64, 1e64*Fr*Fr*rhoratio, o_uSourceY);
-
-    // Surface tension term for the U equation.
+    // Surface tension source term for the U equation.
     lvlSet::applySurfaceTensionAcc(We, o_uSource);
+
+    // Buoyancy source terms for the U equation.
+    buoyancySource(info, o_psi, o_rho, Fr, o_uSourceY);
 }

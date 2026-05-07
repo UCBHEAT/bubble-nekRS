@@ -23,6 +23,8 @@ typedef struct caseinfo {
     dfloat deltael;
     // Target conservative level set (CLS) interface width (epsilon)
     dfloat eps_cls;
+    // Global average density, for use in pressure gradient force term.
+    dfloat rho_average;
 } caseinfo_t;
 
 /**

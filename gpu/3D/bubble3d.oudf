@@ -29,13 +29,37 @@
  * @param divisor non-dimensionalization
  * @param out output two-phase mixed value for this property
  */
-@kernel void weightedMixing(const caseinfo_t info, @restrict dfloat *psi,
+@kernel void weightedMixing(const caseinfo_t info, @restrict const dfloat *psi,
         const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
 {
     for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
             out[i] = ((1-psi[i])*ratio + psi[i])/divisor;
+        }
+    }
+}
+
+/**
+ * Calculate buoyancy Y-acceleration terms (gravitational force
+ * balanced by pressure gradient force).
+ *
+ * @param info common data about the case
+ * @param rho local density field
+ * @param psi conservative level set (CLS) scalar field
+ * @param Fr Froude number u/sqrt(gL)
+ * @param out output Y-acceleration term
+ */
+@kernel void buoyancySource(const caseinfo_t info, @restrict const dfloat *psi,
+        @restrict const dfloat *rho, const dfloat Fr, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            // Non-dimensional gravitational acceleration -gL/(u^2).
+            out[i] -= 1.0/(Fr*Fr);
+            // Pressure gradient force, converted to acceleration by dividing rho[i].
+            out[i] += (1.0/(Fr*Fr))*(info.rho_average)/rho[i];
         }
     }
 }
@@ -140,38 +164,4 @@
             cst_flux_z[i] *= coeff;
         }
     }
-}
-
-/**
- * Force the velocity to zero inside the sphere defined by level set.
- * 
- * @param info common data about the case
- * @param psi conservative level set (CLS) scalar field
- * @param U velocity vector field to wipe
- */
-@kernel void wipeVelocityInsideSphere(const caseinfo_t info,
-        @restrict const dfloat *psi, @restrict dfloat *U)
-{
-    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
-        for (int n = 0; n < p_Np; ++n; @inner) {
-            const int i = e*p_Np + n;
-            U[i + 0*info.fieldOffset] *= psi[i];
-            U[i + 1*info.fieldOffset] *= psi[i];
-            U[i + 2*info.fieldOffset] *= psi[i];
-        }
-    }
-}
-
-/**
- * Inlet/outlet boundary conditions for this case.
- * 
- * @param bcData values to apply at this boundary condition
- */
-void udfDirichlet(bcData *bc)
-{
-  if (isField("fluid velocity")) {
-    bc->uxFluid = 0.0;
-    bc->uyFluid = -1.0;
-    bc->uzFluid = 0.0;
-  }
 }
