@@ -51,32 +51,42 @@ void UDF_Setup()
     // These must be calculated and passed to device kernels as arguments, as the mesh
     // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
     // cannot set them as defines.
-    /*dfloat liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
-            nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
-    dfloat gas_volume = mesh->volume - info.liquid_volume;*/
     info.Nelements = mesh->Nelements;//mesh->Nlocal;
     info.fieldOffset = nrs->fieldOffset;
-    //info.rho_average = (info.liquid_volume + diffratio*(info.gas_volume))/(mesh->volume);
-    info.rho_average = 1;
+    info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
+            nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
+    info.gas_volume = mesh->volume - info.liquid_volume;
+    info.rho_average = (info.liquid_volume + rhoratio*(info.gas_volume))/(mesh->volume);
+    if (platform->comm.mpiRank() == 0) {
+        printf("Liquid/gas/total volumes %.4g %.4g %.4g\n", info.liquid_volume, info.gas_volume, mesh->volume);
+        printf("rho_average=%.4g\n", info.rho_average);
+    }
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
 {
+    mesh_t* mesh = nrs->meshV;
+    scalar_t* scalar = nrs->scalar.get();
+    fluidSolver_t* fluid = nrs->fluid.get();
+    const occa::memory o_psi = scalar->o_solution("cls");
+    const occa::memory o_phi = scalar->o_solution("tls");
+    const occa::memory o_c = scalar->o_solution("c");
+
     lvlSet::solve(time);
-/*
-    // TODO: calculate MTC via volume integral(diffusion and CST fluxes . interface normals)/(c_bulk - c_bubble)
+
+    // Calculate MTC via volume integral(diffusion and CST fluxes . interface normals)/(c_bulk - c_bubble)
     occa::memory o_interfaceNormalVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-    occa::memory o_interfaceNormalVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_interfaceNormalVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_interfaceNormalVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_interfaceNormalVectorX = o_interfaceNormalVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_interfaceNormalVectorY = o_interfaceNormalVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_interfaceNormalVectorZ = o_interfaceNormalVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstDiffVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-    occa::memory o_cstDiffVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_cstDiffVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_cstDiffVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVectorX = o_cstDiffVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVectorY = o_cstDiffVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstDiffVectorZ = o_cstDiffVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
     occa::memory o_cstSrcVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-    occa::memory o_cstSrcVectorX = o_cstVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_cstSrcVectorY = o_cstVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-    occa::memory o_cstSrcVectorZ = o_cstVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVectorX = o_cstSrcVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVectorY = o_cstSrcVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+    occa::memory o_cstSrcVectorZ = o_cstSrcVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
 
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_interfaceNormalVector);
@@ -84,16 +94,39 @@ void UDF_ExecuteStep(double time, int tstep)
 
     // Calculate CST diffusion flux.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_c, o_cstDiffVector);
-    // multiply by scalar->o_diffusionCoeff("c")
+    platform->linAlg->axmyMany(mesh->Nlocal, /* Nfields */ 3, nrs->fieldOffset, /* mode */ 0,
+            /* constant multiplier */ 1.0, scalar->o_diffusionCoeff("c"), o_cstDiffVector);
 
     // Calculate CST source flux.
-    // copy o_interfaceNormalVector to o_cstSrcVector
+    o_cstSrcVector.copyFrom(o_interfaceNormalVector, 3*nrs->fieldOffset);
     speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe, o_cstSrcVectorX, o_cstSrcVectorY, o_cstSrcVectorZ);
 
-    o_memory diffusion_and_cst_fluxes = platform->device.malloc<dfloat>(nrs->fieldOffset);
-    // ...
-    o_memory interface_flux = platform->device.malloc<dfloat>(nrs->fieldOffset);
-    platform->linAlg->dotProduct(mesh->Nlocal, diffusion_and_cst_fluxes, interface_normals, interface_flux);
-    dfloat mtc = platform->linAlg->innerProd(mesh->Nlocal, interface_flux, mesh->o_Jw, platform->comm.mpiComm());
-*/
+    // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + o_cstSrcVector.
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorX, 1.0, o_cstSrcVectorX);
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorY, 1.0, o_cstSrcVectorY);
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorZ, 1.0, o_cstSrcVectorZ);
+    occa::memory o_interface_flux = platform->device.malloc<dfloat>(3*nrs->fieldOffset);
+    platform->linAlg->dotProduct(mesh->Nlocal, nrs->fieldOffset, o_cstSrcVector, o_interfaceNormalVector, o_interface_flux);
+
+    // Calculate c_bulk, c_bubble, and C_total.
+    occa::memory o_cpsi = platform->device.malloc<dfloat>(nrs->fieldOffset);
+    platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
+    dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, platform->comm.mpiComm()) / info.liquid_volume;
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_c, -1.0, o_cpsi); // o_cpsi[i] = o_c[i]*(1-o_psi[i])
+    dfloat c_bubble = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, platform->comm.mpiComm()) / info.gas_volume;
+    dfloat C_total = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, platform->comm.mpiComm());
+
+    // Calculate MTC and Sh.
+    dfloat mtc = platform->linAlg->innerProd(mesh->Nlocal, o_interface_flux, mesh->o_Jw, platform->comm.mpiComm())
+            / mesh->volume / (c_bulk - c_bubble/solubilityratio);
+    dfloat sherwood_no = mtc*Pe;
+
+    if (platform->comm.mpiRank() == 0) {
+        printf("----------------------------------------\n");
+        printf("Interphase species transport statistics:\n");
+        printf("MTC=%.4g Sh=%.4g\n", mtc, sherwood_no);
+        printf("c_bulk=%.4f c_bubble=%.4f\n", c_bulk, c_bubble);
+        printf("C conservation error=%.4g (negative=loss, positive=gain)\n", C_total - info.liquid_volume);
+        printf("----------------------------------------\n");
+    }
 }
