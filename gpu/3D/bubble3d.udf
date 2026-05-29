@@ -134,10 +134,12 @@ void UDF_ExecuteStep(double time, int tstep)
 
         // Write CSV file for timestep
         std::stringstream filename;
-        filename << "data_" << tstep << ".csv";
+        filename << std::fixed << std::setprecision(2) "data_" << time << ".csv";
         std::ofstream f(filename.str());
-        f << "MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
+        f << "time,tstep,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
         // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
+        f << std::fixed :: std::setprecision(4) << time << ",";
+        f << tstep << ",";
         f << std::defaultfloat << std::setprecision(4) << mtc << "," << sherwood_no << ",";
         f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
         f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
