@@ -7,10 +7,13 @@ userSections = tlsr, clsr, lvlset
 #startFrom = bubble3d.f00000
 
 polynomialOrder = 5
-numSteps = 1000000
-writeInterval = 1000
+
+stopAt = endTime
+endTime = 100
+dt = initial=1.0e-5+targetCFL=0.4+max=2.0e-4
 timeStepper = tombo2
-dt = 1e-4
+checkpointControl = simulationTime
+checkPointInterval = 0.1
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
