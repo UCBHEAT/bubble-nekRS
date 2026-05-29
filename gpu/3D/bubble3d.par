@@ -7,8 +7,8 @@ userSections = tlsr, clsr, lvlset
 #startFrom = bubble3d.f00000
 
 polynomialOrder = 5
-numSteps = 10000
-writeInterval = 100
+numSteps = 1000000
+writeInterval = 1000
 timeStepper = tombo2
 dt = 1e-4
 
