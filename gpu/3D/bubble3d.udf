@@ -51,7 +51,7 @@ void UDF_Setup()
     // These must be calculated and passed to device kernels as arguments, as the mesh
     // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
     // cannot set them as defines.
-    info.Nelements = mesh->Nelements;//mesh->Nlocal;
+    info.Nelements = mesh->Nelements;
     info.fieldOffset = nrs->fieldOffset;
     info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
             nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
