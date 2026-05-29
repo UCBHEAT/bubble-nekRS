@@ -28,7 +28,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=0.1+filterPower=2.0
+regularization = svv+svvCoeff=1.0+filterPower=2.0
 
 [SCALAR CLS]
 # CLS (conservative level set), domain: [0, 1]
@@ -36,7 +36,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=0.1+filterPower=2.0
+regularization = svv+svvCoeff=1.0+filterPower=2.0
 
 [SCALAR C]
 # Species concentration
@@ -44,7 +44,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=0.1+filterPower=2.0
+regularization = svv+svvCoeff=1.0+filterPower=2.0
 
 [SCALAR DEBUG1]
 solver = none
@@ -56,7 +56,7 @@ solver = none
 [TLSR]
 boundaryTypeMap = none
 solveFrequency = 1e-2
-regularization = svv+svvCoeff=2.0+filterPower=6.0
+regularization = svv+svvCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 
 [CLSR]
