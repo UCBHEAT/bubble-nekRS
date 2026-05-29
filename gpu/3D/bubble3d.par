@@ -15,7 +15,7 @@ timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
 
-scalars = tls, cls, c, debug1, debug2, debug3
+scalars = tls, cls, c
 
 [FLUID VELOCITY]
 boundaryTypeMap = none
@@ -48,13 +48,6 @@ transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
 regularization = svv+svvCoeff=1.0+filterPower=2.0
-
-[SCALAR DEBUG1]
-solver = none
-[SCALAR DEBUG2]
-solver = none
-[SCALAR DEBUG3]
-solver = none
 
 [TLSR]
 boundaryTypeMap = none
