@@ -36,7 +36,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
 
     auto o_delta = lvlSet::getDeltaFunction();
     // this looks good
-    //scalar->o_solution("debug1").copyFrom(o_delta);
+    scalar->o_solution("debug1").copyFrom(o_delta);
 
     auto o_phi = nrs->scalar->o_solution("tls");
     bool avg = false;
@@ -58,7 +58,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // didn't seem to do anything, with or without averaging
     //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho); // curvature
     platform->linAlg->axmy(meshV->Nlocal, 1.0, o_delta, o_curvDeltabyRho);
-    //scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho); // curvature*area
+    scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho); // curvature*area
 
     // Divide by density
     auto o_rho = nrs->fluid->o_prop + 1 * nrs->fluid->fieldOffset;
@@ -72,7 +72,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // so we do our own custom cleanup.
     auto o_psi = nrs->scalar->o_solution("cls");
     cleanupCurvature(info, o_psi, o_curvDeltabyRho);
-    scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho); // cleanup(curvature*area/rho)
+    scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho); // cleanup(curvature*area/rho)
 
     platform->linAlg->axmyVector(meshV->Nlocal,
                                 nrs->scalar->vFieldOffset,

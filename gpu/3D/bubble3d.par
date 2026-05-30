@@ -4,16 +4,26 @@ userSections = tlsr, clsr, lvlset
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
-#startFrom = bubble3d.f00000
+startFrom = 32x64x32-ord5-startup.fld # production
+#startFrom = 12x24x12-ord5-startup.fld # local development
 
 polynomialOrder = 5
 
 stopAt = endTime
 endTime = 100
-dt = initial=1.0e-5+targetCFL=0.4+max=2.0e-4
+dt = initial=3.0e-7+targetCFL=0.4+max=6.0e-7 # production, real rhoratio
+#dt = initial=3.0e-5+targetCFL=0.4+max=6.0e-5 # production, startup
+#dt = initial=1.0e-6+targetCFL=0.4+max=2.0e-6 # local development, real rhoratio
+#dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-4 # local development, startup
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
+# To generate startup file, set rhoratio=1/40 (rather than ~1/4000)
+# and increase dt by 100x correspondingly. Run to t=1 or so and then switch
+# to real rhoratio and the real rhoratio dt settings.
+# - You can use the same Sc=1150 startup file in all Sc cases.
+# - Should targetCFL be divided by rhoratio too? Currently dynamic
+#   timestepping isn't really doing anything.
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
@@ -23,7 +33,7 @@ equation = navierStokes+variableViscosity
 [FLUID VELOCITY]
 boundaryTypeMap = none
 regularization = svv+svvCoeff=1.0+filterPower=4.0
-residualTol = 1e-6
+residualTol = 1e-8
 
 [FLUID PRESSURE]
 residualTol = 1e-4
