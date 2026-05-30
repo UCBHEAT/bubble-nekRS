@@ -20,6 +20,71 @@ void customProperties(double t)
     platform->linAlg->fill(mesh->Nlocal, 1.0, scalar->o_transportCoeff("c"));
 }
 
+void myGetCurvature(const occa::memory& o_normals, occa::memory& o_curvature)
+{
+  auto mesh = nrs->scalar->mesh(nrs->scalar->nameToIndex.find("tls")->second);
+
+  opSEM::strongDivergence(mesh, nrs->scalar->fieldOffset(), o_normals, o_curvature);
+  // seems to help, but not by reducing boxiness... it reduces magnitude of the result??
+  //opSEM::divergence(mesh, nrs->scalar->fieldOffset(), o_normals, o_curvature);
+}
+
+void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
+{
+    scalar_t* scalar = nrs->scalar.get();
+    auto meshV = nrs->scalar->meshV;
+
+    auto o_delta = lvlSet::getDeltaFunction();
+    // this looks good
+    //scalar->o_solution("debug1").copyFrom(o_delta);
+
+    auto o_phi = nrs->scalar->o_solution("tls");
+    bool avg = false;
+    if(platform->options.compareArgs("LVLSET NORMAL AVERAGING", "TRUE")) {
+        avg = true;
+    }
+    lvlSet::normalVector(o_phi, o_sforce, avg);
+    // this is boxy (nearly locally constant on each element), leading the gradient
+    // to be concentrated on element edges
+    //scalar->o_solution("debug1").copyFrom(o_sforce);
+    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+
+    auto o_curvDeltabyRho = platform->device.malloc<dfloat>(meshV->Nlocal);
+    myGetCurvature(o_sforce, o_curvDeltabyRho);
+    // Laplacian is a bit cleaner than double derivative. We ignore the normalization here because
+    // mag(grad(phi)) is supposed to be 1 anyways. Turn off averaging.
+    //opSEM::strongLaplacian(meshV, nrs->scalar->fieldOffset(), o_phi, o_curvDeltabyRho, false);
+    // didn't seem to do anything, with or without averaging
+    //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho); // curvature
+    platform->linAlg->axmy(meshV->Nlocal, 1.0, o_delta, o_curvDeltabyRho);
+    //scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho); // curvature*area
+
+    // Divide by density
+    auto o_rho = nrs->fluid->o_prop + 1 * nrs->fluid->fieldOffset;
+    platform->linAlg->aydx(meshV->Nlocal, 1.0, o_rho, o_curvDeltabyRho);
+    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho); // curvature*area/rho
+
+    // There should be no curvature inside the bubble. Currently rho_g being << rho_l
+    // amplifies the high noise in o_curvature inside the bubble. Multiplying by delta
+    // (surface area density, but also a Dirac delta for the interface location) does
+    // not do a good enough job at killing this massive far-from-interface curvature,
+    // so we do our own custom cleanup.
+    auto o_psi = nrs->scalar->o_solution("cls");
+    cleanupCurvature(info, o_psi, o_curvDeltabyRho);
+    scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho); // cleanup(curvature*area/rho)
+
+    platform->linAlg->axmyVector(meshV->Nlocal,
+                                nrs->scalar->vFieldOffset,
+                                0,
+                                -1.0/We, //reverse sign (see Nek5000)
+                                o_curvDeltabyRho,
+                                o_sforce);
+    //scalar->o_solution("debug1").copyFrom(o_sforce);
+    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+}
+
 void customSource(double t)
 {
     mesh_t* mesh = nrs->meshV;
@@ -40,19 +105,20 @@ void customSource(double t)
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
     interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_cstVectorX, o_cstVectorY, o_cstVectorZ);
-    scalar->o_solution("debug1").copyFrom(o_cstVectorY);
+    //scalar->o_solution("debug1").copyFrom(o_cstVectorY);
 
     // Calculate CST vector field.
     speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe,
         o_cstVectorX, o_cstVectorY, o_cstVectorZ);
-    scalar->o_solution("debug2").copyFrom(o_cstVectorY);
+    //scalar->o_solution("debug2").copyFrom(o_cstVectorY);
 
     // Source term is the divergence of the above vector field.
     opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, o_cSource);
-    scalar->o_solution("debug3").copyFrom(o_cSource);
+    //scalar->o_solution("debug3").copyFrom(o_cSource);
 
     // Surface tension source term for the U equation.
-    lvlSet::applySurfaceTensionAcc(We, o_uSource);
+    //lvlSet::applySurfaceTensionAcc(We, o_uSource);
+    myApplySurfaceTensionAcc(We, o_uSource);
 
     // Buoyancy source terms for the U equation.
     buoyancySource(info, o_psi, o_rho, Fr, o_uSourceY);

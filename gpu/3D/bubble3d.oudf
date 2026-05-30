@@ -141,3 +141,21 @@
         }
     }
 }
+
+@kernel void cleanupCurvature(const caseinfo_t info,
+        @restrict const dfloat *psi, @restrict dfloat *curvature)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Smoothed Dirac delta function around psi=0.5 with width epsilon=1e-3 and height 1.
+            //const dfloat eps = 1e-3;
+            //curvature[i] *= (eps*eps/((psi[i]-0.5)*(psi[i]-0.5))+eps*eps);
+
+            // More strongly (exponentially) erasing near psi=0,1:
+            const dfloat eps = 1e-1;
+            curvature[i] *= exp(-eps/(psi[i]*(1-psi[i]))) / exp(-eps/0.25);
+        }
+    }
+}
