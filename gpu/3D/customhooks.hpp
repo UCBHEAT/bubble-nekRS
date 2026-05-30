@@ -40,13 +40,16 @@ void customSource(double t)
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
     interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    scalar->o_solution("debug1").copyFrom(o_cstVectorY);
 
     // Calculate CST vector field.
     speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe,
         o_cstVectorX, o_cstVectorY, o_cstVectorZ);
+    scalar->o_solution("debug2").copyFrom(o_cstVectorY);
 
     // Source term is the divergence of the above vector field.
     opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, o_cSource);
+    scalar->o_solution("debug3").copyFrom(o_cSource);
 
     // Surface tension source term for the U equation.
     lvlSet::applySurfaceTensionAcc(We, o_uSource);
