@@ -36,10 +36,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
 
     auto o_delta = lvlSet::getDeltaFunction();
     // this looks good
-    //scalar->o_solution("debug1").copyFrom(o_delta);
-    // for some reason the above copy fails on Aurora (debug1 has extra 128 entries?):
-    // Function : copyFrom
-    // Message  : Source memory has size [4717440], trying to access [0, 4717568]
+    scalar->o_solution("debug1").copyFrom(o_delta, o_delta.size());
 
     auto o_phi = nrs->scalar->o_solution("tls");
     bool avg = false;
@@ -49,9 +46,9 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     lvlSet::normalVector(o_phi, o_sforce, avg);
     // this is boxy (nearly locally constant on each element), leading the gradient
     // to be concentrated on element edges
-    //scalar->o_solution("debug1").copyFrom(o_sforce);
-    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
-    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+    //scalar->o_solution("debug1").copyFrom(o_sforce, nrs->fieldOffset);
+    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset), nrs->fieldOffset);
+    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset), nrs->fieldOffset);
 
     auto o_curvDeltabyRho = platform->device.malloc<dfloat>(meshV->Nlocal);
     myGetCurvature(o_sforce, o_curvDeltabyRho);
@@ -59,14 +56,14 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // mag(grad(phi)) is supposed to be 1 anyways. Turn off averaging.
     //opSEM::strongLaplacian(meshV, nrs->scalar->fieldOffset(), o_phi, o_curvDeltabyRho, false);
     // didn't seem to do anything, with or without averaging
-    //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho); // curvature
+    //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature
     platform->linAlg->axmy(meshV->Nlocal, 1.0, o_delta, o_curvDeltabyRho);
-    //scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho); // curvature*area
+    scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature*area
 
     // Divide by density
     auto o_rho = nrs->fluid->o_prop + 1 * nrs->fluid->fieldOffset;
     platform->linAlg->aydx(meshV->Nlocal, 1.0, o_rho, o_curvDeltabyRho);
-    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho); // curvature*area/rho
+    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature*area/rho
 
     // There should be no curvature inside the bubble. Currently rho_g being << rho_l
     // amplifies the high noise in o_curvature inside the bubble. Multiplying by delta
@@ -75,7 +72,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // so we do our own custom cleanup.
     auto o_psi = nrs->scalar->o_solution("cls");
     cleanupCurvature(info, o_psi, o_curvDeltabyRho);
-    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho); // cleanup(curvature*area/rho)
+    scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // cleanup(curvature*area/rho)
 
     platform->linAlg->axmyVector(meshV->Nlocal,
                                 nrs->scalar->vFieldOffset,
@@ -83,9 +80,9 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
                                 -1.0/We, //reverse sign (see Nek5000)
                                 o_curvDeltabyRho,
                                 o_sforce);
-    //scalar->o_solution("debug1").copyFrom(o_sforce);
-    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
-    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset));
+    //scalar->o_solution("debug1").copyFrom(o_sforce, nrs->fieldOffset);
+    //scalar->o_solution("debug2").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset), nrs->fieldOffset);
+    //scalar->o_solution("debug3").copyFrom(o_sforce.slice(1*nrs->fieldOffset, nrs->fieldOffset), nrs->fieldOffset);
 }
 
 void customSource(double t)
@@ -108,16 +105,16 @@ void customSource(double t)
     // Calculate interface unit normals.
     opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_cstVector);
     interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_cstVectorX, o_cstVectorY, o_cstVectorZ);
-    //scalar->o_solution("debug1").copyFrom(o_cstVectorY);
+    //scalar->o_solution("debug1").copyFrom(o_cstVectorY, o_cstVectorY.size());
 
     // Calculate CST vector field.
     speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe,
         o_cstVectorX, o_cstVectorY, o_cstVectorZ);
-    //scalar->o_solution("debug2").copyFrom(o_cstVectorY);
+    //scalar->o_solution("debug2").copyFrom(o_cstVectorY, o_cstVectorY.size());
 
     // Source term is the divergence of the above vector field.
     opSEM::strongDivergence(mesh, nrs->fieldOffset, o_cstVector, o_cSource);
-    //scalar->o_solution("debug3").copyFrom(o_cSource);
+    //scalar->o_solution("debug3").copyFrom(o_cSource, o_cSource.size());
 
     // Surface tension source term for the U equation.
     //lvlSet::applySurfaceTensionAcc(We, o_uSource);
