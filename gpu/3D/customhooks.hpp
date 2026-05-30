@@ -36,7 +36,10 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
 
     auto o_delta = lvlSet::getDeltaFunction();
     // this looks good
-    scalar->o_solution("debug1").copyFrom(o_delta);
+    //scalar->o_solution("debug1").copyFrom(o_delta);
+    // for some reason the above copy fails on Aurora (debug1 has extra 128 entries?):
+    // Function : copyFrom
+    // Message  : Source memory has size [4717440], trying to access [0, 4717568]
 
     auto o_phi = nrs->scalar->o_solution("tls");
     bool avg = false;
