@@ -17,6 +17,9 @@ checkPointInterval = 0.1
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
+[PROBLEMTYPE]
+equation = navierStokes+variableViscosity
+
 [FLUID VELOCITY]
 boundaryTypeMap = none
 regularization = svv+svvCoeff=1.0+filterPower=4.0
