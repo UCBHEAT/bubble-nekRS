@@ -56,14 +56,14 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // mag(grad(phi)) is supposed to be 1 anyways. Turn off averaging.
     //opSEM::strongLaplacian(meshV, nrs->scalar->fieldOffset(), o_phi, o_curvDeltabyRho, false);
     // didn't seem to do anything, with or without averaging
-    //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature
+    //scalar->o_solution("debug1").copyFrom(o_curvDeltabyRho, o_curvDeltabyRho.size()); // curvature
     platform->linAlg->axmy(meshV->Nlocal, 1.0, o_delta, o_curvDeltabyRho);
-    scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature*area
+    scalar->o_solution("debug2").copyFrom(o_curvDeltabyRho, o_curvDeltabyRho.size()); // curvature*area
 
     // Divide by density
     auto o_rho = nrs->fluid->o_prop + 1 * nrs->fluid->fieldOffset;
     platform->linAlg->aydx(meshV->Nlocal, 1.0, o_rho, o_curvDeltabyRho);
-    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // curvature*area/rho
+    //scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltabyRho.size()); // curvature*area/rho
 
     // There should be no curvature inside the bubble. Currently rho_g being << rho_l
     // amplifies the high noise in o_curvature inside the bubble. Multiplying by delta
@@ -72,7 +72,7 @@ void myApplySurfaceTensionAcc(const dfloat& We, occa::memory &o_sforce)
     // so we do our own custom cleanup.
     auto o_psi = nrs->scalar->o_solution("cls");
     cleanupCurvature(info, o_psi, o_curvDeltabyRho);
-    scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltaByRho.size()); // cleanup(curvature*area/rho)
+    scalar->o_solution("debug3").copyFrom(o_curvDeltabyRho, o_curvDeltabyRho.size()); // cleanup(curvature*area/rho)
 
     platform->linAlg->axmyVector(meshV->Nlocal,
                                 nrs->scalar->vFieldOffset,
