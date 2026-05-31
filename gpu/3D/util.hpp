@@ -1,7 +1,7 @@
 // Common case information struct, to make device kernel arguments
 // more readable.
 typedef struct caseinfo {
-    // Number of elements local to this CPU node.
+    // Number of elements local to this MPI rank.
     dlong Nelements;
     // Offset between vector field components.
     dlong fieldOffset;
