@@ -1,29 +1,65 @@
 userSections = tlsr, clsr, lvlset
 
+# CONFIGS
+# -------
+# Development: ord5 12x24x12 elements on 2x2x4 domain. For
+# fast local testing of code changes.
+# $ ./mesh development
+#
+# Production: ord9 32x64x32 elements (adjusted to 32x72x32
+# to work around MPI rank divisibility "blocky corruption"
+# bug) on 4x4x8 domain ("8x").
+# $ ./mesh production
+#
+# The production config matches Nadish's bubblyFlow case
+# as closely as possible. Comparing bubblyFlow -> this case:
+#  - Poly order 9 -> same
+#  - Timestepping settings -> same
+#  - 75 GLL points per bubble diameter -> 80 GLL points
+#    (Note bubblyFlow has half this in the y direction for
+#    some reason, and this case has slightly more in the y
+#    direction for the aforementioned workaround.)
+#    This is 1x Kolmogorov scale.
+#  - LS/SVV parameters -> same
+#    velocity: coeff 1 power 4
+#    tls: coeff 1 power 2
+#    cls: coeff 1 power 2
+#    tlsr: coeff 1 power 6 freq 0.02 cfl 0.4 steps 200
+#    clsr: coeff 1 power 4 freq 0.002 cfl 0.2 steps 20
+#    width: 1.5
+# We are also going to set rhoratio = 1/40 to match the
+# bubblyFlow case as well. With the development mesh
+# we noticed higher rhoratio required much lower dt.
+#
+# Differences:
+#  - Many bubbles -> single bubble
+#  - Domain is 67x67x33 bubble diameters -> 4x4x8 domain
+#  - Y-axis boundaries are walls -> fully periodic
+#  - Thermophysical props (dimensionless numbers & ratios)
+#    arbitrary -> FLiBe properties except rhoratio
+#  - Species transport no -> yes (but this shouldn't be
+#    related to level set convergence issues)
+
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
-startFrom = 32x64x32-ord5-startup.fld # production
-#startFrom = 12x24x12-ord5-startup.fld # local development
+#startFrom = startup.fld
 
-polynomialOrder = 5
+#polynomialOrder = 5 # development
+polynomialOrder = 9 # production
 
 stopAt = endTime
 endTime = 100
-dt = initial=3.0e-7+targetCFL=0.4+max=6.0e-7 # production, real rhoratio
-#dt = initial=3.0e-5+targetCFL=0.4+max=6.0e-5 # production, startup
+dt = initial=1.0e-5+targetCFL=0.4+max=2.0e-4 # production
 #dt = initial=1.0e-6+targetCFL=0.4+max=2.0e-6 # local development, real rhoratio
 #dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-4 # local development, startup
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
 # To generate startup file, set rhoratio=1/40 (rather than ~1/4000)
-# and increase dt by 100x correspondingly. Run to t=1 or so and then switch
-# to real rhoratio and the real rhoratio dt settings.
-# - You can use the same Sc=1150 startup file in all Sc cases.
-# - Should targetCFL be divided by rhoratio too? Currently dynamic
-#   timestepping isn't really doing anything.
+# and increase dt by 100x correspondingly. Run to t=1 or so and then
+# switch to real rhoratio and the real rhoratio dt settings.
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
@@ -71,15 +107,19 @@ solver = none
 
 [TLSR]
 boundaryTypeMap = none
-solveFrequency = 1e-2
+solveFrequency = 0.02
 regularization = svv+svvCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
+targetCFL = 0.4
+maximumSteps = 200
 
 [CLSR]
 boundaryTypeMap = none
-solveFrequency = 1e-3
+solveFrequency = 0.002
 regularization = svv+svvCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
+targetCFL = 0.2
+maximumSteps = 20
 
 [LVLSET]
 interfaceWidthFactor = 1.5
