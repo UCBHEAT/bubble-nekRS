@@ -68,7 +68,7 @@ equation = navierStokes+variableViscosity
 
 [FLUID VELOCITY]
 boundaryTypeMap = none
-regularization = svv+svvCoeff=1.0+filterPower=4.0
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 
 [FLUID PRESSURE]
@@ -80,7 +80,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=1.0+filterPower=2.0
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR CLS]
 # CLS (conservative level set), domain: [0, 1]
@@ -88,7 +88,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=1.0+filterPower=2.0
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR C]
 # Species concentration
@@ -96,7 +96,7 @@ boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
-regularization = svv+svvCoeff=1.0+filterPower=2.0
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR DEBUG1]
 solver = none
@@ -108,7 +108,7 @@ solver = none
 [TLSR]
 boundaryTypeMap = none
 solveFrequency = 0.02
-regularization = svv+svvCoeff=1.0+filterPower=6.0
+regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 targetCFL = 0.4
 maximumSteps = 200
@@ -116,7 +116,7 @@ maximumSteps = 200
 [CLSR]
 boundaryTypeMap = none
 solveFrequency = 0.002
-regularization = svv+svvCoeff=1.0+filterPower=4.0
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 targetCFL = 0.2
 maximumSteps = 20
