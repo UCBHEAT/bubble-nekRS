@@ -1,8 +1,8 @@
 -3                     spatial dimension (will create box.re2)
 6                      number of fields
 Box 1
--32 -72 -32            Nelx Nely Nelz (neg. for auto distribute nodes)
+-32 -64 -32            Nelx Nely Nelz (neg. for auto distribute nodes)
 -2 2 1                 x0 x1 node_ratio
 0 8 1                  y0 y1 node_ratio
 -2 2 1                 z0 z1 node_ratio
-P  ,P  ,W  ,W  ,P  ,P  boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,P  ,P  boundary conditions (L, R, bottom, T, back, F)
