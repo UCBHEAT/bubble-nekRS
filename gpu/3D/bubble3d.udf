@@ -107,12 +107,24 @@ void UDF_ExecuteStep(double time, int tstep)
         o_cstSrcVector.copyFrom(o_interfaceNormalVector, 3*nrs->fieldOffset);
         speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe, o_cstSrcVectorX, o_cstSrcVectorY, o_cstSrcVectorZ);
 
-        // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + o_cstSrcVector.
+        // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + o_cstSrcVector [mol/(m^2 s)].
         platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorX, 1.0, o_cstSrcVectorX);
         platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorY, 1.0, o_cstSrcVectorY);
         platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorZ, 1.0, o_cstSrcVectorZ);
-        occa::memory o_interface_flux = platform->device.malloc<dfloat>(3*nrs->fieldOffset);
-        platform->linAlg->dotProduct(mesh->Nlocal, nrs->fieldOffset, o_cstSrcVector, o_interfaceNormalVector, o_interface_flux);
+
+        // Calculate interface mass transfer rate per unit volume as
+        // o_interface_mass_transfer_rate [mol/(m^3 s)] = o_cstSrcVector [mol/(m^2 s)] . o_interfaceNormalVector [m^2/m^3].
+        occa::memory o_interface_mass_transfer_rate = platform->device.malloc<dfloat>(3*nrs->fieldOffset);
+        occa::memory o_interface_mass_transfer_rateX = o_interface_mass_transfer_rate.slice(0*nrs->fieldOffset, nrs->fieldOffset);
+        occa::memory o_interface_mass_transfer_rateY = o_interface_mass_transfer_rate.slice(1*nrs->fieldOffset, nrs->fieldOffset);
+        occa::memory o_interface_mass_transfer_rateZ = o_interface_mass_transfer_rate.slice(2*nrs->fieldOffset, nrs->fieldOffset);
+        platform->linAlg->dotProduct(mesh->Nlocal, nrs->fieldOffset, o_cstSrcVector, o_interfaceNormalVector, o_interface_mass_transfer_rate);
+        // o_interface_mass_transfer_rateX = o_interface_mass_transfer_rateX + o_interface_mass_transfer_rateY + o_interface_mass_transfer_rateZ
+        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_interface_mass_transfer_rateY, 1.0, o_interface_mass_transfer_rateX);
+        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_interface_mass_transfer_rateZ, 1.0, o_interface_mass_transfer_rateX);
+
+        // Integrate for total_mass_transfer_rate [mol/s]; divide by volume for vol_avg_mass_transfer_rate [mol/(m^3 s)].
+        dfloat total_mass_transfer_rate = platform->linAlg->innerProd(mesh->Nlocal, o_interface_mass_transfer_rateX, mesh->o_Jw, platform->comm.mpiComm());
 
         // Calculate c_bulk, c_bubble, and C_total.
         occa::memory o_cpsi = platform->device.malloc<dfloat>(nrs->fieldOffset);
@@ -123,14 +135,14 @@ void UDF_ExecuteStep(double time, int tstep)
         dfloat C_total = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, platform->comm.mpiComm());
 
         // Calculate MTC and Sh.
-        dfloat mtc = platform->linAlg->innerProd(mesh->Nlocal, o_interface_flux, mesh->o_Jw, platform->comm.mpiComm())
-                / mesh->volume / (c_bulk - c_bubble/solubilityratio);
+        dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, platform->comm.mpiComm());
+        dfloat mtc = total_mass_transfer_rate / total_area / (c_bulk - c_bubble/solubilityratio);
         dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("MTC=%.4g Sh=%.4g\n", mtc, sherwood_no);
+            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", total_mass_transfer_rate, mtc, sherwood_no);
             printf("c_bulk=%.4f c_bubble=%.4f\n", c_bulk, c_bubble);
             printf("C conservation error=%.4g (negative=loss, positive=gain)\n", C_total - info.liquid_volume);
             printf("----------------------------------------\n");
@@ -140,11 +152,11 @@ void UDF_ExecuteStep(double time, int tstep)
         std::stringstream filename;
         filename << std::fixed << std::setprecision(2) << "data_" << time << ".csv";
         std::ofstream f(filename.str());
-        f << "time,tstep,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
+        f << "time,tstep,mdot,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
         // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
         f << std::fixed << std::setprecision(4) << time << ",";
         f << tstep << ",";
-        f << std::defaultfloat << std::setprecision(4) << mtc << "," << sherwood_no << ",";
+        f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << "," << mtc << "," << sherwood_no << ",";
         f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
         f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
         f << std::endl;
