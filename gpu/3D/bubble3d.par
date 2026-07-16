@@ -3,22 +3,26 @@ userSections = tlsr, clsr, lvlset
 # CONFIGS
 # -------
 # Development: ord5 12x24x12 elements on 2x2x4 domain. For
-# fast local testing of code changes.
+# fast local testing of code changes. This is approximately
+# 4x Kolmogorov scale.
 # $ ./mesh development
 #
-# Production: ord9 32x64x32 elements (adjusted to 32x72x32
-# to work around MPI rank divisibility "blocky corruption"
-# bug) on 4x4x8 domain ("8x").
+# Production: ord9 32x64x32 elements on 4x4x8 domain. This
+# is 1x Kolomogorov scale.
 # $ ./mesh production
+#
+# Production10x: ord9 320x640x320 elements on 4x4x8 domain.
+# This is 1/10x Komogorov scale, and with interface width
+# ~10x Kolmogorov scale should fully resolve turbulent mass
+# transfer at DNS scale.
 #
 # The production config matches Nadish's bubblyFlow case
 # as closely as possible. Comparing bubblyFlow -> this case:
 #  - Poly order 9 -> same
-#  - Timestepping settings -> same
+#  - Timestepping settings -> same target CFL
 #  - 75 GLL points per bubble diameter -> 80 GLL points
 #    (Note bubblyFlow has half this in the y direction for
-#    some reason, and this case has slightly more in the y
-#    direction for the aforementioned workaround.)
+#    some reason.)
 #    This is 1x Kolmogorov scale.
 #  - LS/SVV parameters -> same
 #    velocity: coeff 1 power 4
@@ -46,20 +50,17 @@ userSections = tlsr, clsr, lvlset
 # Uncomment to resume from a checkpoint.
 #startFrom = startup.fld
 
+polynomialOrder = 9 # production*
 #polynomialOrder = 5 # development
-polynomialOrder = 9 # production
 
 stopAt = endTime
-endTime = 100
-dt = initial=1.0e-5+targetCFL=0.4+max=2.0e-4 # production
-#dt = initial=1.0e-6+targetCFL=0.4+max=2.0e-6 # local development, real rhoratio
-#dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-4 # local development, startup
+endTime = 30
+dt = initial=1.0e-3+targetCFL=0.4+max=2.0e-4 # production10x
+#dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-3 # production
+#dt = initial=2.0e-4+targetCFL=0.4+max=4.0e-3 # development
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
-# To generate startup file, set rhoratio=1/40 (rather than ~1/4000)
-# and increase dt by 100x correspondingly. Run to t=1 or so and then
-# switch to real rhoratio and the real rhoratio dt settings.
 
 scalars = tls, cls, c, debug1, debug2, debug3
 
