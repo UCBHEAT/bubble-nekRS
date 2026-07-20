@@ -45,9 +45,9 @@ userSections = tlsr, clsr, lvlset
 #    related to level set convergence issues)
 
 [MESH]
-#hrefine = 12 # local development
-#hrefine = 32 # Kolmogorov scale
-hrefine = 320 # 1/10 Kolmogorov scale
+#hrefine = 3 # local development
+#hrefine = 8 # Kolmogorov scale
+hrefine = 80 # 1/10 Kolmogorov scale
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
@@ -61,7 +61,7 @@ stopAt = endTime
 endTime = 30
 #dt = initial=2.0e-4+targetCFL=0.4+max=4.0e-3 # local development
 #dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-3 # Kolmogorov scale
-dt = initial=1.0e-3+targetCFL=0.4+max=2.0e-4 # 1/10 Kolmogorov scale
+dt = initial=1.0e-5+targetCFL=0.4+max=2.0e-4 # 1/10 Kolmogorov scale
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
