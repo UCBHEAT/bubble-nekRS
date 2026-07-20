@@ -44,20 +44,24 @@ userSections = tlsr, clsr, lvlset
 #  - Species transport no -> yes (but this shouldn't be
 #    related to level set convergence issues)
 
+[MESH]
+#hrefine = 12 # local development
+#hrefine = 32 # Kolmogorov scale
+hrefine = 320 # 1/10 Kolmogorov scale
+
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
 #startFrom = startup.fld
 
-polynomialOrder = 9 # production*
-#polynomialOrder = 5 # development
+polynomialOrder = 9
 
 stopAt = endTime
 endTime = 30
-dt = initial=1.0e-3+targetCFL=0.4+max=2.0e-4 # production10x
-#dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-3 # production
-#dt = initial=2.0e-4+targetCFL=0.4+max=4.0e-3 # development
+#dt = initial=2.0e-4+targetCFL=0.4+max=4.0e-3 # local development
+#dt = initial=1.0e-4+targetCFL=0.4+max=2.0e-3 # Kolmogorov scale
+dt = initial=1.0e-3+targetCFL=0.4+max=2.0e-4 # 1/10 Kolmogorov scale
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
