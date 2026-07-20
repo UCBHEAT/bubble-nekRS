@@ -51,8 +51,8 @@
  * 
  * @param info common data about the case
  * @param psi conservative level set (CLS) scalar field
- * @param solubilityratio ratio of Henry solubilities (gas/liquid)
- * @param diffratio ratio of mass diffusivities (gas/liquid)
+ * @param solubilityratio ratio of Henry solubilities (liquid/gas)
+ * @param diffratio ratio of mass diffusivities (liquid/gas)
  * @param Pe Peclet number
  * @param out output CST diffusion term coefficient
  */
@@ -64,8 +64,8 @@
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
             const dfloat p = psi[i];
-            out[i] = (p/(p+(1.0-p)*solubilityratio) +
-                    diffratio*(1.0-p)/((1.0-p)+p/solubilityratio))/Pe;
+            out[i] = (p/(p+(1.0-p)/solubilityratio) +
+                    (1.0/diffratio)*(1.0-p)/((1.0-p)+p*solubilityratio))/Pe;
         }
     }
 }
@@ -112,8 +112,8 @@
  * @param info common data about the case
  * @param c species concentration scalar field
  * @param psi conservative level set (CLS) scalar field
- * @param solubilityratio ratio of Henry solubilities (gas/liquid)
- * @param diffratio ratio of mass diffusivities (gas/liquid)
+ * @param solubilityratio ratio of Henry solubilities (liquid/gas)
+ * @param diffratio ratio of mass diffusivities (liquid/gas)
  * @param Pe Peclet number
  * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface normal vectors,
  *     output: CST pseudo-advective flux
@@ -128,10 +128,10 @@
             const int i = e*p_Np + n;
 
             // Calculate scalar coefficient.
-            const dfloat term1 = ((1.0 - diffratio)/solubilityratio)
-                   / pow(psi[i]/solubilityratio+(1.0-psi[i]), 2);
-            const dfloat term2 = (1.0/solubilityratio - diffratio)
-                    / (psi[i]/solubilityratio + (1.0-psi[i]));
+            const dfloat term1 = ((1.0 - 1.0/diffratio)*solubilityratio)
+                   / pow(psi[i]*solubilityratio+(1.0-psi[i]), 2);
+            const dfloat term2 = (solubilityratio - 1.0/diffratio)
+                    / (psi[i]*solubilityratio + (1.0-psi[i]));
             const dfloat coeff = c[i]*(term1 - term2)/Pe;
 
             // Write output CST flux (for the next OCCA kernel to take divergence).

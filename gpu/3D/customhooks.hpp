@@ -6,14 +6,14 @@ void customProperties(double t)
 
     // Properties for momentum transport equation
     const occa::memory o_psi = scalar->o_solution("cls");
-    // mu = ((1.0-psi)*muratio + psi)/Re
-    weightedMixing(info, o_psi, muratio, Re, fluid->o_diffusionCoeff());
-    // rho = (1.0-psi)*rhoratio + psi
-    weightedMixing(info, o_psi, rhoratio, 1.0, fluid->o_transportCoeff());
+    // mu = ((1.0-psi)/muratio + psi)/Re
+    weightedMixing(info, o_psi, 1.0/muratio, Re, fluid->o_diffusionCoeff());
+    // rho = (1.0-psi)/rhoratio + psi
+    weightedMixing(info, o_psi, 1.0/rhoratio, 1.0, fluid->o_transportCoeff());
 
     // Properties for species transport equation
-    // D = (psi/(psi+(1.0-psi)*solubilityratio) +
-    //     diffratio*(1.0-psi)/((1.0-psi)+psi/solubilityratio))/Pe
+    // D = (psi/(psi+(1.0-psi)/solubilityratio) +
+    //     (1.0/diffratio)*(1.0-psi)/((1.0-psi)+psi*solubilityratio))/Pe
     speciesDiff(info, o_psi, solubilityratio, diffratio, Pe,
             scalar->o_diffusionCoeff("c"));
     // No transport coefficient in c equation.
