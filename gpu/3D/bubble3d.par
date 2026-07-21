@@ -47,7 +47,7 @@ userSections = tlsr, clsr, lvlset
 [MESH]
 #hrefine = 3 # local development
 #hrefine = 8 # Kolmogorov scale
-hrefine = 80 # 1/10 Kolmogorov scale
+hrefine = 40 # 1/10 Kolmogorov scale
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
@@ -66,7 +66,7 @@ timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
 
-scalars = tls, cls, c, debug1, debug2, debug3
+scalars = tls, cls, c
 
 [PROBLEMTYPE]
 equation = navierStokes+variableViscosity
@@ -102,13 +102,6 @@ transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
-
-[SCALAR DEBUG1]
-solver = none
-[SCALAR DEBUG2]
-solver = none
-[SCALAR DEBUG3]
-solver = none
 
 [TLSR]
 boundaryTypeMap = none

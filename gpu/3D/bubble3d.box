@@ -1,5 +1,5 @@
 -3                     spatial dimension (will create box.re2)
-6                      number of fields
+3                      number of fields
 Box 1
 -4 -8 -4               Nelx Nely Nelz (neg. for auto distribute nodes)
 -1 1 1                 x0 x1 node_ratio
