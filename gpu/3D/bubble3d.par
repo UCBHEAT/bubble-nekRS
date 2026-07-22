@@ -45,8 +45,8 @@ userSections = tlsr, clsr, lvlset
 #    related to level set convergence issues)
 
 [MESH]
-#hrefine = 3 # local development (1.03 mm)
-hrefine = 48 # 1/10 Kolmogorov scale (0.0065 mm)
+# no hrefine (12x24x12) = local development (0.10 mm)
+hrefine = 16 # 1/10 Kolmogorov scale (0.0065 mm)
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
