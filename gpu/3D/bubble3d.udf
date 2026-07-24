@@ -149,10 +149,10 @@ void UDF_ExecuteStep(double time, int tstep)
 
             // Write CSV file
             const std::string filename = "data.csv";
-            std::ifstream check_file(filename_combined);
+            std::ifstream check_file(filename);
             bool newly_created = !check_file.good();
             check_file.close();
-            std::ofstream f(filename_combined, std::ios_base::app);
+            std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
                 f << "Time,tstep,mdot,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
             }
