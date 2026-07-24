@@ -148,7 +148,7 @@ void UDF_ExecuteStep(double time, int tstep)
             printf("----------------------------------------\n");
 
             // Write CSV file
-            const std::string filename_combined = "data.csv";
+            const std::string filename = "data.csv";
             std::ifstream check_file(filename_combined);
             bool newly_created = !check_file.good();
             check_file.close();
@@ -157,13 +157,13 @@ void UDF_ExecuteStep(double time, int tstep)
                 f << "Time,tstep,mdot,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
-            *f << std::fixed << std::setprecision(4) << time << ",";
-            *f << tstep << ",";
-            *f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << "," << mtc << "," << sherwood_no << ",";
-            *f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
-            *f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
-            *f << std::endl;
-            f->close();
+            f << std::fixed << std::setprecision(4) << time << ",";
+            f << tstep << ",";
+            f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << "," << mtc << "," << sherwood_no << ",";
+            f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
+            f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
+            f << std::endl;
+            f.close();
         } // if (platform->comm.mpiRank() == 0)
     } // if (nrs->checkpointStep)
 }
