@@ -1,52 +1,9 @@
 userSections = tlsr, clsr, lvlset
 
-# CONFIGS
-# -------
-# Development: ord5 12x24x12 elements on 2x2x4 domain. For
-# fast local testing of code changes. This is approximately
-# 4x Kolmogorov scale.
-# $ ./mesh development
-#
-# Production: ord9 32x64x32 elements on 4x4x8 domain. This
-# is 1x Kolomogorov scale.
-# $ ./mesh production
-#
-# Production10x: ord9 320x640x320 elements on 4x4x8 domain.
-# This is 1/10x Komogorov scale, and with interface width
-# ~10x Kolmogorov scale should fully resolve turbulent mass
-# transfer at DNS scale.
-#
-# The production config matches Nadish's bubblyFlow case
-# as closely as possible. Comparing bubblyFlow -> this case:
-#  - Poly order 9 -> same
-#  - Timestepping settings -> same target CFL
-#  - 75 GLL points per bubble diameter -> 80 GLL points
-#    (Note bubblyFlow has half this in the y direction for
-#    some reason.)
-#    This is 1x Kolmogorov scale.
-#  - LS/SVV parameters -> same
-#    velocity: coeff 1 power 4
-#    tls: coeff 1 power 2
-#    cls: coeff 1 power 2
-#    tlsr: coeff 1 power 6 freq 0.02 cfl 0.4 steps 200
-#    clsr: coeff 1 power 4 freq 0.002 cfl 0.2 steps 20
-#    width: 1.5
-# We are also going to set rhoratio = 1/40 to match the
-# bubblyFlow case as well. With the development mesh
-# we noticed higher rhoratio required much lower dt.
-#
-# Differences:
-#  - Many bubbles -> single bubble
-#  - Domain is 67x67x33 bubble diameters -> 4x4x8 domain
-#  - Y-axis boundaries are walls -> fully periodic
-#  - Thermophysical props (dimensionless numbers & ratios)
-#    arbitrary -> FLiBe properties except rhoratio
-#  - Species transport no -> yes (but this shouldn't be
-#    related to level set convergence issues)
-
 [MESH]
-# no hrefine (12x24x12) = local development (0.10 mm)
-hrefine = 16 # 1/10 Kolmogorov scale (0.0065 mm)
+# Kolmogorov scale = 0.0671 mm
+# no hrefine (12x24x12) + order 5 = local development (0.17 mm)
+hrefine = 26 # hrefine 26 + order 5 = 1/10 Kolmogorov scale (0.0066 mm)
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
@@ -54,12 +11,12 @@ hrefine = 16 # 1/10 Kolmogorov scale (0.0065 mm)
 # Uncomment to resume from a checkpoint.
 #startFrom = startup.fld
 
-polynomialOrder = 9
+polynomialOrder = 5
 
 stopAt = endTime
 endTime = 30
-#dt = initial=2.0e-4+targetCFL=0.4+max=4.0e-3 # local development
-dt = initial=2.0e-5+targetCFL=0.4+max=4.0e-4 # 1/10 Kolmogorov scale
+#dt = 4e-3 # local development
+dt = 0.1538e-3 # 1/10 Kolmogorov scale
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkPointInterval = 0.1
@@ -103,7 +60,8 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
 boundaryTypeMap = none
-solveFrequency = 0.02
+#solveFrequency = 0.2 # local development
+solveFrequency = 0.007692 # 1/10 Kolmogorov scale
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 targetCFL = 0.4
@@ -111,7 +69,8 @@ maximumSteps = 200
 
 [CLSR]
 boundaryTypeMap = none
-solveFrequency = 0.002
+#solveFrequency = 0.02 # local development
+solveFrequency = 0.0007692 # 1/10 Kolmogorov scale
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 targetCFL = 0.2
