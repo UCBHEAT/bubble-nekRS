@@ -122,6 +122,11 @@ if [[ "$1" == "-r" ]]; then
     # Don't clobber the original .batch file.
     mv $1.batch $1.pre-requeue.batch
     echo "Requeuing..."
+else
+    if grep -E "^startFrom" $1.par; then
+        echo "-r not passed but $1.par is configured for restart which is probably not intentional. Aborting!"
+        exit 1
+    fi
 fi
 
 desc=$(cat JOB_DESC || echo "job")
@@ -131,6 +136,10 @@ gen_batch_file_header $1.batch $2 $3
 echo "#PBS -N $desc" >> $1.batch
 echo "cd $PWD" >> $1.batch
 if [[ $requeue == "true" ]]; then
+    echo "if ! ls *.f0* >/dev/null 2>&1; then" >> $1.batch
+    echo "    echo \"Fatal: last job produced no checkpoints!\"" >> $1.batch
+    echo "    exit 1" >> $1.batch
+    echo "fi" >> $1.batch
     echo "backup_folder=\$(date +%Y%m%d-%H%M)" >> $1.batch
     echo "last_checkpoint=\$(ls *.f0* | tail -n 1)" >> $1.batch
     echo "mkdir \$backup_folder && mv *.f0* data_*.csv \$backup_folder/" >> $1.batch
