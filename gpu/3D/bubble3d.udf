@@ -60,7 +60,7 @@ void UDF_Setup()
     info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
             nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
     info.gas_volume = mesh->volume - info.liquid_volume;
-    info.rho_average = (info.liquid_volume + rhoratio*(info.gas_volume))/(mesh->volume);
+    info.rho_average = (info.liquid_volume + (info.gas_volume/rhoratio))/(mesh->volume);
     if (platform->comm.mpiRank() == 0) {
         printf("Liquid/gas/total volumes %.4g %.4g %.4g\n", info.liquid_volume, info.gas_volume, mesh->volume);
         printf("rho_average=%.4g\n", info.rho_average);
@@ -136,7 +136,7 @@ void UDF_ExecuteStep(double time, int tstep)
 
         // Calculate MTC and Sh.
         dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, platform->comm.mpiComm());
-        dfloat mtc = total_mass_transfer_rate / total_area / (c_bulk - c_bubble/solubilityratio);
+        dfloat mtc = total_mass_transfer_rate / total_area / (c_bulk - c_bubble*solubilityratio);
         dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
