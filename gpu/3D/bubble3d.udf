@@ -101,16 +101,16 @@ void UDF_ExecuteStep(double time, int tstep)
         // Calculate CST diffusion flux.
         opSEM::strongGrad(mesh, nrs->fieldOffset, o_c, o_cstDiffVector);
         platform->linAlg->axmyMany(mesh->Nlocal, /* Nfields */ 3, nrs->fieldOffset, /* mode */ 0,
-                /* constant multiplier */ 1.0, scalar->o_diffusionCoeff("c"), o_cstDiffVector);
+                /* constant multiplier */ -1.0, scalar->o_diffusionCoeff("c"), o_cstDiffVector);
 
-        // Calculate CST source flux.
+        // Calculate (negative of) CST source flux.
         o_cstSrcVector.copyFrom(o_interfaceNormalVector, 3*nrs->fieldOffset);
         speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe, o_cstSrcVectorX, o_cstSrcVectorY, o_cstSrcVectorZ);
 
-        // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + o_cstSrcVector [mol/(m^2 s)].
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorX, 1.0, o_cstSrcVectorX);
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorY, 1.0, o_cstSrcVectorY);
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorZ, 1.0, o_cstSrcVectorZ);
+        // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + (-o_cstSrcVector) [mol/(m^2 s)].
+        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorX, -1.0, o_cstSrcVectorX);
+        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorY, -1.0, o_cstSrcVectorY);
+        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorZ, -1.0, o_cstSrcVectorZ);
 
         // Calculate interface mass transfer rate per unit volume as
         // o_interface_mass_transfer_rate [mol/(m^3 s)] = o_cstSrcVector [mol/(m^2 s)] . o_interfaceNormalVector [m^2/m^3].
