@@ -61,7 +61,8 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 [TLSR]
 boundaryTypeMap = none
 #solveFrequency = 0.2 # local development
-solveFrequency = 0.007692 # 1/10 Kolmogorov scale
+#solveFrequency = 0.007692 # 1/10 Kolmogorov scale
+solveFrequency = 0.1538e-2 # 1/10 Kolmogorov scale
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 targetCFL = 0.4
@@ -70,7 +71,8 @@ maximumSteps = 200
 [CLSR]
 boundaryTypeMap = none
 #solveFrequency = 0.02 # local development
-solveFrequency = 0.0007692 # 1/10 Kolmogorov scale
+#solveFrequency = 0.0007692 # 1/10 Kolmogorov scale
+solveFrequency = 0.1538e-3 # 1/10 Kolmogorov scale
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 targetCFL = 0.2
