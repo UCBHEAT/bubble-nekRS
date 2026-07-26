@@ -14,12 +14,12 @@ hrefine = 26 # hrefine 26 + order 5 = 1/10 Kolmogorov scale (0.0066 mm)
 polynomialOrder = 5
 
 stopAt = endTime
-endTime = 30
+endTime = 0.025
 #dt = 4e-3 # local development
 dt = 0.1538e-3 # 1/10 Kolmogorov scale
 timeStepper = tombo2
 checkpointControl = simulationTime
-checkPointInterval = 0.1
+checkpointInterval = 0.025
 
 scalars = tls, cls, c
 
