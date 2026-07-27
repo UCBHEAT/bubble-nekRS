@@ -145,10 +145,10 @@ if [[ $requeue == "true" ]]; then
     echo "mkdir \$backup_folder && mv *.f0* data_*.csv \$backup_folder/" >> $1.batch
     echo "rm -f restart.fld && ln -s \$backup_folder/\$last_checkpoint restart.fld" >> $1.batch
     echo "sed -i 's/#\\?startFrom \\?=.*/startFrom = restart.fld/' $1.par" >> $1.batch
-    endTime=$(grep "endTime =" bubble3d.par | cut -d ' ' -f 3)
-    checkpointInterval=$(grep "checkpointInterval =" bubble3d.par | cut -d ' ' -f 3)
-    newEndTime=$(printf "%.3f" $(echo $endTime + $checkpointInterval | bc))
-    echo "sed -i 's/#\\?endTime \\?=.*/endTime = $newEndTime/' $1.par" >> $1.batch
+    #endTime=$(grep "endTime =" bubble3d.par | cut -d ' ' -f 3)
+    #checkpointInterval=$(grep "checkpointInterval =" bubble3d.par | cut -d ' ' -f 3)
+    #newEndTime=$(printf "%.3f" $(echo $endTime + $checkpointInterval | bc))
+    #echo "sed -i 's/#\\?endTime \\?=.*/endTime = $newEndTime/' $1.par" >> $1.batch
 fi
 echo "RUN_ONLY=1 NEKRS_HOME=$NEKRS_HOME QUEUE=$QUEUE ./requeue.sh -r $1 $2 $3" >> $1.batch
 

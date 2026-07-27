@@ -3,7 +3,8 @@ userSections = tlsr, clsr, lvlset
 [MESH]
 # Kolmogorov scale = 0.0671 mm
 # no hrefine (12x24x12) + order 5 = local development (0.17 mm)
-hrefine = 26 # hrefine 26 + order 5 = 1/10 Kolmogorov scale (0.0066 mm)
+#hrefine = 26 # hrefine 26 + order 5 = 1/10 Kolmogorov scale (0.0066 mm)
+hrefine = 13 # hrefine 13 + order 5 = 1/5 Kolmogorov scale (0.013 mm)
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
@@ -14,12 +15,13 @@ hrefine = 26 # hrefine 26 + order 5 = 1/10 Kolmogorov scale (0.0066 mm)
 polynomialOrder = 5
 
 stopAt = endTime
-endTime = 0.025
+endTime = 30
 #dt = 4e-3 # local development
-dt = 0.1538e-3 # 1/10 Kolmogorov scale
+dt = 0.3046e-3 # 1/5 Kolmogorov scale
+#dt = 0.1538e-3 # 1/10 Kolmogorov scale
 timeStepper = tombo2
 checkpointControl = simulationTime
-checkpointInterval = 0.025
+checkpointInterval = 0.1
 
 scalars = tls, cls, c
 
@@ -60,9 +62,9 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
 boundaryTypeMap = none
-#solveFrequency = 0.2 # local development
-#solveFrequency = 0.007692 # 1/10 Kolmogorov scale
-solveFrequency = 0.1538e-2 # 1/10 Kolmogorov scale
+#solveFrequency = 0.2 # local development (40 timesteps)
+solveFrequency = 0.0007692 # 1/5 Kolmogorov scale (20 timesteps)
+#solveFrequency = 0.1538e-2 # 1/10 Kolmogorov scale (10 timesteps)
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 targetCFL = 0.4
@@ -70,9 +72,9 @@ maximumSteps = 200
 
 [CLSR]
 boundaryTypeMap = none
-#solveFrequency = 0.02 # local development
-#solveFrequency = 0.0007692 # 1/10 Kolmogorov scale
-solveFrequency = 0.1538e-3 # 1/10 Kolmogorov scale
+#solveFrequency = 0.02 # local development (4 timesteps)
+solveFrequency = 0.0007692 # 1/5 Kolmogorov scale (2 timesteps)
+#solveFrequency = 0.1538e-3 # 1/10 Kolmogorov scale (1 timestep)
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 targetCFL = 0.2
