@@ -143,7 +143,7 @@ void UDF_ExecuteStep(double time, int tstep)
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
             printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", total_mass_transfer_rate, mtc, sherwood_no);
-            printf("c_bulk=%.4f c_bubble=%.4f\n", c_bulk, c_bubble);
+            printf("total_area=%.4g c_bulk=%.4f c_bubble=%.4f\n", total_area, c_bulk, c_bubble);
             printf("C conservation error=%.4g (negative=loss, positive=gain)\n", C_total - info.liquid_volume);
             printf("----------------------------------------\n");
 
@@ -154,12 +154,13 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,c_bulk,c_bubble,C_conservation_error" << std::endl;
+                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_bubble,C_conservation_error" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
             f << tstep << ",";
-            f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << "," << mtc << "," << sherwood_no << ",";
+            f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << ","
+                    << mtc << "," << sherwood_no << "," << total_area << ",";
             f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
             f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
             f << std::endl;
