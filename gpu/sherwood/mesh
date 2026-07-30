@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "bubble3d.box" | genbox
+mv box.re2 bubble3d.re2
+echo -e "bubble3d\n" | genmap

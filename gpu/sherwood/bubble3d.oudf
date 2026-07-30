@@ -1,0 +1,161 @@
+#include "util.hpp"
+// OCCA kernels used in customProperties and customSource.
+
+/**
+ * Compute two-phase property ((1-psi)*ratio + psi)/divisor.
+ *
+ * @param info common data about the case
+ * @param psi conservative level set (CLS) scalar field
+ * @param ratio gas property/liquid property ratio
+ * @param divisor non-dimensionalization
+ * @param out output two-phase mixed value for this property
+ */
+@kernel void weightedMixing(const caseinfo_t info, @restrict const dfloat *psi,
+        const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            out[i] = ((1-psi[i])*ratio + psi[i])/divisor;
+        }
+    }
+}
+
+/**
+ * Calculate buoyancy Y-acceleration terms (gravitational force
+ * balanced by pressure gradient force).
+ *
+ * @param info common data about the case
+ * @param rho local density field
+ * @param psi conservative level set (CLS) scalar field
+ * @param Fr Froude number u/sqrt(gL)
+ * @param out output Y-acceleration term
+ */
+@kernel void buoyancySource(const caseinfo_t info, @restrict const dfloat *psi,
+        @restrict const dfloat *rho, const dfloat Fr, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            // Non-dimensional gravitational acceleration -gL/(u^2).
+            out[i] -= 1.0/(Fr*Fr);
+            // Pressure gradient force, converted to acceleration by dividing rho[i].
+            out[i] += (1.0/(Fr*Fr))*(info.rho_average)/rho[i];
+        }
+    }
+}
+
+/**
+ * Compute the coefficient of the implicit diffusion term in the CST
+ * equation.
+ * 
+ * @param info common data about the case
+ * @param psi conservative level set (CLS) scalar field
+ * @param solubilityratio ratio of Henry solubilities (liquid/gas)
+ * @param diffratio ratio of mass diffusivities (liquid/gas)
+ * @param Pe Peclet number
+ * @param out output CST diffusion term coefficient
+ */
+@kernel void speciesDiff(const caseinfo_t info, @restrict dfloat *psi,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            const dfloat p = psi[i];
+            out[i] = (p/(p+(1.0-p)/solubilityratio) +
+                    (1.0/diffratio)*(1.0-p)/((1.0-p)+p*solubilityratio))/Pe;
+        }
+    }
+}
+
+/**
+ * Computes interface normal vectors using the TLS (traditional level set) field phi.
+ * 
+ * @param info common data about the case
+ * @param phi traditional level set (TLS) scalar field
+ * @param delta surface area density scalar field
+ * @param nx, ny, nz input: grad(phi), output: interface normal vector
+ * 
+ * @see https://github.com/nandu90/nrsLS_Examples/blob/v25/circles/circles.oudf
+ */
+@kernel void interfaceNormals(const caseinfo_t info, @restrict const dfloat *phi, @restrict const dfloat *delta,
+        @restrict dfloat *nx, @restrict dfloat *ny, @restrict dfloat *nz)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Calculate interface direction as normalization of grad(phi) (gradient of TLS field).
+            const dfloat mag2 = nx[i]*nx[i] + ny[i]*ny[i] + nz[i]*nz[i];
+            const dfloat mag  = sqrt(mag2);
+
+            // Interface normal = surface area density * interface direction.
+            if (mag <= 1e-12) {
+                nx[i] = 0.0;
+                ny[i] = 0.0;
+                nz[i] = 0.0;
+            } else {
+                nx[i] = delta[i] * nx[i] / mag;
+                ny[i] = delta[i] * ny[i] / mag;
+                nz[i] = delta[i] * nz[i] / mag;
+            }
+        }
+    }
+}
+
+/**
+ * Compute the pseudo-advection term in the CST equation, as an explicit
+ * source term.
+ * 
+ * @param info common data about the case
+ * @param c species concentration scalar field
+ * @param psi conservative level set (CLS) scalar field
+ * @param solubilityratio ratio of Henry solubilities (liquid/gas)
+ * @param diffratio ratio of mass diffusivities (liquid/gas)
+ * @param Pe Peclet number
+ * @param cst_flux_x, cst_flux_y, cst_flux_z input: interface normal vectors,
+ *     output: CST pseudo-advective flux
+ */
+@kernel void speciesSource(const caseinfo_t info,
+        @restrict const dfloat *c, @restrict const dfloat *psi,
+        const dfloat solubilityratio, const dfloat diffratio, const dfloat Pe,
+        @restrict dfloat *cst_flux_x, @restrict dfloat *cst_flux_y, @restrict dfloat *cst_flux_z)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Calculate scalar coefficient.
+            const dfloat term1 = ((1.0 - 1.0/diffratio)*solubilityratio)
+                   / pow(psi[i]*solubilityratio+(1.0-psi[i]), 2);
+            const dfloat term2 = (solubilityratio - 1.0/diffratio)
+                    / (psi[i]*solubilityratio + (1.0-psi[i]));
+            const dfloat coeff = c[i]*(term1 - term2)/Pe;
+
+            // Write output CST flux (for the next OCCA kernel to take divergence).
+            cst_flux_x[i] *= coeff;
+            cst_flux_y[i] *= coeff;
+            cst_flux_z[i] *= coeff;
+        }
+    }
+}
+
+@kernel void cleanupCurvature(const caseinfo_t info,
+        @restrict const dfloat *psi, @restrict dfloat *curvature)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+
+            // Smoothed Dirac delta function around psi=0.5 with width epsilon=1e-3 and height 1.
+            //const dfloat eps = 1e-3;
+            //curvature[i] *= (eps*eps/((psi[i]-0.5)*(psi[i]-0.5))+eps*eps);
+
+            // More strongly (exponentially) erasing near psi=0,1:
+            const dfloat eps = 1e-1;
+            curvature[i] *= exp(-eps/(psi[i]*(1-psi[i]))) / exp(-eps/0.25);
+        }
+    }
+}
