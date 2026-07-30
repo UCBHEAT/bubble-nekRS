@@ -22,7 +22,7 @@ hrefine = 2 # hrefine 2 + order 5 = 127% Kolmogorov scale (0.085 mm)
 polynomialOrder = 5
 
 stopAt = endTime
-endTime = 31
+endTime = 30
 #dt = 4e-3 # local development
 dt = 2e-3 # 127% Kolmogorov scale
 #dt = 0.5e-3 # 64% Kolmogorov scale (extra halving)

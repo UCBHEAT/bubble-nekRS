@@ -142,20 +142,43 @@
     }
 }
 
-@kernel void cleanupCurvature(const caseinfo_t info,
-        @restrict const dfloat *psi, @restrict dfloat *curvature)
+/**
+ * Compute a soft source term in the liquid bulk.
+ * 
+ * @param info common data about the case
+ * @param psi conservative level set (CLS) scalar field
+ * @param c species concentration scalar field
+ * @param cSource output explicit source term
+ */
+@kernel void softSource(const caseinfo_t info, @restrict const dfloat *psi,
+        @restrict const dfloat *c, @restrict dfloat *cSource)
 {
     for (dlong e = 0; e < info.Nelements; ++e; @outer) {
         for (int n = 0; n < p_Np; ++n; @inner) {
             const int i = e*p_Np + n;
+            if (c[i] <= 1.0) {
+                const dfloat source_thres = 0.9;
+                const dfloat source_str = 0.05;
+                // Add (1-c)*psi term to drive liquid bulk (psi=1) towards c=1.
+                const dfloat psi_thres = max(0.0, psi[i] - source_thres)/(1.0 - source_thres);
+                cSource[i] = (1.0 - c[i])*psi_thres*source_str;
+            }
+        }
+    }
+}
 
-            // Smoothed Dirac delta function around psi=0.5 with width epsilon=1e-3 and height 1.
-            //const dfloat eps = 1e-3;
-            //curvature[i] *= (eps*eps/((psi[i]-0.5)*(psi[i]-0.5))+eps*eps);
-
-            // More strongly (exponentially) erasing near psi=0,1:
-            const dfloat eps = 1e-1;
-            curvature[i] *= exp(-eps/(psi[i]*(1-psi[i]))) / exp(-eps/0.25);
+@kernel void hardSink(const caseinfo_t info, @restrict dfloat *c,
+        @restrict const dfloat *psi, @restrict dfloat *cSink)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            if (psi[i] < 0.1) {
+                cSink[i] = c[i];
+                c[i] = 0.0;
+            } else {
+                cSink[i] = 0.0;
+            }
         }
     }
 }

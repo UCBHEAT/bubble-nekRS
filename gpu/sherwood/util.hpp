@@ -11,4 +11,6 @@ typedef struct caseinfo {
     dfloat gas_volume;
     // Global average density, for use in pressure gradient force term.
     dfloat rho_average;
+    dfloat cumulative_c_sink;
+    dfloat cumulative_dt;
 } caseinfo_t;
