@@ -1,3 +1,4 @@
 .lhelper
 JOB_DESC
 *.batch
+data.csv
