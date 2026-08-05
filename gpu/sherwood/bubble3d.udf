@@ -102,7 +102,7 @@ void UDF_ExecuteStep(double time, int tstep)
 
         // Calculate MTC and Sh.
         dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, platform->comm.mpiComm());
-        dfloat mtc = mdot / total_area / (0.0 - c_bulk);
+        dfloat mtc = mdot / total_area / c_bulk;
         dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
