@@ -28,6 +28,10 @@ he = Phase("He(625C,1bar)", rho=0.05359, D=1.5547e-4, kH=1./(R*898.15), nu=4.278
 air = Phase("air(20C,1bar,oxygen)", rho=1.122, D=1.916e-5, kH=1./(R*293.15), nu=1.824e-5/1.122) # from [Marschall12]
 #water_25C = Phase("water(25C,1bar,CO2)", rho=997., D=1.97e-9, kH=3.49e-4, nu=8.927e-7)
 #co2_25C = Phase("CO2(25C,1bar,CO2)", rho=1.784, D=1.381e-5, kH=1./(R*298.15), nu=8.369e-6)
+flibe1 = Phase("FLiBe(625C,1bar)(Sc=1)", rho=1975., D=3.843e-6/1, kH=3.75464e-7, nu=3.843e-6)
+flibe4 = Phase("FLiBe(625C,1bar)(Sc=4)", rho=1975., D=3.843e-6/4, kH=3.75464e-7, nu=3.843e-6)
+flibe20 = Phase("FLiBe(625C,1bar)(Sc=20)", rho=1975., D=3.843e-6/20, kH=3.75464e-7, nu=3.843e-6)
+flibe100 = Phase("FLiBe(625C,1bar)(Sc=100)", rho=1975., D=3.843e-6/100, kH=3.75464e-7, nu=3.843e-6)
 
 combos = [
     # liquid, gas, surface tension, bubble diameter, bubble velocity
@@ -37,6 +41,11 @@ combos = [
     (water, air, 7.2e-2, 2e-3, 0.232),
     (water, air, 7.2e-2, 4e-3, 0.221),
     (water, air, 7.2e-2, 6e-3, 0.208),
+
+    (flibe1, ar, 0.188, None, None),
+    (flibe4, ar, 0.188, None, None),
+    (flibe20, ar, 0.188, None, None),
+    (flibe100, ar, 0.188, None, None),
 ]
 
 def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
@@ -78,7 +87,7 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
     HongBrauer84 = 2.0 + 1.5e-2*(Re**0.89)*(Sc**0.7)
 
     print(f"""
-      ! {liquid.name}/{gas.name}/{d*1000:.2f}mm/{u:.2f} m/s
+! {liquid.name}/{gas.name}/{d*1000:.2f}mm/{u:.2f} m/s
       real Re, Fr, We, Sc, Pe
       parameter (Re = {Re:.4g})
       parameter (Fr = {u/np.sqrt(g*d):.4g})
@@ -92,6 +101,7 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
       parameter (muratio = nuratio*rhoratio)
       parameter (diffratio = {gas.D/liquid.D:.4g})
       parameter (solubilityratio = {gas.kH/liquid.kH:.4g})
+
       ! Correlations (valid={correlation_validity}):
       ! Brauer71 = {Brauer71:.4g}
       ! HongBrauer84 = {HongBrauer84:.4g}""")
@@ -101,14 +111,17 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
         A = np.pi*((d/2)**2)
         Cd = 0.5 # sphere drag coefficient
         u2 = np.sqrt(2*(liquid.rho-gas.rho)*V*g / (liquid.rho*A*Cd))
-        print(f"! u from simple calc = {u2}")
         # Calculate Kolmogorov scale
         epsilon = u*g
         lambda_k = ((liquid.nu**3)/epsilon)**0.25
         lambda_kd = ((liquid.D**3)/epsilon)**0.25
-        print(f"! Bubble rise specific turbulent KE dissipation rate = {epsilon} J/kg")
-        print(f"! Kolmogorov scale lambda_k = {lambda_k*10**3} mm")
-        print(f"! Mass transfer Kolmogorov scale lambda_kd = {lambda_kd*10**3} mm")
+        print(f"""
+      ! u from simple calc = {u2:.4g}
+      ! Bubble rise specific turbulent KE dissipation rate = {epsilon:.4g} W/kg
+      ! Kolmogorov scale lambda_k = {lambda_k*10**3:.4g} mm
+      ! Mass transfer Kolmogorov scale lambda_kd = {lambda_kd*10**3:.4g} mm
+      ! At polynomial order 7, {d/lambda_kd/8:.4g} elements per non-dim length unit
+      ! 2x4x2 -> {d/lambda_kd/4:.0f}x{d/lambda_kd/2:.0f}x{d/lambda_kd/4:.0f}""")
 
 for combo in combos:
     calc_dimensionless_numbers(*combo)
