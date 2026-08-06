@@ -1,3 +1,4 @@
+import argparse
 import sys
 import numpy as np
 from dataclasses import dataclass
@@ -44,16 +45,9 @@ combos = [
     (flibe100, ar, 0.188, None, None),
 ]
 
-# Build a lookup by case name like FLiBe/Ar, FLiBe/He, FLiNaK/Ar, water/air, etc.
-# Also include the Sc variants explicitly.
 case_lookup = {}
-case_names = []
 for combo in combos:
     liquid, gas, sigma, d, u = combo
-    name = f"{liquid.name.split('(')[0]}/{gas.name.split('(')[0]}"
-    # Short names for the standard combinations
-    short_name = f"{liquid.name.split('(')[0].replace('FLiBe', 'FLiBe').replace('FLiNaK', 'FLiNaK')}/{gas.name.split('(')[0]}"
-    # Use simplified key
     if liquid.name.startswith("FLiBe") and not "Sc=" in liquid.name and gas.name.startswith("Ar"):
         key = "FLiBe/Ar"
     elif liquid.name.startswith("FLiBe") and gas.name.startswith("He"):
@@ -61,7 +55,6 @@ for combo in combos:
     elif liquid.name.startswith("FLiNaK") and gas.name.startswith("Ar"):
         key = "FLiNaK/Ar"
     elif liquid.name.startswith("water") and gas.name.startswith("air"):
-        # There are three water/air combos with different diameters/velocities
         if d == 2e-3:
             key = "water/air (2mm)"
         elif d == 4e-3:
@@ -81,7 +74,6 @@ for combo in combos:
     else:
         key = f"{liquid.name.split('(')[0]}/{gas.name.split('(')[0]}"
     case_lookup[key] = combo
-    case_names.append(key)
 
 def get_combo_by_case(name):
     if name not in case_lookup:
@@ -90,24 +82,6 @@ def get_combo_by_case(name):
             print(f"  {k}")
         sys.exit(1)
     return case_lookup[name]
-
-def print_help():
-    print("Usage:")
-    print("  python calc_dimensionless_numbers.py [--case CASE] [subcommand] [args]")
-    print()
-    print("Subcommands:")
-    print("  (no args)             Print reference dimensionless numbers to stdout")
-    print("  list                   List available case combos")
-    print("  help                   Print this message")
-    print("  gen_nek5000_case FILE  Generate Nek5000 CASE file (Fortran, gas/liquid)")
-    print("  gen_nekRS_case FILE    Generate NekRS case.hpp file (C++, liquid/gas)")
-    print()
-    print("Options:")
-    print("  --case CASE            Select combo (default: FLiBe/Ar)")
-    print()
-    print("Available combos:")
-    for k in sorted(case_lookup):
-        print(f"  {k}")
 
 def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
     if d is None:
@@ -124,7 +98,6 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
             (Re >= 3.73*(Mo*(-0.209))) and (Re <= 3.1*(Mo**(-0.25)))
     Brauer71 = 2.0 + 9.45e-4*(Re**1.07)*(Sc**0.888)
     HongBrauer84 = 2.0 + 1.5e-2*(Re**0.89)*(Sc**0.7)
-
     print(f"""
 ! {liquid.name}/{gas.name}/{d*1000:.2f}mm/{u:.2f} m/s
       real Re, Fr, We, Sc, Pe
@@ -238,48 +211,47 @@ static caseinfo_t info;
     with open(filepath, "w") as f:
         f.write(content)
 
-if __name__ == "__main__":
-    args = sys.argv[1:]
-    case_name = "FLiBe/Ar"
-    # Parse --case
-    if "--case" in args:
-        idx = args.index("--case")
-        if idx + 1 >= len(args):
-            print("Error: --case requires a value")
-            sys.exit(1)
-        case_name = args[idx + 1]
-        args = args[:idx] + args[idx+2:]
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate dimensionless number parameter files for bubble-nekRS.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Available combos: " + ", ".join(sorted(case_lookup))
+    )
+    parser.add_argument("--case", default="FLiBe/Ar", choices=list(case_lookup.keys()),
+                        help="Select combo (default: FLiBe/Ar)")
 
-    subcommand = None
-    sub_args = []
-    if len(args) > 0:
-        subcommand = args[0]
-        sub_args = args[1:]
+    subparsers = parser.add_subparsers(dest="command", help="Subcommands")
 
-    if subcommand is None:
-        # Default behavior: print reference values
-        combo = get_combo_by_case(case_name)
+    # Default behavior when no subcommand given: print reference values
+    # We handle this by checking args.command after parse_args
+    # But argparse subparsers make the subcommand optional only if we don't set required=True
+    # Actually we want subcommand optional. Let's not set required.
+
+    subparsers.add_parser("list", help="List available case combos")
+    subparsers.add_parser("help", help="Print usage")
+
+    gen_5000 = subparsers.add_parser("gen_nek5000_case", help="Generate Nek5000 CASE file (Fortran, gas/liquid)")
+    gen_5000.add_argument("file", help="Output CASE file path")
+
+    gen_nekRS = subparsers.add_parser("gen_nekRS_case", help="Generate NekRS case.hpp file (C++, liquid/gas)")
+    gen_nekRS.add_argument("file", help="Output case.hpp file path")
+
+    args = parser.parse_args()
+
+    combo = get_combo_by_case(args.case)
+
+    if args.command is None:
         calc_dimensionless_numbers(*combo)
-    elif subcommand == "list":
+    elif args.command == "list":
         print("Available combos:")
         for k in sorted(case_lookup):
             print(f"  {k}")
-    elif subcommand == "help":
-        print_help()
-    elif subcommand == "gen_nek5000_case":
-        if len(sub_args) < 1:
-            print("Usage: gen_nek5000_case <CASE file>")
-            sys.exit(1)
-        combo = get_combo_by_case(case_name)
-        write_nek5000_case(sub_args[0], *combo)
-    elif subcommand == "gen_nekRS_case":
-        if len(sub_args) < 1:
-            print("Usage: gen_nekRS_case <case.hpp file>")
-            sys.exit(1)
-        combo = get_combo_by_case(case_name)
-        write_nekRS_case(sub_args[0], *combo)
-    else:
-        # Unknown subcommand; treat as file name for default? No, print help.
-        print(f"Unknown subcommand: {subcommand}")
-        print_help()
-        sys.exit(1)
+    elif args.command == "help":
+        parser.print_help()
+    elif args.command == "gen_nek5000_case":
+        write_nek5000_case(args.file, *combo)
+    elif args.command == "gen_nekRS_case":
+        write_nekRS_case(args.file, *combo)
+
+if __name__ == "__main__":
+    main()
