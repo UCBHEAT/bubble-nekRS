@@ -171,6 +171,43 @@ def write_nek5000_case(filepath, liquid, gas, sigma, d, u):
       parameter (muratio = nuratio*rhoratio)
       parameter (diffratio = {diffratio:.4g})
       parameter (solubilityratio = {solubilityratio:.4g})
+
+      ! Field mappings.
+      integer ifld_v, ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr, ifld_c
+      parameter (ifld_v = 1)    ! velocity
+      parameter (ifld_cls = 2)  ! temperature = conservative level set
+      parameter (ifld_tls = 3)  ! scalar01 = traditional level set
+      parameter (ifld_clsr = 4) ! scalar02 = CLS internal re-distancing
+      parameter (ifld_tlsr = 5) ! scalar03 = TLS internal re-distancing
+      parameter (ifld_c = 6)    ! scalar04 = concentration
+
+      ! User parameter mappings
+      integer iprm_tlsr_freq, iprm_clsr_freq, iprm_pord, iprm_cst_ver,
+     $    iprm_sinkmode, iprm_sourcemode
+      parameter (iprm_tlsr_freq = 1) ! uparam01 = TLS redistancing freq
+      parameter (iprm_clsr_freq = 2) ! uparam02 = CLS redistancing freq
+      parameter (iprm_pord = 3)      ! uparam03 = p extrapolation order
+      parameter (iprm_cst_ver = 4)   ! uparam04 = CST version
+      parameter (iprm_sinkmode = 5)  ! uparam04 = sink term mode
+      parameter (iprm_sourcemode = 6)! uparam04 = source term mode
+
+      ! Set a reasonable sink strength. This can be estimated from a
+      ! target c_bubble:
+      !   bubble_sink_out = bubble_interface_in
+      !   sink_str * V * c_bubble_target = A * MTC *
+      !                                    (c_bulk - H*c_bubble_target)
+      !   sink_str = (A/V) * MTC * (c_bulk/c_bubble_target - H)
+      ! For 2D, area/volume = pi*d/(pi*d^2/4) = 4/d^2 = 4.
+      !   sink_str = 4 * (~200) * (1/c_bubble_target - 0.0028)
+      !            = ~80 if targetting c_bubble ~ 10
+      real sink_str
+      parameter (sink_str = 0.05)
+
+      ! Weaken liquid bulk source by this arbitrary ratio, or else the bulk
+      ! returns to c=1 too fast and we don't visualize the wake of depleted
+      ! concentration that the bubble leaves behind.
+      real source_str
+      parameter (source_str = 0.05)
 """
     with open(filepath, "w") as f:
         f.write(content)
