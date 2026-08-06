@@ -1,7 +1,7 @@
 [GENERAL]
 #startFrom = restart.fld
 stopAt = endTime
-endTime = 100.0
+endTime = 30.0
 timeStepper = bdf2
 writeControl = runTime
 writeInterval = 0.5
