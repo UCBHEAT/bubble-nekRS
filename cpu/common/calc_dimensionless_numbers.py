@@ -114,14 +114,20 @@ def calc_dimensionless_numbers(liquid, gas, sigma, d, u):
         # Calculate Kolmogorov scale
         epsilon = u*g
         lambda_k = ((liquid.nu**3)/epsilon)**0.25
-        lambda_kd = ((liquid.D**3)/epsilon)**0.25
+        gll_per_el = 6
+        t0 = d/u
+        target_cfl = 0.5
+        dx = 0.5*lambda_k
+        element_density = d/dx/gll_per_el
         print(f"""
       ! u from simple calc = {u2:.4g}
       ! Bubble rise specific turbulent KE dissipation rate = {epsilon:.4g} W/kg
       ! Kolmogorov scale lambda_k = {lambda_k*10**3:.4g} mm
-      ! Mass transfer Kolmogorov scale lambda_kd = {lambda_kd*10**3:.4g} mm
-      ! At polynomial order 7, {d/lambda_kd/8:.4g} elements per non-dim length unit
-      ! 2x4x2 -> {d/lambda_kd/4:.0f}x{d/lambda_kd/2:.0f}x{d/lambda_kd/4:.0f}""")
+      ! At polynomial order {gll_per_el-1}, dx = {dx*10**3:.4g} mm: {element_density:.4g} elements per non-dim length unit
+      ! 2x4x2 -> {2*element_density:.0f}x{4*element_density:.0f}x{2*element_density:.0f} ({16*(element_density**3):.0f} elements, {(2*element_density*gll_per_el + 1)*(4*element_density*gll_per_el + 1)*(2*element_density*gll_per_el + 1):.0f} GLL points)
+      ! Max delta_t (advection) = {target_cfl*dx/u:.4g} s = {target_cfl*dx/u/t0:.4g} non-dim
+      ! Max delta_t (diffusion) = {target_cfl*(dx**2)/liquid.D:.4g} s = {target_cfl*(dx**2)/liquid.D/t0:.4g} non-dim
+      ! Cell Peclet number = {u*dx/liquid.D:.4g}""")
 
 for combo in combos:
     calc_dimensionless_numbers(*combo)
