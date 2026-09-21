@@ -97,12 +97,12 @@ c-----------------------------------------------------------------------
 
       ! Compute dpdy contribution.
       !rhol = 1.0
-      !dpdy = (1./Fr)*rhol/vtrans(ix,iy,iz,e,1)
-      dpdy = (1./Fr)*fh/vtrans(ix,iy,iz,e,1)
+      !dpdy = (1./(Fr*Fr))*rhol/vtrans(ix,iy,iz,e,1)
+      dpdy = (1./(Fr*Fr))*fh/vtrans(ix,iy,iz,e,1)
 
       ! Set output variables.
       ffx = sfx + svvx
-      ffy = sfy + svvy - 1.0/Fr + dpdy
+      ffy = sfy + svvy - 1.0/(Fr*Fr) + dpdy
 
       return
       end
