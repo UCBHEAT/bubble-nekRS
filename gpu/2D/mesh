@@ -3,4 +3,6 @@ set -euo pipefail
 
 echo "2d-dns.box" | genbox
 mv box.re2 2d-dns.re2
-echo -e "2d-dns\n" | genmap
+# No genmap: NekRS builds connectivity from the .re2 itself and never reads
+# .map/.ma2. genmap at MAXNEL=13000000 has a ~24GB static BSS and segfaults
+# at startup on login nodes (memory cgroup), so skip it entirely.
