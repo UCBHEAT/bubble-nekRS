@@ -1,0 +1,11 @@
+-3                     spatial dimension (will create box.re2)
+4                      number of fields (vel, tls, cls, c)
+Box 1
+-2500 -5000 -1         Nelx Nely Nelz (neg. for auto distribute nodes)
+-2 2 1                 x0 x1 node_ratio
+0 8 1                  y0 y1 node_ratio
+-0.0016 0.0016 1       z0 z1 node_ratio (width 1/2500 of x width)
+P  ,P  ,P  ,P  ,sym,symvel boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,I  ,I  tls boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,I  ,I  cls boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,I  ,I  c boundary conditions (L, R, bottom, T, back, F)

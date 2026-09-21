@@ -1,0 +1,96 @@
+userSections = tlsr, clsr, lvlset
+
+[MESH]
+# 2500 x 5000 x 1
+# can't use hrefine because that would refine in the z direction too
+# Kolmogorov scale = 67 um
+# Diffusion boundary layer scale = 29 um
+# Desired GLL points within diffusion boundary layer = ~50
+# Target mesh resolution = (29 um)/50 = 0.6 um
+# GLL points per element at poly ord 7 = 8
+# -> (3.1 mm*4)/(0.6 um)/8 = 2583
+
+[GENERAL]
+# Uncomment to debug per-field internal iterations.
+#verbose = true
+# Uncomment to resume from a checkpoint.
+#startFrom = startup.fld
+
+polynomialOrder = 7
+
+stopAt = endTime
+endTime = 30
+dt = 1e-4 # Nek5000
+timeStepper = tombo2
+checkpointControl = simulationTime
+checkpointInterval = 0.5
+
+scalars = tls, cls, c
+
+[PROBLEMTYPE]
+equation = navierStokes+variableViscosity
+
+[FLUID VELOCITY]
+boundaryTypeMap = none
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+
+[FLUID PRESSURE]
+residualTol = 1e-8 # Nek5000
+#residualProj = yes # does not exist in nekRS
+#preconditioner = semg_amg_hypre
+#        Value semg_amg_hypre is not recognized!
+#                Valid values are:
+#                        none
+#                        jac
+#                        semfem
+#                        femsem
+#                        pmg
+#                        multigrid
+#                        additive
+#                        multiplicative
+
+[SCALAR TLS]
+# TLS (traditional level set), domain: (-infty, infty)
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR CLS]
+# CLS (conservative level set), domain: [0, 1]
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR C]
+# Species concentration
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+#regularization = svv+scalingCoeff=1.0+filterPower=2.0
+# Nek5000 defaults
+regularization = svv+scalingCoeff=0.1+filterPower=2.0
+
+[TLSR]
+boundaryTypeMap = none
+solveFrequency = 1e-2 # Nek5000
+regularization = svv+scalingCoeff=1.0+filterPower=6.0
+residualTol = 1e-8
+targetCFL = 0.4
+maximumSteps = 200
+
+[CLSR]
+boundaryTypeMap = none
+solveFrequency = 1e-3 # Nek5000
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+targetCFL = 0.2
+maximumSteps = 20
+
+[LVLSET]
+interfaceWidthFactor = 1.5
