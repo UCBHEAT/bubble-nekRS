@@ -23,7 +23,7 @@ polynomialOrder = 5 # full-run test: N=7 p-GMRES stagnated at 25% from step1; tw
 stopAt = numSteps
 numSteps = 300
 endTime = 30
-dt = 1e-5 # DIAGNOSTIC 10x smaller: is full-mesh blowup CFL-limited?
+dt = 5e-5 # bisect: 1e-5 stable (CFL 0.013 x300), 1e-4 diverges step 14
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkpointInterval = 0.5
