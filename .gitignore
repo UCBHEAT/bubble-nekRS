@@ -10,3 +10,4 @@ s.bin
 *.msh
 *.re2
 *.ma2
+gpu/2d-dns-sm/
