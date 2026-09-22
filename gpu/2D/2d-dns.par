@@ -16,7 +16,6 @@ userSections = tlsr, clsr, lvlset
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
-startFrom = restart.fld
 
 polynomialOrder = 5 # full-run test: N=7 p-GMRES stagnated at 25% from step1; twin proves N=5
 
