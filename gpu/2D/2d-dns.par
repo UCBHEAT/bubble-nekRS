@@ -92,7 +92,7 @@ solveFrequency = 1e-3 # Nek5000
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 targetCFL = 0.2
-maximumSteps = 20
+maximumSteps = 250
 
 [LVLSET]
-interfaceWidthFactor = 1.5
+interfaceWidthFactor = 15
