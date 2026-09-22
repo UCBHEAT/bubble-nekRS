@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "bubble.box" | genbox
+mv box.re2 bubble.re2
+echo -e "bubble\n" | genmap

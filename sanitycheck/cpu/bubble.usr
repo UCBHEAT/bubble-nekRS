@@ -1,0 +1,321 @@
+      include "experimental/lvlSet.f"
+      include "experimental/lserrors.f"
+      include "../common/species.f"
+c-----------------------------------------------------------------------
+      subroutine uservp(ix,iy,iz,eg)
+      ! Set variable properties.
+      ! Note that this subroutine is not called by external solvers such
+      ! as HYPRE!
+      implicit none
+      integer ix,iy,iz,eg,el
+     
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+      include 'NEKUSE'
+
+      real, external :: species_diff
+      real psi
+      integer icalld
+      save icalld
+      data icalld /0/
+
+      el = gllel(eg)
+
+      if (ifield.eq.ifld_v) then
+        psi = t(ix,iy,iz,el,ifld_cls-1)
+        psi = max(0.0,psi)
+        psi = min(1.0,psi)
+        utrans = (1.0-psi)*rhoratio + psi
+        udiff = ((1.0-psi)*muratio + psi)/Re
+        if(istep.le.2)then
+          vtrans0(ix,iy,iz,el) = utrans
+        else
+          vtrans0(ix,iy,iz,el) = rhoratio
+        endif
+      elseif (ifield.eq.ifld_c) then
+        utrans = 1.0 ! ignore mass, c is a volumetric value
+        udiff = species_diff(ix, iy, iz, el)
+      else
+        utrans = 1.0
+        udiff = 1e-10 ! must be tiny for hyperbolic equations
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf(ix,iy,iz,eg)
+      ! Set acceleration (not force!) for the source term in the
+      ! velocity equation.
+      implicit none
+      integer ix,iy,iz,eg,e
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+      include 'NEKUSE'
+
+      real sfx,sfy,sfz
+
+      real svvx,svvy,svvz
+
+      real sffx,sffy
+
+      real voll, volg
+      real rhol, rhog
+      integer icalld
+      save icalld
+      data icalld /0/
+      real fh
+      save fh
+      real dpdy
+      real enclosedVol
+
+      e = gllel(eg)
+
+      sfx = 0.0
+      sfy = 0.0
+      sfz = 0.0
+      svvx = 0.0
+      svvy = 0.0
+      svvz = 0.0
+
+      if(icalld.eq.0)then
+        volg = enclosedVol(t(1,1,1,1,ifld_cls-1),-1)
+        voll = enclosedVol(t(1,1,1,1,ifld_cls-1),1)
+        rhol = 1.0
+        rhog = rhoratio
+        fh = (rhol*voll + rhog*volg)/(voll+volg)
+        icalld = 1
+      endif
+
+      ! Compute surface tension contribution (sfx, sfy, sfz).
+      call surfacetension(ix,iy,iz,e,1./We,sfx,sfy,sfz)
+      
+      ! Compute SVV contribution (svvx, svvy, svvz).
+      call svv_fluid(ix,iy,iz,e,svvx,svvy,svvz)
+
+      ! Compute dpdy contribution.
+      !rhol = 1.0
+      !dpdy = (1./(Fr*Fr))*rhol/vtrans(ix,iy,iz,e,1)
+      dpdy = (1./(Fr*Fr))*fh/vtrans(ix,iy,iz,e,1)
+
+      ! Set output variables.
+      ffx = sfx + svvx
+      ffy = sfy + svvy - 1.0/(Fr*Fr) + dpdy
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq(ix, iy, iz, eg)
+      ! Set source term for all passive scalar equations.
+      implicit none
+      integer ix, iy, iz, eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+      include 'NEKUSE'
+
+      integer el
+      real, external :: species_src
+
+      el = gllel(eg)
+      
+      qvol = 0.0
+      avol = 0.0
+
+      ! This function checks ifield internally.
+      call limit_cls(ix, iy, iz, el)
+
+      if (ifield.eq.ifld_c) then
+        ! Add accumulation and CST terms.
+        qvol = species_src(ix, iy, iz, el)
+        ! Add artificial source and sink terms to drive quasi-
+        ! steady-state equilibriation of MTC & Sherwood number.
+        call add_artificial_srcsnk(ix, iy, iz, el, avol, qvol)
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric(ix, iy, iz, eg)
+      ! Set up boundary conditions. This subroutine is called once per
+      ! field (ifield), per element (eg), per GLL point (ix, iy, iz).
+      implicit none
+      integer ix, iy, iz, eg
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+      include 'NEKUSE'
+
+      real, external :: heaviside
+      real signed_distance
+
+      if (ifield.eq.ifld_v) then
+        ux = 0.0
+        uy = 0.0
+        uz = 0.0
+      elseif (ifield.eq.ifld_cls .or. ifield.eq.ifld_clsr) then
+        ! Equation for a circle centered at (0, 1) of radius 0.5.
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+
+        ! Setting temp means setting a Dirichlet (fixed-value)
+        ! constraint, and is unrelated to whether the current field
+        ! (ifield) is the temperature field.
+        !
+        ! CLS fields should be initialized to 0 inside the bubble,
+        ! 1 outside the bubble.
+        temp = heaviside(ix, iy, iz, gllel(eg), signed_distance, 0.0)
+      elseif (ifield.eq.ifld_c) then
+        signed_distance = sqrt(x**2.0+(y-1.0)**2.0) - 0.5
+        ! Concentration field should be initialized to c_initial
+        ! inside the bubble, 1 outside the bubble.
+        !
+        ! c_initial = (1%)1/H to speed up equilibriation time.
+        temp = heaviside(ix, iy, iz, gllel(eg), -signed_distance, 0.0)
+     $      * (0.01*solubilityratio - 1) + 1
+      endif
+
+      ! TLS fields are derived from CLS and do not need initialization.
+      
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk()
+      ! User hook that is called every timestep.
+      ! Despite the naming, it isn't only called on checkpoints!
+      implicit none
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CASE'
+
+      integer ntot, i
+      integer ntdump ! checkpoint counter
+      common /rdump/ ntdump
+
+      real, external :: glmax, glmin, glsum, ls_volerr
+      real, save :: cls_initial(lx1*ly1*lz1*lelv),
+     $              tls_initial(lx1*ly1*lz1*lelv)
+      
+      ntot = lx1*ly1*lz1*nelv
+
+      ! Save initial state and set up file handles.
+      if (istep.eq.0) then
+        call copy(cls_initial,t(1,1,1,1,ifld_cls-1), ntot)
+        call copy(tls_initial,t(1,1,1,1,ifld_tls-1), ntot)
+        do i=1,ntot
+          if (tls_initial(i).ge.0.0) then
+            tls_initial(i) = 1.0
+          else
+            tls_initial(i) = 0.0
+          endif
+        enddo
+      endif
+
+      ! Perform pressure extrapolation.
+      block
+        integer pord
+        pord = int(uparam(iprm_pord))
+        call extrappr(prext, pr, prlag(1,1,1,1,1), prlag(1,1,1,1,2),
+     $                pord)
+      endblock
+
+      ! Perform re-distancing.
+      block
+        real ntlsr, nclsr
+        ntlsr = uparam(iprm_tlsr_freq) ! freq of TLS re-distancing
+        nclsr = uparam(iprm_clsr_freq) ! freq of CLS re-distancing
+        call LS_default_driver(ntlsr, nclsr)
+      endblock
+
+      ! Compute Sherwood number (only at checkpoints, to save
+      ! compute).
+      if (ifoutfld) then
+      block
+        real, external :: get_sink
+        real delta(lx1, ly1, lz1, lelv), interface_area, MTC, Sh
+        real c_iface, c_bulk, ndot
+        call deltals(t(1,1,1,1,ifld_cls-1), delta)
+        call col2(delta, bm1, ntot)
+        interface_area = glsum(delta, ntot)
+
+        c_iface = 0.0
+        c_bulk = 1.0
+        ndot = get_sink()
+        MTC = ndot/(interface_area*(c_bulk-c_iface))
+        Sh = MTC*Pe
+
+        ! Write output on the I/O master.
+        if (nio.eq.0) then
+        block
+          ! Paraview wants a file per timestep in order to
+          ! interpret data as a time series that can be treated
+          ! alongside the Nek5000 checkpoints.
+          character(len=99) filename
+          integer fd
+          write(filename,*) ntdump ! convert to string
+          filename = "data." // trim(adjustl(filename)) // ".csv"
+          open(newunit=fd, file=filename)
+          write(*,*) "MTC and Sh", MTC, Sh
+          write(fd,*) "time,interface_area,ndot,MTC,Sh"
+          write(fd,'(*(G0.6,:,","))')
+     $        time, interface_area, ndot, MTC, Sh
+          close(fd)
+        endblock
+        endif
+      endblock
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3() ! initialize any case/user-specific data
+      implicit none
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'SVV'
+      include 'CASE'
+
+      integer ifdebug, ifixCLSbdry, nsteps_cls, nsteps_tls
+      real farfield, eps, dt_cls_in, dt_tls_in
+
+      ! Initialize level set-specific data.
+      eps = 3.0/(lx1-1.0)
+      ifdebug = 0
+      ifixCLSbdry = 0
+      farfield = 1.0
+      call ls_init(ifld_cls, ifld_clsr, ifld_tls, ifld_tlsr,
+     $             eps, ifdebug, ifixCLSbdry, farfield)
+
+      ! SVV parameters for velocity.
+      svv_c0(1) = 1.0
+      svvcut(1) = (lx1-1.0)/2.0
+
+      ! SVV parameters for CLSr and TLSr.
+      svv_c0(ifld_clsr) = 1.0
+      svvcut(ifld_clsr) = (lx1-1.0)/2.0
+      svv_c0(ifld_tlsr) = 1.0
+      svvcut(ifld_tlsr) = (lx1-1.0)/3.0
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      ! The regex in mkuserfile to auto-add unused user hooks is broken
+      ! (it thinks usrdat is present because the regex "subroutine
+      ! usrdat" matches on "subroutine usrdat3").
+      subroutine usrdat
+      return
+      end
+
+      ! The default version of this calls userqtl_scig, but in the
+      ! original bubbleRise/Dodd/2D case we had an empty userqtl.
+      subroutine userqtl ! set thermal divergence
+      return
+      end
+
+      ! Note we don't provide a userbc because it isn't called for
+      ! periodic boundaries. All of the boundaries in the .box file for
+      ! this case are assigned as periodic.
