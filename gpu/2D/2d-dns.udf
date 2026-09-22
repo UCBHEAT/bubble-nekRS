@@ -17,6 +17,10 @@ void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 
 void UDF_Setup0(MPI_Comm comm, setupAide &options)
 {
+    // The Ax/Helm autotuning benchmark sizes its random host vectors in int32
+    // (Np*Nelements*Nggeo overflows at 12.5M elems/24 ranks -> negative ->
+    // length_error in randomVector). There is no .par key for this in this fork.
+    options.setArgs("KERNEL AUTOTUNING", "FALSE");
     options.setArgs("FLUID PRESSURE RHO SPLITTING", "TRUE");
     options.setArgs("FLUID PRESSURE RHO SPLITTING FILTER", "TRUE");
     options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");

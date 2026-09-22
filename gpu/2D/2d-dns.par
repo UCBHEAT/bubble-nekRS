@@ -11,8 +11,8 @@ userSections = tlsr, clsr, lvlset
 # -> (3.1 mm*4)/(0.6 um)/8 = 2583
 
 [GENERAL]
-# Autotuning benchmark sizes overflow int32 at 12.5M elements (520833 elem/rank x Np x Nggeo)
-kernelAutotuning = false
+# NOTE: kernel autotuning is disabled in UDF_Setup0 (2d-dns.udf): no .par key exists
+# for it in this fork, and the Ax benchmark int32-overflow vector sizes at this mesh.
 # Uncomment to debug per-field internal iterations.
 #verbose = true
 # Uncomment to resume from a checkpoint.
