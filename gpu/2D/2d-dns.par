@@ -84,7 +84,7 @@ solveFrequency = 1e-2 # Nek5000
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
 targetCFL = 0.4
-maximumSteps = 200
+maximumSteps = 400
 
 [CLSR]
 boundaryTypeMap = none
