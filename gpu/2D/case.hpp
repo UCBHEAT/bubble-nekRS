@@ -4,7 +4,7 @@ static double Sc = 1150;
 static double Pe = Re*Sc;
 static double Fr = 1.633;
 static double We = 2.667;
-static double rhoratio = 40; // DIAGNOSTIC: 3D-twin value; real case 1/0.0002709 (3691:1) diverges at step 4
+static double rhoratio = 1.0/0.0002709;
 static double muratio = 148.1;
 static double nuratio = muratio/rhoratio;
 
