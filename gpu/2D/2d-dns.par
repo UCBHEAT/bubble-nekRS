@@ -18,7 +18,7 @@ userSections = tlsr, clsr, lvlset
 # Uncomment to resume from a checkpoint.
 #startFrom = startup.fld
 
-polynomialOrder = 7
+polynomialOrder = 5 # full-run test: N=7 p-GMRES stagnated at 25% from step1; twin proves N=5
 
 stopAt = endTime
 endTime = 30
