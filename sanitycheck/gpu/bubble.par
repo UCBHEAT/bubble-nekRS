@@ -26,7 +26,6 @@ residualTol = 1e-4
 
 [SCALAR TLS]
 # TLS (traditional level set), domain: (-infty, infty)
-boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
@@ -34,7 +33,6 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR CLS]
 # CLS (conservative level set), domain: [0, 1]
-boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
@@ -42,14 +40,12 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR C]
 # Species concentration
-boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
 residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
-boundaryTypeMap = none
 solveFrequency = 0.1
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
@@ -57,7 +53,6 @@ targetCFL = 0.4
 maximumSteps = 400
 
 [CLSR]
-boundaryTypeMap = none
 solveFrequency = 0.01
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
