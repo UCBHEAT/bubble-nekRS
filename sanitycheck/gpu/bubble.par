@@ -17,7 +17,6 @@ scalars = tls, cls, c
 equation = navierStokes+variableViscosity
 
 [FLUID VELOCITY]
-boundaryTypeMap = none
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 
