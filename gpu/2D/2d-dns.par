@@ -20,12 +20,12 @@ userSections = tlsr, clsr, lvlset
 polynomialOrder = 5 # full-run test: N=7 p-GMRES stagnated at 25% from step1; twin proves N=5
 
 stopAt = numSteps
-numSteps = 300
+numSteps = 3300
 endTime = 30
-dt = 3e-5 # bisect CFL cap: 1e-5 clean, 5e-5 diverged step 20
+dt = 1e-5 # ONLY stable dt at full mesh so far (3e-5 diverged step 98)
 timeStepper = tombo2
 checkpointControl = simulationTime
-checkpointInterval = 0.5
+checkpointInterval = 0.02
 
 scalars = tls, cls, c
 
