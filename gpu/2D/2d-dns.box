@@ -4,7 +4,7 @@ Box 1
 -2500 -5000 -1         Nelx Nely Nelz (neg. for auto distribute nodes)
 -2 2 1                 x0 x1 node_ratio
 0 8 1                  y0 y1 node_ratio
--0.8 0.8 1          z0 z1 (was +/-0.0016 -> 2:1 element aspect; 1.6 makes it 1:1. Flow is z-invariant (was +/-0.0016: 500:1 cell aspect ruined pressure solver; z-invariant periodic slab makes any thickness equivalent) periodic so physics unchanged)
+-0.0008 0.0008 1      z0 z1 (unit aspect vs dx=1.6e-3; was +/-0.0016 = 2:1. z-invariant periodic slab, physics unchanged)
 P  ,P  ,P  ,P  ,P  ,P   boundary conditions (L, R, bottom, T, back, F)
 P  ,P  ,P  ,P  ,P  ,P  tls boundary conditions (L, R, bottom, T, back, F)
 P  ,P  ,P  ,P  ,P  ,P  cls boundary conditions (L, R, bottom, T, back, F)
