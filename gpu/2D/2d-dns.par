@@ -33,6 +33,7 @@ scalars = tls, cls, c
 equation = navierStokes+variableViscosity
 
 [FLUID VELOCITY]
+boundaryTypeMap = none
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 
@@ -52,6 +53,7 @@ residualTol = 1e-8 # Nek5000
 #                        multiplicative
 
 [SCALAR TLS]
+boundaryTypeMap = none
 # TLS (traditional level set), domain: (-infty, infty)
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
@@ -59,6 +61,7 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR CLS]
+boundaryTypeMap = none
 # CLS (conservative level set), domain: [0, 1]
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
@@ -66,6 +69,7 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR C]
+boundaryTypeMap = none
 # Species concentration
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
@@ -75,6 +79,7 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=0.1+filterPower=2.0
 
 [TLSR]
+boundaryTypeMap = none
 solveFrequency = 1e-2 # Nek5000
 regularization = svv+scalingCoeff=1.0+filterPower=6.0
 residualTol = 1e-8
@@ -82,6 +87,7 @@ targetCFL = 0.4
 maximumSteps = 200
 
 [CLSR]
+boundaryTypeMap = none
 solveFrequency = 1e-3 # Nek5000
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
