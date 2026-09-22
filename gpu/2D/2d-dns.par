@@ -38,7 +38,7 @@ regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 
 [FLUID PRESSURE]
-residualTol = 1e-8 # Nek5000
+residualTol = 1e-4 # match working 3D twin; 1e-8 stagnates GMRES (iter 500 every step)
 #residualProj = yes # does not exist in nekRS
 #preconditioner = semg_amg_hypre
 #        Value semg_amg_hypre is not recognized!
