@@ -54,7 +54,10 @@ run_chunks() {
         [ $first -lt $n ] || break
         local dev=$((gpu % ngpu))
         gpu=$((gpu + 1))
-        VTK_DEFAULT_EGL_DEVICE_INDEX=$dev pvbatch $script $mode $dir $first $last "$label" \
+        # pvbatch cannot take an empty argument, so the label goes to frames only.
+        local args=($mode $dir $first $last)
+        if [ $mode = frames ]; then args+=("$label"); fi
+        VTK_DEFAULT_EGL_DEVICE_INDEX=$dev pvbatch $script "${args[@]}" \
             > $dir/animate-logs/$mode-$first.log 2>&1 &
     done
 }
