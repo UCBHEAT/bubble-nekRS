@@ -1,4 +1,4 @@
-userSections = tlsr, clsr, lvlset
+userSections = tlsr, clsr, lvlset, casedata
 
 [GENERAL]
 # Uncomment to debug per-field internal iterations.
@@ -11,7 +11,8 @@ polynomialOrder = 7
 
 stopAt = endTime
 endTime = 30
-# Same dt for every mesh so only the spatial resolution changes between runs.
+# Same dt on the 2.25x, 1.5x and 1x meshes so only the spatial resolution
+# changes between them; setup-runs.sh sets a smaller dt for finer meshes.
 # With the physical density ratio, larger dt gives spurious gas-core velocity
 # spikes near t = 0.32 on the 2.25x mesh (2.25x blew up at t = 0.72 with
 # dt = 4e-4; dt = 2e-4 survives the spike but Sh differs by 10% at t = 0.4).
@@ -61,12 +62,16 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 # developer (no targetCFL, maximumSteps, or SVV); boundaryTypeMap is
 # inherited from SCALAR TLS and SCALAR CLS.
 [TLSR]
-solveFrequency = 0.01 # every 100 timesteps
+solveFrequency = 0.01 # every 100 steps at dt = 1e-4
 residualTol = 1e-8
 
 [CLSR]
-solveFrequency = 0.001 # every 10 timesteps
+solveFrequency = 0.001 # every 10 steps at dt = 1e-4
 residualTol = 1e-8
 
 [LVLSET]
 interfaceWidthFactor = 1.5
+
+[CASEDATA]
+# Sherwood number statistics interval (data.csv), independent of checkpoints.
+sampleInterval = 0.1

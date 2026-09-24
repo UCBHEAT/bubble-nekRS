@@ -10,6 +10,12 @@
 #include "case.hpp"
 #include "customhooks.hpp"
 
+// Sherwood number statistics are sampled every sampleInterval ([CASEDATA]
+// sampleInterval in the .par, default checkpointInterval) rather than at
+// checkpoints, so the finest meshes can checkpoint far less often.
+static double sampleInterval = 0.0;
+static int sampleCount = 1;
+
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
     kernelInfo.define("p_PI") = M_PI;
@@ -68,6 +74,15 @@ void UDF_Setup()
     info.cumulative_c_sink = 0.0;
     info.cumulative_dt = 0.0;
     platform->options.getArgs("DT", info.dt);
+
+    // Same bookkeeping as nekRS's checkpointStep so restarts stay on the grid.
+    platform->options.getArgs("CHECKPOINT INTERVAL", sampleInterval);
+    platform->par->extract("casedata", "sampleinterval", sampleInterval);
+    double startTime = 0.0;
+    platform->options.getArgs("START TIME", startTime);
+    if (startTime > 0) {
+        sampleCount = startTime/sampleInterval + 1;
+    }
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
@@ -90,7 +105,8 @@ void UDF_ExecuteStep(double time, int tstep)
         info.cumulative_dt += info.dt;
     }
 
-    if (nrs->checkpointStep) {
+    if (time > sampleCount*sampleInterval) {
+        sampleCount++;
         dfloat mdot = info.cumulative_c_sink / info.cumulative_dt;
         info.cumulative_c_sink = 0.0;
         info.cumulative_dt = 0.0;
@@ -130,5 +146,5 @@ void UDF_ExecuteStep(double time, int tstep)
             f << std::endl;
             f.close();
         } // if (platform->comm.mpiRank() == 0)
-    } // if (nrs->checkpointStep)
+    } // if (time > sampleCount*sampleInterval)
 }
