@@ -4,7 +4,7 @@
 # makes ~/answinter26/Sc1/{2.25x,1.5x,1x} with the case files and .re2 mesh.
 # Other meshes are given as name:Nelx:dt:checkpointInterval, e.g.
 #   GENBOX=~/answinter26/tools/genbox-maxnel1.5M ./setup-runs.sh ~/answinter26/Sc1 \
-#       0.667x:40:5e-5:1.0 0.444x:60:2.5e-5:0.5 0.296x:90:1.25e-5:0.25
+#       0.667x:40:5e-5:0.5 0.444x:60:2.5e-5:0.5 0.296x:90:1.25e-5:0.25
 # (genbox must be built with MAXNEL >= Nelx*2*Nelx*Nelx).
 #
 # Resolutions are multiples of the Kolmogorov scale lambda_k = 0.0671 mm
