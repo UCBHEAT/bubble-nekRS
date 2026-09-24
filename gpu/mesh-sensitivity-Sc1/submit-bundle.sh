@@ -7,7 +7,11 @@
 #
 # The job environment follows $NEKRS_HOME/bin/nrsqsub_polaris. The batch
 # script is written to bundle.batch, the PBS log to nekRS_bundle.e<jobid>,
-# and each case's nekRS output to <dir>/logfile-<jobid>.
+# and each case's nekRS output to <dir>/logfile-<jobid>. Each case stops
+# with a checkpoint 5 minutes before the walltime runs out (BUBBLE_STOP_AT,
+# see bubble3d.udf), so prepare-restart.sh continues from where it stopped.
+# Nodes that fail a CUDA context check (gpucheck.cu) at the start of the job
+# are left out, and the case with the most nodes runs on that many fewer.
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
@@ -23,6 +27,9 @@ fi
 casename=bubble3d
 time=$1
 shift
+IFS=: read -r hh mm <<< "$time"
+walltime_s=$((10#$hh*3600 + 10#$mm*60))
+stop_margin=300
 gpu_per_node=4
 cores_per_numa=8
 
@@ -68,6 +75,10 @@ cat > $SFILE <<EOF
 #PBS -l place=scatter
 #PBS -k doe
 #PBS -j eo
+
+# bubble3d.udf ends each case cleanly, with a checkpoint, once the job is
+# within $stop_margin s of its walltime.
+export BUBBLE_STOP_AT=\$((\$(date +%s) + $walltime_s - $stop_margin))
 EOF
 cat >> $SFILE <<'EOF'
 
@@ -105,11 +116,37 @@ casename=$casename
 gpu_per_node=$gpu_per_node
 cores_per_numa=$cores_per_numa
 jitc_nthreads=$NEKRS_JITC_NTHREADS
+dirs=(${dirs[*]})
+nodes=(${nodes[*]})
 EOF
 cat >> $SFILE <<'EOF'
 jobid=${PBS_JOBID%%.*}
 bin=$NEKRS_HOME/bin/nekrs
-mapfile -t hosts < <(awk '!seen[$0]++' $PBS_NODEFILE)
+mapfile -t all_hosts < <(awk '!seen[$0]++' $PBS_NODEFILE)
+
+# Leave out nodes whose GPUs are missing or fail CUDA context creation; the
+# case with the most nodes then runs on fewer nodes.
+mpiexec -n ${#all_hosts[@]} -ppn 1 ./.gpucheck $gpu_per_node > gpucheck-$jobid 2>&1
+cat gpucheck-$jobid
+hosts=()
+for h in "${all_hosts[@]}"; do
+    if grep -q "^${h%%.*} OK" gpucheck-$jobid; then
+        hosts+=("$h")
+    fi
+done
+missing=$((${#all_hosts[@]} - ${#hosts[@]}))
+if [ $missing -gt 0 ]; then
+    big=0
+    for k in "${!nodes[@]}"; do
+        if [ ${nodes[k]} -gt ${nodes[big]} ]; then big=$k; fi
+    done
+    if [ ${nodes[big]} -le $missing ]; then
+        echo "$(date) $missing bad nodes, too few left to run"
+        exit 1
+    fi
+    nodes[big]=$((nodes[big] - missing))
+    echo "$(date) left out $missing bad nodes, ${dirs[big]} runs on ${nodes[big]} nodes"
+fi
 
 # run_case <dir> <index of first node> <number of nodes>
 run_case() {
@@ -135,15 +172,14 @@ run_case() {
     } > logfile-$jobid 2>&1
 }
 
-EOF
 first=0
 for k in "${!dirs[@]}"; do
-    echo "run_case ${dirs[k]} $first ${nodes[k]} &" >> $SFILE
+    run_case ${dirs[k]} $first ${nodes[k]} &
     first=$((first + nodes[k]))
 done
-cat >> $SFILE <<'EOF'
 wait
 echo "$(date) all cases done"
 EOF
 
+nvcc -O2 -o .gpucheck "$(dirname "$0")/gpucheck.cu"
 qsub -q $QUEUE $SFILE

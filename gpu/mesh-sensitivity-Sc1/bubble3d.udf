@@ -4,6 +4,8 @@
 
 #endif
 
+#include <ctime>
+
 #include "lvlSet.hpp"
 #include "util.hpp"
 
@@ -15,6 +17,20 @@
 // checkpoints, so the finest meshes can checkpoint far less often.
 static double sampleInterval = 0.0;
 static int sampleCount = 1;
+
+// The bubble position and velocity are sampled with the Sherwood number. The
+// domain is periodic, so the position is a circular mean: the angle of the
+// gas-weighted mean of exp(2 pi i (x - x0)/L) in each direction, as in
+// animate.py.
+static double domainLo[3];
+static double domainLength[3];
+static occa::memory o_trig; // cos and sin of 2 pi (x - x0)/L, for x, y and z
+
+// submit-bundle.sh sets BUBBLE_STOP_AT (seconds since the epoch) a few minutes
+// before the job's walltime runs out. Past it, the run ends after the next
+// step, which writes a checkpoint, by moving endTime the same way nekrs.upd
+// does, so a job doesn't lose the steps after its last regular checkpoint.
+static double stopAt = -1;
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
@@ -83,6 +99,38 @@ void UDF_Setup()
     if (startTime > 0) {
         sampleCount = startTime/sampleInterval + 1;
     }
+
+    if (const char* s = getenv("BUBBLE_STOP_AT")) {
+        stopAt = atof(s);
+    }
+
+    {
+        auto [x, y, z] = mesh->xyzHost();
+        const std::vector<dfloat>* xyz[3] = {&x, &y, &z};
+        double hi[3];
+        for (int d = 0; d < 3; d++) {
+            domainLo[d] = 1e300;
+            hi[d] = -1e300;
+            for (int n = 0; n < mesh->Nlocal; n++) {
+                domainLo[d] = std::min(domainLo[d], (double) (*xyz[d])[n]);
+                hi[d] = std::max(hi[d], (double) (*xyz[d])[n]);
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE, domainLo, 3, MPI_DOUBLE, MPI_MIN, platform->comm.mpiComm());
+        MPI_Allreduce(MPI_IN_PLACE, hi, 3, MPI_DOUBLE, MPI_MAX, platform->comm.mpiComm());
+
+        std::vector<dfloat> trig(6*nrs->fieldOffset, 0.0);
+        for (int d = 0; d < 3; d++) {
+            domainLength[d] = hi[d] - domainLo[d];
+            for (int n = 0; n < mesh->Nlocal; n++) {
+                const double theta = 2*M_PI*((*xyz[d])[n] - domainLo[d])/domainLength[d];
+                trig[(2*d)*nrs->fieldOffset + n] = cos(theta);
+                trig[(2*d + 1)*nrs->fieldOffset + n] = sin(theta);
+            }
+        }
+        o_trig = platform->device.malloc<dfloat>(trig.size());
+        o_trig.copyFrom(trig.data(), trig.size());
+    }
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
@@ -96,6 +144,20 @@ void UDF_ExecuteStep(double time, int tstep)
 
     lvlSet::solve(time);
 
+    if (stopAt > 0 && tstep % 20 == 0) {
+        int stop = platform->comm.mpiRank() == 0 && std::time(nullptr) >= stopAt;
+        MPI_Bcast(&stop, 1, MPI_INT, 0, platform->comm.mpiComm());
+        double endTime = -1;
+        platform->options.getArgs("END TIME", endTime);
+        if (stop && time + info.dt < endTime) {
+            platform->options.setArgs("END TIME", to_string_f(time + info.dt));
+            if (platform->comm.mpiRank() == 0) {
+                printf("BUBBLE_STOP_AT reached: stopping at t = %.6f\n", time + info.dt);
+            }
+            stopAt = -1;
+        }
+    }
+
     // Hard sink.
     {
         occa::memory o_cSink = platform->device.malloc<dfloat>(nrs->fieldOffset);
@@ -105,8 +167,14 @@ void UDF_ExecuteStep(double time, int tstep)
         info.cumulative_dt += info.dt;
     }
 
-    if (time > sampleCount*sampleInterval) {
-        sampleCount++;
+    // The last step (endTime or BUBBLE_STOP_AT) is sampled too, so the sink
+    // accumulated since the previous sample isn't lost; sherwood.py weights
+    // each row by the length of its interval.
+    const bool regularSample = time > sampleCount*sampleInterval;
+    if (regularSample || nrs->lastStep) {
+        if (regularSample) {
+            sampleCount++;
+        }
         dfloat mdot = info.cumulative_c_sink / info.cumulative_dt;
         info.cumulative_c_sink = 0.0;
         info.cumulative_dt = 0.0;
@@ -121,11 +189,37 @@ void UDF_ExecuteStep(double time, int tstep)
         dfloat mtc = mdot / total_area / c_bulk;
         dfloat sherwood_no = mtc*Pe;
 
+        // Gas-weighted bubble position and velocity, and the liquid mean velocity.
+        const auto comm = platform->comm.mpiComm();
+        occa::memory o_wg = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        occa::memory o_wl = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        bubbleWeights(info, o_psi, mesh->o_Jw, o_wg, o_wl);
+        const dfloat gas_volume = platform->linAlg->sum(mesh->Nlocal, o_wg, comm);
+        const dfloat liquid_volume = platform->linAlg->sum(mesh->Nlocal, o_wl, comm);
+        double center[3], ub[3], ul[3];
+        for (int d = 0; d < 3; d++) {
+            const dfloat cos_sum = platform->linAlg->innerProd(mesh->Nlocal, o_wg,
+                    o_trig.slice((2*d)*nrs->fieldOffset, mesh->Nlocal), comm);
+            const dfloat sin_sum = platform->linAlg->innerProd(mesh->Nlocal, o_wg,
+                    o_trig.slice((2*d + 1)*nrs->fieldOffset, mesh->Nlocal), comm);
+            double theta = atan2(sin_sum, cos_sum);
+            if (theta < 0) {
+                theta += 2*M_PI;
+            }
+            center[d] = domainLo[d] + domainLength[d]*theta/(2*M_PI);
+
+            const occa::memory o_Ud = fluid->o_U.slice(d*fluid->fieldOffset, mesh->Nlocal);
+            ub[d] = platform->linAlg->innerProd(mesh->Nlocal, o_wg, o_Ud, comm)/gas_volume;
+            ul[d] = platform->linAlg->innerProd(mesh->Nlocal, o_wl, o_Ud, comm)/liquid_volume;
+        }
+
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
             printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
             printf("total_area=%.4g c_bulk=%.4f\n", total_area, c_bulk);
+            printf("gas_volume=%.4g center=(%.4f, %.4f, %.4f) rise_velocity=%.4g\n",
+                    gas_volume, center[0], center[1], center[2], ub[1] - ul[1]);
             printf("----------------------------------------\n");
 
             // Write CSV file
@@ -135,7 +229,8 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk" << std::endl;
+                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,gas_volume,x_c,y_c,z_c,"
+                  << "u_b,v_b,w_b,u_l,v_l,w_l,rise_velocity" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
@@ -143,8 +238,13 @@ void UDF_ExecuteStep(double time, int tstep)
             f << std::defaultfloat << std::setprecision(4) << mdot << ","
                     << mtc << "," << sherwood_no << "," << total_area << ",";
             f << std::fixed << std::setprecision(4) << c_bulk;
+            f << std::defaultfloat << std::setprecision(6) << "," << gas_volume;
+            for (int d = 0; d < 3; d++) f << "," << center[d];
+            for (int d = 0; d < 3; d++) f << "," << ub[d];
+            for (int d = 0; d < 3; d++) f << "," << ul[d];
+            f << "," << ub[1] - ul[1];
             f << std::endl;
             f.close();
         } // if (platform->comm.mpiRank() == 0)
-    } // if (time > sampleCount*sampleInterval)
+    } // if (regularSample || nrs->lastStep)
 }

@@ -182,3 +182,26 @@
         }
     }
 }
+
+/**
+ * Gas and liquid volume weights for the bubble position and velocity, with
+ * psi clipped to [0, 1] as in animate.py.
+ *
+ * @param info common data about the case
+ * @param psi conservative level set (CLS) scalar field
+ * @param Jw mass matrix diagonal
+ * @param gas output (1 - psi)*Jw
+ * @param liquid output psi*Jw
+ */
+@kernel void bubbleWeights(const caseinfo_t info, @restrict const dfloat *psi,
+        @restrict const dfloat *Jw, @restrict dfloat *gas, @restrict dfloat *liquid)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            const dfloat p = min(max(psi[i], 0.0), 1.0);
+            gas[i] = (1.0 - p)*Jw[i];
+            liquid[i] = p*Jw[i];
+        }
+    }
+}

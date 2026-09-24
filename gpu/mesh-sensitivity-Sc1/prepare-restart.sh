@@ -31,7 +31,7 @@ for dir in "$@"; do
     while [ -e part$part ]; do part=$((part + 1)); done
     mkdir part$part
     mv bubble3d0.f[0-9]* part$part/
-    mv logfile-* nodes-* part$part/ 2>/dev/null || true
+    mv logfile-* nodes-* nekRS_*.e* part$part/ 2>/dev/null || true
     if [ -e bubble3d.nek5000 ]; then mv bubble3d.nek5000 part$part/; fi
 
     ln -sfn part$part/$last restart.fld

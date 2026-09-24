@@ -3,11 +3,14 @@
 
 Usage: sherwood.py [--tmin 20] [--tmax 30] [--csv summary.csv] <run dir>...
 
-Each data.csv row holds mdot averaged over the checkpoint interval ending at
-Time, with total_area and c_bulk sampled at Time, so the window average uses
-the rows whose intervals lie inside (tmin, tmax]. The uncertainty is the
-standard error of 1 time unit batch means, which are much less correlated
-than individual checkpoints.
+Each data.csv row holds mdot averaged over the sample interval ending at
+Time (the checkpoint interval in the 2.25x, 1.5x and 1x runs), with
+total_area and c_bulk sampled at Time, so the window average uses the rows
+whose intervals lie inside (tmin, tmax]. Rows are weighted by the length of
+their interval, so the short rows at job boundaries (bubble3d.udf also
+samples each job's last step) count proportionally less. The uncertainty is
+the standard error of 1 time unit batch means, which are much less correlated
+than individual samples.
 """
 import argparse
 import csv
@@ -27,26 +30,36 @@ def load(path):
 def summarize(run_dir, tmin, tmax):
     data = load(os.path.join(run_dir, "data.csv"))
     t = data["Time"]
-    interval = np.median(np.diff(t))
+    weight = np.diff(t, prepend=0.0)
+    interval = np.median(weight)
     sel = (t > tmin + 0.5*interval) & (t <= tmax + 0.5*interval)
     n_expected = int(round((tmax - tmin)/interval))
+    w = weight[sel]
+
+    def mean(x):
+        return (w*x[sel]).sum()/w.sum()
+
     sh = data["Sh"][sel]
-    batches = [sh[(t[sel] > b + 0.5*interval) & (t[sel] <= b + 1 + 0.5*interval)]
-               for b in np.arange(tmin, tmax)]
-    batch_means = np.array([b.mean() for b in batches if len(b)])
+    batch_means = []
+    for b in np.arange(tmin, tmax):
+        inside = (t[sel] > b + 0.5*interval) & (t[sel] <= b + 1 + 0.5*interval)
+        if inside.any():
+            batch_means.append((w[inside]*sh[inside]).sum()/w[inside].sum())
+    batch_means = np.array(batch_means)
     se = batch_means.std(ddof=1)/np.sqrt(len(batch_means)) if len(batch_means) > 1 else float("nan")
-    ratio_of_means = Pe*data["mdot"][sel].mean()/(data["total_area"][sel].mean()*data["c_bulk"][sel].mean())
+    sh_mean = mean(data["Sh"])
+    ratio_of_means = Pe*mean(data["mdot"])/(mean(data["total_area"])*mean(data["c_bulk"]))
     return {
         "run": os.path.basename(os.path.normpath(run_dir)),
         "t_end": t[-1],
         "samples": int(sel.sum()),
         "expected_samples": n_expected,
-        "Sh_mean": sh.mean(),
-        "Sh_std": sh.std(ddof=1) if len(sh) > 1 else float("nan"),
+        "Sh_mean": sh_mean,
+        "Sh_std": np.sqrt((w*(sh - sh_mean)**2).sum()/w.sum()) if len(sh) > 1 else float("nan"),
         "Sh_batch_se": se,
         "Sh_ratio_of_means": ratio_of_means,
-        "area_mean": data["total_area"][sel].mean(),
-        "c_bulk_mean": data["c_bulk"][sel].mean(),
+        "area_mean": mean(data["total_area"]),
+        "c_bulk_mean": mean(data["c_bulk"]),
     }
 
 
