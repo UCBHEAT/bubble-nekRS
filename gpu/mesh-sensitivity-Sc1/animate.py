@@ -176,7 +176,7 @@ def post(run, first, last):
         print("post {} t={:.4f} V_g={:.4f} y_c={:.3f} rise={:.3f} area={:.3f}".format(
             os.path.basename(run), t, vg, center[1], ub[1] - ul[1], area), flush=True)
     with open(out + ".tmp", "w") as f:
-        w = csv.DictWriter(f, fieldnames=POST_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=POST_COLUMNS, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
     os.rename(out + ".tmp", out)
@@ -200,7 +200,7 @@ def merge(run):
         row["x_c_unwrapped"], row["y_c_unwrapped"], row["z_c_unwrapped"] = unwrapped
     columns = POST_COLUMNS + ["x_c_unwrapped", "y_c_unwrapped", "z_c_unwrapped"]
     with open(os.path.join(run, "post.csv"), "w") as f:
-        w = csv.DictWriter(f, fieldnames=columns)
+        w = csv.DictWriter(f, fieldnames=columns, lineterminator="\n")
         w.writeheader()
         for row in rows:
             w.writerow({k: "{:.6g}".format(row[k]) for k in columns})

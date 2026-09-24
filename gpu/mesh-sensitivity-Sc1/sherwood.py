@@ -67,7 +67,7 @@ def main():
               "{c_bulk_mean:7.4f}".format(**r))
     if args.csv:
         with open(args.csv, "w") as f:
-            w = csv.DictWriter(f, fieldnames=list(results[0]))
+            w = csv.DictWriter(f, fieldnames=list(results[0]), lineterminator="\n")
             w.writeheader()
             w.writerows(results)
 
