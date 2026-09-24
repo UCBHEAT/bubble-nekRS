@@ -38,7 +38,8 @@ for dir in "$@"; do
     sed -i 's/^#\?startFrom *=.*/startFrom = restart.fld/' bubble3d.par
 
     if [ -e data.csv ]; then
-        awk -F, -v t="$t_restart" 'NR == 1 || $1 <= t + 1e-6' data.csv > data.csv.tmp
+        # data.csv times are rounded to 4 decimals.
+        awk -F, -v t="$t_restart" 'NR == 1 || $1 <= t + 6e-5' data.csv > data.csv.tmp
         mv data.csv.tmp data.csv
     fi
     echo "$dir: restarting from part$part/$last (t = $t_restart)"
