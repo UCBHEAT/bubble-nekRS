@@ -82,3 +82,29 @@ the debug queue:
 cd ~/answinter26/Sc1-debug/2.25x
 QUEUE=debug PROJ_ID=nek-vf nrsqsub_polaris bubble3d.par 1 1:00
 ```
+
+## Results (Polaris, September 2026)
+
+Runs are in answinter26/Sc1/{2.25x,1.5x,1x}: part1-3/ hold each job's
+checkpoints and logs, bubble3d0.f00000-00299 link them in time order, and
+data.csv is the continuous Sherwood number record. All three used dt = 1e-4,
+except 2.25x, which blew up at t = 24.87 and was continued from t = 24.8 at
+dt = 5e-5.
+
+Sh averaged over t = 20-30 (100 checkpoint intervals, `sherwood.py`):
+
+| Run   | Sh    | batch SE | std  | area | c_bulk |
+|-------|-------|----------|------|------|--------|
+| 2.25x | 7.84  | 0.19     | 0.62 | 4.04 | 0.967  |
+| 1.5x  | 8.40  | 0.21     | 0.65 | 3.34 | 0.978  |
+| 1x    | 11.31 | 0.09     | 0.32 | 3.42 | 0.974  |
+
+Sh is not mesh converged: it rises 7% from 2.25x to 1.5x and 35% from 1.5x
+to 1x. On the 2.25x mesh (3 elements across the bubble) the bubble is far more
+deformed (area 4.04 vs 3.34-3.42) and rises at 0.56 instead of about 1.0, and
+before t = 1 its gas core carried velocities 20-40 times the rise velocity
+along the bubble axis (about 5 times on 1x), so its value is not reliable. In
+the t = 20-30 window the maximum gas velocity is 3.4-4.7 times the rise
+velocity on the 1.5x and 1x meshes (5.8-8.8 on 2.25x). Sh also drifts slowly
+within the window (1.5x: 8.06 over t = 20-25, 8.75 over t = 25-30), so the
+batch standard error understates the uncertainty.
