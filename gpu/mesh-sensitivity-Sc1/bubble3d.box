@@ -1,0 +1,11 @@
+-3                     spatial dimension (will create box.re2)
+4                      number of fields (vel, tls, cls, c)
+Box 1
+-27 -54 -27            Nelx Nely Nelz (27x54x27 = 1x Kolmogorov at N=7 with dx = h over N)
+-2 2 1                 x0 x1 node_ratio
+0 8 1                  y0 y1 node_ratio
+-2 2 1                 z0 z1 node_ratio
+P  ,P  ,P  ,P  ,P  ,P  boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,P  ,P  tls boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,P  ,P  cls boundary conditions (L, R, bottom, T, back, F)
+P  ,P  ,P  ,P  ,P  ,P  c boundary conditions (L, R, bottom, T, back, F)

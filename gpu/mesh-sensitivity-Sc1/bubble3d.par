@@ -1,0 +1,69 @@
+userSections = tlsr, clsr, lvlset
+
+[GENERAL]
+# Uncomment to debug per-field internal iterations.
+#verbose = true
+# Uncomment to resume from a checkpoint.
+#startFrom = restart.fld
+
+# Kolmogorov scale = 0.0671 mm. Mesh resolution is set in bubble3d.box.
+polynomialOrder = 7
+
+stopAt = endTime
+endTime = 30
+# Same dt for every mesh so only the spatial resolution changes between runs.
+dt = 4e-4
+timeStepper = tombo2
+checkpointControl = simulationTime
+checkpointInterval = 0.1
+
+scalars = tls, cls, c
+
+[PROBLEMTYPE]
+equation = navierStokes+variableViscosity
+
+[FLUID VELOCITY]
+boundaryTypeMap = none
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+
+[FLUID PRESSURE]
+residualTol = 1e-4
+
+[SCALAR TLS]
+# TLS (traditional level set), domain: (-infty, infty)
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR CLS]
+# CLS (conservative level set), domain: [0, 1]
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR C]
+# Species concentration
+boundaryTypeMap = none
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+# TLSR and CLSR use the level set defaults recommended by the nekRS-LS
+# developer (no targetCFL, maximumSteps, or SVV); boundaryTypeMap is
+# inherited from SCALAR TLS and SCALAR CLS.
+[TLSR]
+solveFrequency = 0.04 # every 100 timesteps
+residualTol = 1e-8
+
+[CLSR]
+solveFrequency = 0.004 # every 10 timesteps
+residualTol = 1e-8
+
+[LVLSET]
+interfaceWidthFactor = 1.5
