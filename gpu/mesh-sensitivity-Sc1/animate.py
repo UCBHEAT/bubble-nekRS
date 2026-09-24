@@ -22,9 +22,6 @@ import sys
 
 import numpy as np
 
-# 4x8x4 fully periodic domain (bubble3d.box).
-LO = np.array([-2.0, 0.0, -2.0])
-L = np.array([4.0, 8.0, 4.0])
 T_END = 30.0
 
 POST_COLUMNS = [
@@ -59,6 +56,38 @@ def checkpoints(run):
             with open(fn, "rb") as fh:
                 out.append((nek, float(fh.read(132).split()[7])))
     return sorted(out, key=lambda c: c[1])
+
+
+def domain(run):
+    """Lower corner and size of the fully periodic box domain, from the
+    coordinates in the run's first checkpoint (4x8x4 in this study, 2x4x2 in
+    gpu/match-nek5000-202605)."""
+    parts = glob.glob(os.path.join(run, "part[0-9]*"))
+    part = sorted(parts, key=lambda d: int(os.path.basename(d)[4:]))[0] if parts else run
+    fn = sorted(glob.glob(os.path.join(part, "bubble3d0.f[0-9][0-9][0-9][0-9][0-9]")))[0]
+    with open(fn, "rb") as f:
+        hdr = f.read(132).split()
+    assert hdr[11].startswith(b"X"), "{} has no coordinates".format(fn)
+    nxyz, nel = int(hdr[2])*int(hdr[3])*int(hdr[4]), int(hdr[5])
+    dtype = np.float32 if hdr[1] == b"4" else np.float64
+    # Each element's x, y and z blocks follow the endian marker and element ids.
+    x = np.memmap(fn, dtype=dtype, mode="r", offset=136 + 4*nel, shape=(nel, 3, nxyz))
+    lo = np.array([x[:, k].min() for k in range(3)], dtype=np.float64)
+    hi = np.array([x[:, k].max() for k in range(3)], dtype=np.float64)
+    return lo, hi - lo
+
+
+def chart_max(path, column, default, tmin=1.0):
+    """Chart axis maximum: the default, shared by this study's runs, unless the
+    data after the initial transient peak at more than 2.5 times it or less
+    than a tenth of it (other cases); then a round number just above them."""
+    with open(path) as f:
+        values = [float(r[column]) for r in csv.DictReader(f) if float(r["Time"]) > tmin]
+    top = builtins.max(values) if values else default
+    if 0.1*default <= top <= 2.5*default:
+        return default
+    step = 10.0**math.floor(math.log10(top))
+    return math.ceil(1.1*top/step)*step
 
 
 def open_reader(nek):
@@ -114,6 +143,7 @@ def post(run, first, last):
         print("{} exists, skipping".format(out))
         return
     cps = checkpoints(run)
+    LO, L = domain(run)
     r = contour = current = None
     rows = []
     for i in range(first, builtins.min(last, len(cps))):
@@ -189,6 +219,7 @@ def merge(run):
             rows += [{k: float(v) for k, v in row.items()} for row in csv.DictReader(f)]
     rows.sort(key=lambda row: row["Time"])
     # Unwrap the centroid track so the bubble's distance travelled is continuous.
+    LO, L = domain(run)
     prev = None
     for row in rows:
         now = np.array([row["x_c"], row["y_c"], row["z_c"]])
@@ -220,10 +251,12 @@ def frames(run, first, last, label):
     rv.OrientationAxesVisibility = 1
     rv.UseColorPaletteForBackground = 0
     rv.Background = [0.32, 0.34, 0.43]
-    # Camera from the example state, scaled from its 2x4x2 domain to 4x8x4.
-    focal = np.array([0.0, 4.0, 0.0])
+    # Camera from the example state, scaled from its 2x4x2 domain.
+    LO, L = domain(run)
+    scale = L[1]/4.0
+    focal = LO + L/2
     rv.CameraFocalPoint = list(focal)
-    rv.CameraPosition = list(focal + 2.0*np.array([5.795554957734411, 4.7320508075688785, 5.795554957734411]))
+    rv.CameraPosition = list(focal + scale*np.array([5.795554957734411, 4.7320508075688785, 5.795554957734411]))
     rv.CameraViewUp = [-0.35355339059327373, 0.8660254037844388, -0.35355339059327373]
     rv.CameraViewAngle = 30
 
@@ -261,7 +294,7 @@ def frames(run, first, last, label):
     glyph = Glyph(Input=slc, GlyphType="Arrow")
     glyph.OrientationArray = ["POINTS", "Velocity"]
     glyph.ScaleArray = ["POINTS", "Velocity"]
-    glyph.ScaleFactor = 0.4
+    glyph.ScaleFactor = 0.2*scale
     glyph.GlyphMode = "Uniform Spatial Distribution (Surface Sampling)"
     glyph.MaximumNumberOfSamplePoints = 5000
     glyph_disp = Show(glyph, rv)
@@ -287,7 +320,9 @@ def frames(run, first, last, label):
 
     data_csv = CSVReader(FileName=[os.path.join(run, "data.csv")])
     post_csv = CSVReader(FileName=[os.path.join(run, "post.csv")])
-    ymax = {"vel": 1.5, "mtc": 0.2, "sh": 40.0}
+    ymax = {"vel": chart_max(os.path.join(run, "post.csv"), "rise_velocity", 1.5),
+            "mtc": chart_max(os.path.join(run, "data.csv"), "MTC", 0.2),
+            "sh": chart_max(os.path.join(run, "data.csv"), "Sh", 40.0)}
     marker = ProgrammableSource(OutputDataSetType="vtkTable")
 
     def set_marker(t):
@@ -302,6 +337,8 @@ def frames(run, first, last, label):
     set_marker(0.0)
     marker.UpdatePipeline()
 
+    t_end = builtins.max(T_END, math.ceil(cps[-1][1]))
+
     def chart(title, src, series, color, ymax, marker_series, bottom_title=""):
         ch = CreateView("XYChartView")
         ch.ChartTitle = title
@@ -310,7 +347,7 @@ def frames(run, first, last, label):
         ch.LeftAxisUseCustomRange = 1
         ch.LeftAxisRangeMinimum, ch.LeftAxisRangeMaximum = 0.0, ymax
         ch.BottomAxisUseCustomRange = 1
-        ch.BottomAxisRangeMinimum, ch.BottomAxisRangeMaximum = 0.0, T_END
+        ch.BottomAxisRangeMinimum, ch.BottomAxisRangeMaximum = 0.0, t_end
         ch.BottomAxisTitle = bottom_title
         ch.LeftAxisLabelFontSize = ch.BottomAxisLabelFontSize = 20
         ch.BottomAxisTitleFontSize = 22
