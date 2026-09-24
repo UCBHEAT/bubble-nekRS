@@ -12,9 +12,10 @@ polynomialOrder = 7
 stopAt = endTime
 endTime = 30
 # Same dt for every mesh so only the spatial resolution changes between runs.
-# With the physical density ratio, dt = 4e-4 gave spurious gas-core velocity
-# spikes near t = 0.35 on the 2.25x and 1.5x meshes, and 2.25x blew up at t = 0.72.
-dt = 2e-4
+# With the physical density ratio, larger dt gives spurious gas-core velocity
+# spikes near t = 0.32 on the 2.25x mesh (2.25x blew up at t = 0.72 with
+# dt = 4e-4; dt = 2e-4 survives the spike but Sh differs by 10% at t = 0.4).
+dt = 1e-4
 timeStepper = tombo2
 checkpointControl = simulationTime
 checkpointInterval = 0.1
@@ -60,11 +61,11 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 # developer (no targetCFL, maximumSteps, or SVV); boundaryTypeMap is
 # inherited from SCALAR TLS and SCALAR CLS.
 [TLSR]
-solveFrequency = 0.02 # every 100 timesteps
+solveFrequency = 0.01 # every 100 timesteps
 residualTol = 1e-8
 
 [CLSR]
-solveFrequency = 0.002 # every 10 timesteps
+solveFrequency = 0.001 # every 10 timesteps
 residualTol = 1e-8
 
 [LVLSET]

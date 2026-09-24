@@ -24,10 +24,13 @@ Numerics follow gpu/3D except:
   every 100 and CLSR every 10 timesteps.
 * Each mesh is generated directly by genbox (no hrefine, which leaves the
   partition imbalanced when the base mesh has few elements per rank).
-* The same dt = 2e-4 is used for every mesh so only the spatial resolution
-  changes. With the physical density ratio, dt = 4e-4 gave spurious velocity
+* The same dt = 1e-4 is used for every mesh so only the spatial resolution
+  changes. With the physical density ratio, larger dt gives spurious velocity
   spikes in the gas core (on element edges along the bubble axis) near
-  t = 0.35 on the 2.25x and 1.5x meshes, and the 2.25x run blew up at t = 0.72.
+  t = 0.32 on the coarse meshes: the 2.25x run blew up at t = 0.72 with
+  dt = 4e-4, and with dt = 2e-4 it survived the spike but its Sh differed from
+  dt = 1e-4 by 10% at t = 0.4. On the 1x mesh, dt = 2e-4 and 1e-4 agree within
+  1%.
 
 ## Meshes
 
@@ -59,7 +62,7 @@ PROJ_ID=nek-vf QUEUE=prod <this dir>/submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
 
 Level set reinitialization dominates the cost. Measured on 4 GPUs, a step
 averages 0.065 s (2.25x), 0.098 s (1.5x) and 0.24 s (1x), so each run needs
-roughly 2.5-3 hours on the layout above. The small prod queue allows at most
+roughly 5.5 hours on the layout above. The small prod queue allows at most
 3 hours. If a job ends before endTime = 30, prepare the unfinished runs for a
 restart and resubmit them:
 
