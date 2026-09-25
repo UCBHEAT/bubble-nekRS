@@ -6,20 +6,31 @@
 // is added to every velocity point. In a fully periodic domain a uniform
 // acceleration is exactly an acceleration of the reference frame: it shifts the
 // whole velocity field uniformly and does not change the bubble/liquid relative
-// motion (the net gravity + pressure gradient force on the domain is zero, so
-// F_pid is the only term that changes the domain's mean momentum). Once the
+// motion (the net gravity + pressure gradient force on the domain is zero, as
+// are the net viscous and surface tension forces, so in the continuum F_pid is
+// the only term that changes the domain's mean momentum; the discretization
+// does not conserve it exactly, and in the t = 0-10 run the mean velocity
+// drifts from integral(F_pid dt) by ~5% of the frame velocity). Once the
 // bubble reaches terminal velocity, the frame rises with the bubble and the
 // liquid flows down past it.
 //
 //   e      = x_c - x_0          gas centroid offset from the domain center
-//   de/dt  = u_gas              gas-phase mean velocity (derivative on
-//                               measurement: avoids differencing x_c, which
-//                               jumps slightly at each level set reinit)
-//   F_pid  = -(kp*e + ki*integral(e dt) + kd*de/dt)
+//   u_gas                       gas-phase mean velocity, used as de/dt
+//                               (derivative on measurement)
+//   F_pid  = -(kp*e + ki*integral(e dt) + kd*u_gas)
+//
+// u_gas is the material velocity of the gas, which is exactly de/dt between
+// level set reinitializations. Each CLSR reinit also shifts the centroid
+// slightly (upward for a rising bubble, by ~3e-4 per reinit with dt = 0.0025
+// and reinit every 10 steps, a drift of ~0.012-0.017 per unit time), which
+// u_gas does not see. At steady state the integral term therefore settles at
+// ki*integral = kd*(reinit drift rate) rather than 0, and slip_v (from u_gas)
+// is a few percent lower than the rise rate of the level set centroid.
 //
 // Gains are read from the [PID] section of the .par file. The plant (F_pid ->
-// x_c) is a double integrator, so kd > 0 is required for stability; with all
-// three gains, the closed loop is stable for kd*kp > ki.
+// x_c) is a double integrator, so the closed-loop characteristic polynomial is
+// s^3 + kd*s^2 + kp*s + ki, which is stable (Routh-Hurwitz) for kd > 0, ki > 0
+// and kd*kp > ki (which implies kp > 0); with ki = 0 it needs kd > 0, kp > 0.
 
 typedef struct pidState {
     // Gains, from the [PID] par section.
@@ -33,8 +44,8 @@ typedef struct pidState {
     dfloat error[3];
     // Time integral of the error.
     dfloat integral[3];
-    // Gas and liquid phase mean velocities. u_gas is de/dt; u_gas - u_liquid
-    // is the bubble slip (rise) velocity.
+    // Gas and liquid phase mean velocities. u_gas is used as de/dt;
+    // u_gas - u_liquid is the bubble slip (rise) velocity.
     dfloat u_gas[3];
     dfloat u_liquid[3];
     // PID force per unit mass, applied uniformly in the next time step.
@@ -68,6 +79,10 @@ void pidSetup()
     if (platform->comm.mpiRank() == 0) {
         printf("PID: kp=%g ki=%g kd=%g center=(%g, %g, %g)\n", pid.kp, pid.ki, pid.kd,
                 pid.center[0], pid.center[1], pid.center[2]);
+        if ((pid.kp != 0 || pid.ki != 0 || pid.kd < 0) &&
+                !(pid.kd > 0 && pid.ki >= 0 && pid.kd*pid.kp > pid.ki)) {
+            printf("PID: WARNING gains do not satisfy kd > 0, ki >= 0 and kd*kp > ki, the loop is unstable\n");
+        }
     }
 }
 
@@ -127,11 +142,11 @@ void pidUpdate(double time, int tstep)
     }
 
     if (platform->comm.mpiRank() == 0) {
-        printf("PID: step=%d t=%.8e e=(%+.4e, %+.4e, %+.4e) de/dt=(%+.4e, %+.4e, %+.4e) "
-                "F=(%+.4e, %+.4e, %+.4e)\n", tstep, time,
+        printf("PID: step=%d t=%.8e e=(%+.4e, %+.4e, %+.4e) u_gas=(%+.4e, %+.4e, %+.4e) "
+                "F=(%+.4e, %+.4e, %+.4e) Vgas=%.8e\n", tstep, time,
                 pid.error[0], pid.error[1], pid.error[2],
                 pid.u_gas[0], pid.u_gas[1], pid.u_gas[2],
-                pid.force[0], pid.force[1], pid.force[2]);
+                pid.force[0], pid.force[1], pid.force[2], pid.gas_volume);
     }
 }
 
