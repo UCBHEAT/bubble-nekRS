@@ -1,7 +1,7 @@
 userSections = tlsr, clsr, lvlset
 
 [GENERAL]
-polynomialOrder = 9
+polynomialOrder = 7
 
 stopAt = endTime
 endTime = 10

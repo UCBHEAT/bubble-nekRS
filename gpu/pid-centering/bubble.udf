@@ -36,7 +36,8 @@ void UDF_Setup()
         auto [x, y, z] = mesh->xyzHost();
         std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
         for (int n = 0; n < mesh->Nlocal; n++) {
-            dfloat r = sqrt(x[n]*x[n] + (y[n]-1)*(y[n]-1));  // FIX: z-invariant cylinder to match 2D CPU case (was sphere incl. z^2)
+            // z-invariant cylinder of diameter 1 at the domain center (0, 0).
+            dfloat r = sqrt(x[n]*x[n] + y[n]*y[n]);
             phi[n] = r-0.5;
         }
 
