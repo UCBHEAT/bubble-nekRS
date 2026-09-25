@@ -1,4 +1,4 @@
-userSections = tlsr, clsr, lvlset
+userSections = tlsr, clsr, lvlset, pid
 
 [GENERAL]
 polynomialOrder = 7
@@ -59,3 +59,12 @@ residualTol = 1e-8
 
 [LVLSET]
 interfaceWidthFactor = 1.5
+
+[PID]
+# Bubble centering controller (see pid.hpp): a uniform acceleration
+# F_pid = -(kp*e + ki*integral(e dt) + kd*de/dt) is applied to the whole domain,
+# where e is the gas centroid offset from the domain center. Triple closed-loop
+# pole at s = -2 (per unit time): kp = 3*2^2, ki = 2^3, kd = 3*2.
+kp = 12
+ki = 8
+kd = 6

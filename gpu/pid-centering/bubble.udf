@@ -8,6 +8,7 @@
 #include "util.hpp"
 
 #include "case.hpp"
+#include "pid.hpp"
 #include "customhooks.hpp"
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
@@ -66,6 +67,8 @@ void UDF_Setup()
         printf("Liquid/gas/total volumes %.4g %.4g %.4g\n", info.liquid_volume, info.gas_volume, mesh->volume);
         printf("rho_average=%.4g\n", info.rho_average);
     }
+
+    pidSetup();
 }
 
 void UDF_ExecuteStep(double time, int tstep) 
@@ -78,6 +81,9 @@ void UDF_ExecuteStep(double time, int tstep)
     const occa::memory o_c = scalar->o_solution("c");
 
     lvlSet::solve(time);
+
+    // Update the PID bubble centering force from the (reinitialized) level set.
+    pidUpdate(time, tstep);
 
     if (nrs->checkpointStep) {
 
