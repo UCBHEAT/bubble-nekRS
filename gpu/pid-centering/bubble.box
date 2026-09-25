@@ -1,10 +1,10 @@
 -3                     spatial dimension (will create box.re2)
 4                      number of fields (velocity, tls, cls, c)
 Box 1
--10 -10 -1             Nelx Nely Nelz (neg. for auto distribute nodes)
+-8 -8 -1               Nelx Nely Nelz (neg. for auto distribute nodes)
 -1 1 1                 x0 x1 node_ratio
 -1 1 1                 y0 y1 node_ratio
-0 0.2 1               z0 z1 node_ratio
+0 0.25 1               z0 z1 node_ratio
 P  ,P  ,P  ,P  ,P  ,P   velocity bc (L, R, bottom, T, back, F)
 P  ,P  ,P  ,P  ,P  ,P   tls bc
 P  ,P  ,P  ,P  ,P  ,P   cls bc

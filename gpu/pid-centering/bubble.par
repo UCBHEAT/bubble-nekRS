@@ -5,7 +5,10 @@ polynomialOrder = 7
 
 stopAt = endTime
 endTime = 10
-dt = 0.001
+# Explicit surface tension limits dt to ~0.8x the capillary estimate
+# sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) = 3.1e-3 on this mesh: 0.0025 is
+# stable, 0.003 is not (see README). Scale the TLSR/CLSR solveFrequency with dt.
+dt = 0.0025
 timeStepper = tombo2
 #startFrom = restart.fld
 checkpointControl = simulationTime
@@ -50,11 +53,13 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
-solveFrequency = 0.1
+# Every 100 steps (the lvlSet default of 100*dt)
+solveFrequency = 0.25
 residualTol = 1e-8
 
 [CLSR]
-solveFrequency = 0.01
+# Every 10 steps (the lvlSet default of 10*dt)
+solveFrequency = 0.025
 residualTol = 1e-8
 
 [LVLSET]
