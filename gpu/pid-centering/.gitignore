@@ -1,0 +1,7 @@
+# Run outputs (field files, .cache, .re2 are ignored at the top level)
+data.csv
+logfile
+restart.fld
+# animate.py outputs (animate.pvsm is committed)
+frames/
+*.mp4
