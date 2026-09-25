@@ -32,6 +32,10 @@
 // s^3 + kd*s^2 + kp*s + ki, which is stable (Routh-Hurwitz) for kd > 0, ki > 0
 // and kd*kp > ki (which implies kp > 0); with ki = 0 it needs kd > 0, kp > 0.
 
+#include <algorithm>
+#include <fstream>
+#include <sstream>
+
 typedef struct pidState {
     // Gains, from the [PID] par section.
     dfloat kp;
@@ -42,7 +46,8 @@ typedef struct pidState {
     // Gas phase volume and centroid offset from the domain center (the error e).
     dfloat gas_volume;
     dfloat error[3];
-    // Time integral of the error.
+    // Time integral of the error. Written to data.csv so it can be restored on
+    // restart.
     dfloat integral[3];
     // Gas and liquid phase mean velocities. u_gas is used as de/dt;
     // u_gas - u_liquid is the bubble slip (rise) velocity.
@@ -57,8 +62,77 @@ typedef struct pidState {
 static pidState_t pid;
 
 /**
- * Read gains from the [PID] par section and compute the domain center.
- * Call once from UDF_Setup, after the mesh is available.
+ * Restore the integral term on restart from the data.csv row written at the
+ * restart time (the rest of the controller state is re-measured from the
+ * restart fields). If there is no such row, the integral starts from zero.
+ *
+ * @param restart_time simulation time of the restart file
+ */
+void pidRestoreIntegral(double restart_time)
+{
+    // data.csv rows are written with 4 decimals of time, so accept the row
+    // closest to the restart time within this tolerance.
+    const double tolerance = 1e-3;
+    double state[4] = {0, 0, 0, 0}; // found, integral x, y, z
+
+    if (platform->comm.mpiRank() == 0) {
+        std::ifstream f("data.csv");
+        std::string line;
+        std::vector<std::string> header;
+        double best = tolerance;
+        while (std::getline(f, line)) {
+            std::vector<std::string> cols;
+            std::stringstream ss(line);
+            std::string col;
+            while (std::getline(ss, col, ',')) cols.push_back(col);
+            if (!cols.empty() && cols[0] == "Time") {
+                // Header. bubble.udf writes it only when it creates data.csv, so
+                // a data.csv started with an older column layout (no pid_int_*
+                // columns) is never restored from: remove data.csv when the
+                // column layout changes.
+                header = cols;
+                continue;
+            }
+            const auto column = [&](const std::string& name) {
+                const auto it = std::find(header.begin(), header.end(), name);
+                return (it == header.end()) ? -1 : int(it - header.begin());
+            };
+            const int itime = column("Time");
+            const int ix = column("pid_int_x"), iy = column("pid_int_y"), iz = column("pid_int_z");
+            if (itime < 0 || ix < 0 || iy < 0 || iz < 0 || int(cols.size()) != int(header.size())) continue;
+            try {
+                const double t = std::stod(cols[itime]);
+                // Keep the last row within the tolerance, so a row from a later
+                // rerun supersedes an earlier one at the same time.
+                if (std::abs(t - restart_time) <= best) {
+                    const double integral[3] = {std::stod(cols[ix]), std::stod(cols[iy]), std::stod(cols[iz])};
+                    best = std::max(std::abs(t - restart_time), 1e-12);
+                    state[0] = 1;
+                    for (int d = 0; d < 3; d++) state[1 + d] = integral[d];
+                }
+            } catch (const std::exception&) {
+                // Skip malformed rows (e.g. a partially written last line).
+            }
+        }
+    }
+    MPI_Bcast(state, 4, MPI_DOUBLE, 0, platform->comm.mpiComm());
+
+    for (int d = 0; d < 3; d++) pid.integral[d] = state[1 + d];
+    if (platform->comm.mpiRank() == 0) {
+        if (state[0] > 0) {
+            printf("PID: restored integral=(%g, %g, %g) from data.csv at t=%g\n",
+                    pid.integral[0], pid.integral[1], pid.integral[2], restart_time);
+        } else {
+            printf("PID: WARNING no data.csv row at restart time t=%g, integral starts from 0\n",
+                    restart_time);
+        }
+    }
+}
+
+/**
+ * Read gains from the [PID] par section and compute the domain center, and on
+ * restart restore the integral term. Call once from UDF_Setup, after the mesh
+ * is available.
  */
 void pidSetup()
 {
@@ -83,6 +157,12 @@ void pidSetup()
                 !(pid.kd > 0 && pid.ki >= 0 && pid.kd*pid.kp > pid.ki)) {
             printf("PID: WARNING gains do not satisfy kd > 0, ki >= 0 and kd*kp > ki, the loop is unstable\n");
         }
+    }
+
+    if (!platform->options.getArgs("RESTART FILE NAME").empty()) {
+        double restart_time = 0;
+        platform->options.getArgs("START TIME", restart_time);
+        pidRestoreIntegral(restart_time);
     }
 }
 

@@ -162,7 +162,8 @@ void UDF_ExecuteStep(double time, int tstep)
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
                 f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_bubble,C_conservation_error,"
-                        << "bubble_dx,bubble_dy,bubble_dz,slip_u,slip_v,slip_w,F_pid_x,F_pid_y,F_pid_z" << std::endl;
+                        << "bubble_dx,bubble_dy,bubble_dz,slip_u,slip_v,slip_w,F_pid_x,F_pid_y,F_pid_z,"
+                        << "pid_int_x,pid_int_y,pid_int_z" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
@@ -172,11 +173,14 @@ void UDF_ExecuteStep(double time, int tstep)
             f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
             f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
             // PID bubble centering: gas centroid offset from the domain center,
-            // bubble slip velocity (gas minus liquid mean velocity), and the PID
-            // force per unit mass applied in the next step.
+            // bubble slip velocity (gas minus liquid mean velocity), the PID
+            // force per unit mass applied in the next step, and the integral
+            // term state (more digits, as it is read back on restart).
             for (int d = 0; d < 3; d++) f << "," << pid.error[d];
             for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d] - pid.u_liquid[d];
             for (int d = 0; d < 3; d++) f << "," << pid.force[d];
+            f << std::setprecision(10);
+            for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
             f << std::endl;
             f.close();
         } // if (platform->comm.mpiRank() == 0)
