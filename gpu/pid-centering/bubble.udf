@@ -62,7 +62,10 @@ void UDF_Setup()
     info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
             nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
     info.gas_volume = mesh->volume - info.liquid_volume;
-    info.rho_average = (info.liquid_volume + (info.gas_volume/rhoratio))/(mesh->volume);
+    // Buoyancy reference density: the liquid, since in the open (inflow/outflow)
+    // domain the far-field pressure gradient is the liquid's hydrostatic one.
+    // (In a fully periodic box it would be the domain-average density.)
+    info.rho_average = 1.0;
     if (platform->comm.mpiRank() == 0) {
         printf("Liquid/gas/total volumes %.4g %.4g %.4g\n", info.liquid_volume, info.gas_volume, mesh->volume);
         printf("rho_average=%.4g\n", info.rho_average);
@@ -136,8 +139,8 @@ void UDF_ExecuteStep(double time, int tstep)
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
                 f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,"
-                        << "bubble_dx,bubble_dy,bubble_dz,slip_u,slip_v,slip_w,F_pid_x,F_pid_y,F_pid_z,"
-                        << "pid_int_x,pid_int_y,pid_int_z" << std::endl;
+                        << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,F_pid_x,F_pid_y,F_pid_z,"
+                        << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
@@ -146,15 +149,17 @@ void UDF_ExecuteStep(double time, int tstep)
                     << mtc << "," << sherwood_no << "," << total_area << ",";
             f << std::fixed << std::setprecision(4) << c_bulk;
             f << std::defaultfloat << std::setprecision(4);
-            // PID bubble centering: gas centroid offset from the domain center,
-            // bubble slip velocity (gas minus liquid mean velocity), the PID
-            // force per unit mass applied in the next step, and the integral
-            // term state (more digits, as it is read back on restart).
+            // PID bubble centering: gas centroid offset from the setpoint, bubble
+            // rise velocity relative to the quiescent far-field liquid (gas
+            // velocity minus frame velocity), the PID force per unit mass
+            // applied in the next step, and the controller state (integral and
+            // frame velocity, with more digits as they are read back on restart).
             for (int d = 0; d < 3; d++) f << "," << pid.error[d];
-            for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d] - pid.u_liquid[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d] - pid.frame_velocity[d];
             for (int d = 0; d < 3; d++) f << "," << pid.force[d];
             f << std::setprecision(10);
             for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.frame_velocity[d];
             f << std::endl;
             f.close();
         } // if (platform->comm.mpiRank() == 0)

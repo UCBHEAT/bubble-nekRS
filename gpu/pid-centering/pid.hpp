@@ -1,20 +1,20 @@
-// PID controller that keeps the bubble (gas-phase centroid) at the domain
-// center, by applying a spatially uniform acceleration to the whole domain.
+// PID controller that keeps the bubble (gas-phase centroid) at a fixed point in
+// the mesh, by accelerating the reference frame (moving reference frame).
 //
 // The controller output F_pid is a force per unit mass (an acceleration, in the
 // same nondimensional units as the -1/Fr^2 gravity term in buoyancySource) that
-// is added to every velocity point. In a fully periodic domain a uniform
-// acceleration is exactly an acceleration of the reference frame: it shifts the
-// whole velocity field uniformly and does not change the bubble/liquid relative
-// motion (the net gravity + pressure gradient force on the domain is zero, as
-// are the net viscous and surface tension forces, so in the continuum F_pid is
-// the only term that changes the domain's mean momentum; the discretization
-// does not conserve it exactly, and in the t = 0-10 run the mean velocity
-// drifts from integral(F_pid dt) by ~5% of the frame velocity). Once the
-// bubble reaches terminal velocity, the frame rises with the bubble and the
-// liquid flows down past it.
+// is added to every velocity point: the fictitious force of a frame
+// accelerating at -F_pid. The liquid far from the bubble is at rest in the lab
+// frame, so in this frame it moves with the frame velocity
 //
-//   e      = x_c - x_0          gas centroid offset from the domain center
+//   U_frame(t) = integral(F_pid dt),
+//
+// which is imposed as the inflow velocity. The uniform acceleration then shifts
+// the whole velocity field uniformly and does not change the bubble/liquid
+// relative motion. Once the bubble reaches terminal velocity V, U_frame = -V:
+// the bubble stays put and the liquid flows down past it.
+//
+//   e      = x_c - x_0          gas centroid offset from the setpoint x_0
 //   u_gas                       gas-phase mean velocity, used as de/dt
 //                               (derivative on measurement)
 //   F_pid  = -(kp*e + ki*integral(e dt) + kd*u_gas)
@@ -24,8 +24,7 @@
 // slightly (upward for a rising bubble, by ~3e-4 per reinit with dt = 0.0025
 // and reinit every 10 steps, a drift of ~0.012-0.017 per unit time), which
 // u_gas does not see. At steady state the integral term therefore settles at
-// ki*integral = kd*(reinit drift rate) rather than 0, and slip_v (from u_gas)
-// is a few percent lower than the rise rate of the level set centroid.
+// ki*integral = kd*(reinit drift rate) rather than 0.
 //
 // Gains are read from the [PID] section of the .par file. The plant (F_pid ->
 // x_c) is a double integrator, so the closed-loop characteristic polynomial is
@@ -41,20 +40,23 @@ typedef struct pidState {
     dfloat kp;
     dfloat ki;
     dfloat kd;
-    // Domain center (volume centroid of the mesh).
+    // Setpoint x_0 ([PID] x0, y0, z0; default: volume centroid of the mesh).
     dfloat center[3];
-    // Gas phase volume and centroid offset from the domain center (the error e).
+    // Gas phase volume and centroid offset from the setpoint (the error e).
     dfloat gas_volume;
     dfloat error[3];
     // Time integral of the error. Written to data.csv so it can be restored on
     // restart.
     dfloat integral[3];
-    // Gas and liquid phase mean velocities. u_gas is used as de/dt;
-    // u_gas - u_liquid is the bubble slip (rise) velocity.
+    // Gas and liquid phase mean velocities; u_gas is used as de/dt.
     dfloat u_gas[3];
     dfloat u_liquid[3];
     // PID force per unit mass, applied uniformly in the next time step.
     dfloat force[3];
+    // Frame velocity U_frame = integral(F_pid dt) at the last update: the
+    // velocity of the quiescent far-field liquid in this frame. Written to
+    // data.csv so it can be restored on restart.
+    dfloat frame_velocity[3];
     // Simulation time of the last update, for integrating the error.
     double time;
 } pidState_t;
@@ -62,18 +64,21 @@ typedef struct pidState {
 static pidState_t pid;
 
 /**
- * Restore the integral term on restart from the data.csv row written at the
- * restart time (the rest of the controller state is re-measured from the
- * restart fields). If there is no such row, the integral starts from zero.
+ * Restore the integral term and frame velocity on restart from the data.csv
+ * row written at the restart time (the rest of the controller state is
+ * re-measured from the restart fields). If there is no such row, both start
+ * from zero.
  *
  * @param restart_time simulation time of the restart file
  */
-void pidRestoreIntegral(double restart_time)
+void pidRestoreState(double restart_time)
 {
     // data.csv rows are written with 4 decimals of time, so accept the row
     // closest to the restart time within this tolerance.
     const double tolerance = 1e-3;
-    double state[4] = {0, 0, 0, 0}; // found, integral x, y, z
+    const std::string names[6] = {"pid_int_x", "pid_int_y", "pid_int_z",
+                                  "frame_u", "frame_v", "frame_w"};
+    double state[7] = {0, 0, 0, 0, 0, 0, 0}; // found, integral x/y/z, frame u/v/w
 
     if (platform->comm.mpiRank() == 0) {
         std::ifstream f("data.csv");
@@ -87,9 +92,8 @@ void pidRestoreIntegral(double restart_time)
             while (std::getline(ss, col, ',')) cols.push_back(col);
             if (!cols.empty() && cols[0] == "Time") {
                 // Header. bubble.udf writes it only when it creates data.csv, so
-                // a data.csv started with an older column layout (no pid_int_*
-                // columns) is never restored from: remove data.csv when the
-                // column layout changes.
+                // a data.csv started with an older column layout is never
+                // restored from: remove data.csv when the column layout changes.
                 header = cols;
                 continue;
             }
@@ -98,41 +102,51 @@ void pidRestoreIntegral(double restart_time)
                 return (it == header.end()) ? -1 : int(it - header.begin());
             };
             const int itime = column("Time");
-            const int ix = column("pid_int_x"), iy = column("pid_int_y"), iz = column("pid_int_z");
-            if (itime < 0 || ix < 0 || iy < 0 || iz < 0 || int(cols.size()) != int(header.size())) continue;
+            int index[6];
+            bool complete = (itime >= 0);
+            for (int k = 0; k < 6; k++) {
+                index[k] = column(names[k]);
+                complete = complete && (index[k] >= 0);
+            }
+            if (!complete || int(cols.size()) != int(header.size())) continue;
             try {
                 const double t = std::stod(cols[itime]);
                 // Keep the last row within the tolerance, so a row from a later
                 // rerun supersedes an earlier one at the same time.
                 if (std::abs(t - restart_time) <= best) {
-                    const double integral[3] = {std::stod(cols[ix]), std::stod(cols[iy]), std::stod(cols[iz])};
+                    double values[6];
+                    for (int k = 0; k < 6; k++) values[k] = std::stod(cols[index[k]]);
                     best = std::max(std::abs(t - restart_time), 1e-12);
                     state[0] = 1;
-                    for (int d = 0; d < 3; d++) state[1 + d] = integral[d];
+                    for (int k = 0; k < 6; k++) state[1 + k] = values[k];
                 }
             } catch (const std::exception&) {
                 // Skip malformed rows (e.g. a partially written last line).
             }
         }
     }
-    MPI_Bcast(state, 4, MPI_DOUBLE, 0, platform->comm.mpiComm());
+    MPI_Bcast(state, 7, MPI_DOUBLE, 0, platform->comm.mpiComm());
 
-    for (int d = 0; d < 3; d++) pid.integral[d] = state[1 + d];
+    for (int d = 0; d < 3; d++) {
+        pid.integral[d] = state[1 + d];
+        pid.frame_velocity[d] = state[4 + d];
+    }
     if (platform->comm.mpiRank() == 0) {
         if (state[0] > 0) {
-            printf("PID: restored integral=(%g, %g, %g) from data.csv at t=%g\n",
-                    pid.integral[0], pid.integral[1], pid.integral[2], restart_time);
+            printf("PID: restored integral=(%g, %g, %g) frame velocity=(%g, %g, %g) from data.csv at t=%g\n",
+                    pid.integral[0], pid.integral[1], pid.integral[2],
+                    pid.frame_velocity[0], pid.frame_velocity[1], pid.frame_velocity[2], restart_time);
         } else {
-            printf("PID: WARNING no data.csv row at restart time t=%g, integral starts from 0\n",
+            printf("PID: WARNING no data.csv row at restart time t=%g, integral and frame velocity start from 0\n",
                     restart_time);
         }
     }
 }
 
 /**
- * Read gains from the [PID] par section and compute the domain center, and on
- * restart restore the integral term. Call once from UDF_Setup, after the mesh
- * is available.
+ * Read gains and setpoint from the [PID] par section, and on restart restore
+ * the integral term and frame velocity. Call once from UDF_Setup, after the
+ * mesh is available.
  */
 void pidSetup()
 {
@@ -143,15 +157,17 @@ void pidSetup()
     platform->par->extract("pid", "ki", pid.ki);
     platform->par->extract("pid", "kd", pid.kd);
 
-    // Domain center = integral(x dV)/V (exact for the box mesh).
+    // Setpoint: the volume centroid of the mesh, unless given in [PID].
     const occa::memory o_xyz[3] = {mesh->o_x, mesh->o_y, mesh->o_z};
+    const std::string keys[3] = {"x0", "y0", "z0"};
     for (int d = 0; d < 3; d++) {
         pid.center[d] = platform->linAlg->innerProd(mesh->Nlocal, o_xyz[d], mesh->o_Jw,
                 platform->comm.mpiComm()) / mesh->volume;
+        platform->par->extract("pid", keys[d], pid.center[d]);
     }
 
     if (platform->comm.mpiRank() == 0) {
-        printf("PID: kp=%g ki=%g kd=%g center=(%g, %g, %g)\n", pid.kp, pid.ki, pid.kd,
+        printf("PID: kp=%g ki=%g kd=%g setpoint=(%g, %g, %g)\n", pid.kp, pid.ki, pid.kd,
                 pid.center[0], pid.center[1], pid.center[2]);
         if ((pid.kp != 0 || pid.ki != 0 || pid.kd < 0) &&
                 !(pid.kd > 0 && pid.ki >= 0 && pid.kd*pid.kp > pid.ki)) {
@@ -162,8 +178,11 @@ void pidSetup()
     if (!platform->options.getArgs("RESTART FILE NAME").empty()) {
         double restart_time = 0;
         platform->options.getArgs("START TIME", restart_time);
-        pidRestoreIntegral(restart_time);
+        pidRestoreState(restart_time);
     }
+
+    // Device copy of the inflow velocity, read by udfDirichlet as bc->usrwrk[0..2].
+    platform->app->bc->o_usrwrk.resize(3);
 }
 
 /**
@@ -213,6 +232,8 @@ void pidUpdate(double time, int tstep)
         const double dt = time - pid.time;
         for (int d = 0; d < 3; d++) {
             pid.integral[d] += pid.error[d] * dt;
+            // pid.force still holds the force applied during this step.
+            pid.frame_velocity[d] += pid.force[d] * dt;
         }
     }
     pid.time = time;
@@ -223,22 +244,30 @@ void pidUpdate(double time, int tstep)
 
     if (platform->comm.mpiRank() == 0) {
         printf("PID: step=%d t=%.8e e=(%+.4e, %+.4e, %+.4e) u_gas=(%+.4e, %+.4e, %+.4e) "
-                "F=(%+.4e, %+.4e, %+.4e) Vgas=%.8e\n", tstep, time,
+                "F=(%+.4e, %+.4e, %+.4e) Vgas=%.8e U_frame=(%+.4e, %+.4e, %+.4e)\n", tstep, time,
                 pid.error[0], pid.error[1], pid.error[2],
                 pid.u_gas[0], pid.u_gas[1], pid.u_gas[2],
-                pid.force[0], pid.force[1], pid.force[2], pid.gas_volume);
+                pid.force[0], pid.force[1], pid.force[2], pid.gas_volume,
+                pid.frame_velocity[0], pid.frame_velocity[1], pid.frame_velocity[2]);
     }
 }
 
 /**
- * Add the PID force (per unit mass) to the fluid explicit terms.
+ * Add the PID force (per unit mass) to the fluid explicit terms, and set the
+ * inflow velocity for the step, U_frame at the end of the step. Call from the
+ * userSource hook, which runs before the step's Dirichlet conditions.
  *
  * @param o_uSource fluid explicit terms (all 3 components), which must already
  *     contain the surface tension acceleration as that overwrites the buffer
+ * @param dt time step size of the step being set up
  */
-void pidApply(occa::memory& o_uSource)
+void pidApply(occa::memory& o_uSource, dfloat dt)
 {
     for (int d = 0; d < 3; d++) {
         platform->linAlg->add(nrs->meshV->Nlocal, pid.force[d], o_uSource, d*nrs->fieldOffset);
     }
+
+    dfloat inflow[3];
+    for (int d = 0; d < 3; d++) inflow[d] = pid.frame_velocity[d] + pid.force[d]*dt;
+    platform->app->bc->o_usrwrk.copyFrom(inflow, 3);
 }

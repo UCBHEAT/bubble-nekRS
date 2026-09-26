@@ -40,6 +40,7 @@ void customSource(double t)
     // Buoyancy source terms for the U equation.
     buoyancySource(info, o_psi, o_rho, Fr, o_uSourceY);
 
-    // PID bubble centering force (uniform acceleration) for the U equation.
-    pidApply(o_uSource);
+    // PID bubble centering force (uniform acceleration) for the U equation,
+    // and the matching inflow velocity for this step.
+    pidApply(o_uSource, nrs->dt[0]);
 }

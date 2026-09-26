@@ -68,3 +68,30 @@
         }
     }
 }
+
+/**
+ * Boundary conditions. x and z are periodic; the top face (boundary ID 1) is
+ * the inflow and the bottom face (boundary ID 2) the outflow.
+ */
+void udfDirichlet(bcData *bc)
+{
+    if (isField("fluid velocity")) {
+        // The liquid is at rest in the lab frame, so it enters with the frame
+        // velocity U_frame = integral(F_pid dt), set each step by pidApply.
+        bc->uxFluid = bc->usrwrk[0];
+        bc->uyFluid = bc->usrwrk[1];
+        bc->uzFluid = bc->usrwrk[2];
+    } else if (isField("fluid pressure")) {
+        // Stabilized outflow (Dong et al., as in the nekRS hemi/pb146/turbPipe
+        // examples): p = 0, lowered where the flow re-enters the domain.
+        const dfloat iU0delta = 20.0;
+        const dfloat un = bc->uxFluid*bc->nx + bc->uyFluid*bc->ny + bc->uzFluid*bc->nz;
+        const dfloat s0 = 0.5*(1.0 - tanh(un*iU0delta));
+        bc->pFluid = -0.5*bc->transCoeff*(bc->uxFluid*bc->uxFluid + bc->uyFluid*bc->uyFluid
+                + bc->uzFluid*bc->uzFluid)*s0;
+    } else if (isField("scalar cls") || isField("clsr") || isField("scalar c")) {
+        // Pure liquid (psi = 1) saturated with species (c = 1). "clsr" is the
+        // CLS reinitialization, which otherwise imposes psi = 0 (gas) here.
+        bc->sScalar = 1.0;
+    }
+}
