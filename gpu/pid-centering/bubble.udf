@@ -71,87 +71,61 @@ void UDF_Setup()
     pidSetup();
 }
 
-void UDF_ExecuteStep(double time, int tstep) 
+// Hard sink accumulators: species removed (integral of c dV) and the time over
+// which it was removed, since the last checkpoint.
+static double sink_removed = 0.0;
+static double sink_time = 0.0;
+static double sink_last_time = 0.0;
+
+void UDF_ExecuteStep(double time, int tstep)
 {
     mesh_t* mesh = nrs->meshV;
     scalar_t* scalar = nrs->scalar.get();
-    fluidSolver_t* fluid = nrs->fluid.get();
     const occa::memory o_psi = scalar->o_solution("cls");
-    const occa::memory o_phi = scalar->o_solution("tls");
     const occa::memory o_c = scalar->o_solution("c");
+    MPI_Comm comm = platform->comm.mpiComm();
 
     lvlSet::solve(time);
+
+    // Hard sink: remove the species that has reached the gas (psi < 0.5), and
+    // accumulate the removed amount to measure the interface transfer rate. At
+    // tstep 0 this only clears the smeared initial interface band, which is
+    // not mass transfer.
+    {
+        auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        hardSink(info, o_c, o_psi, o_cSink);
+        const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
+        if (tstep > 0) {
+            sink_removed += removed;
+            sink_time += time - sink_last_time;
+        }
+        sink_last_time = time;
+    }
 
     // Update the PID bubble centering force from the (reinitialized) level set.
     pidUpdate(time, tstep);
 
     if (nrs->checkpointStep) {
+        // Interface transfer rate = species removed by the hard sink per unit time.
+        const dfloat mdot = (sink_time > 0) ? sink_removed/sink_time : 0.0;
+        sink_removed = 0.0;
+        sink_time = 0.0;
 
-        // Calculate MTC via volume integral(diffusion and CST fluxes . interface normals)/(c_bulk - c_bubble)
-        occa::memory o_interfaceNormalVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-        occa::memory o_interfaceNormalVectorX = o_interfaceNormalVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_interfaceNormalVectorY = o_interfaceNormalVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_interfaceNormalVectorZ = o_interfaceNormalVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstDiffVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-        occa::memory o_cstDiffVectorX = o_cstDiffVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstDiffVectorY = o_cstDiffVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstDiffVectorZ = o_cstDiffVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstSrcVector = platform->device.malloc<dfloat>(3*(nrs->fieldOffset));
-        occa::memory o_cstSrcVectorX = o_cstSrcVector.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstSrcVectorY = o_cstSrcVector.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_cstSrcVectorZ = o_cstSrcVector.slice(2*nrs->fieldOffset, nrs->fieldOffset);
-
-        // Calculate interface unit normals.
-        opSEM::strongGrad(mesh, nrs->fieldOffset, o_phi, o_interfaceNormalVector);
-        interfaceNormals(info, o_phi, lvlSet::getDeltaFunction(), o_interfaceNormalVectorX, o_interfaceNormalVectorY, o_interfaceNormalVectorZ);
-
-        // Calculate CST diffusion flux.
-        opSEM::strongGrad(mesh, nrs->fieldOffset, o_c, o_cstDiffVector);
-        platform->linAlg->axmyMany(mesh->Nlocal, /* Nfields */ 3, nrs->fieldOffset, /* mode */ 0,
-                /* constant multiplier */ -1.0, scalar->o_diffusionCoeff("c"), o_cstDiffVector);
-
-        // Calculate (negative of) CST source flux.
-        o_cstSrcVector.copyFrom(o_interfaceNormalVector, 3*nrs->fieldOffset);
-        speciesSource(info, o_c, o_psi, solubilityratio, diffratio, Pe, o_cstSrcVectorX, o_cstSrcVectorY, o_cstSrcVectorZ);
-
-        // Sum CST fluxes: o_cstSrcVector = o_cstDiffVector + (-o_cstSrcVector) [mol/(m^2 s)].
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorX, -1.0, o_cstSrcVectorX);
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorY, -1.0, o_cstSrcVectorY);
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_cstDiffVectorZ, -1.0, o_cstSrcVectorZ);
-
-        // Calculate interface mass transfer rate per unit volume as
-        // o_interface_mass_transfer_rate [mol/(m^3 s)] = o_cstSrcVector [mol/(m^2 s)] . o_interfaceNormalVector [m^2/m^3].
-        occa::memory o_interface_mass_transfer_rate = platform->device.malloc<dfloat>(3*nrs->fieldOffset);
-        occa::memory o_interface_mass_transfer_rateX = o_interface_mass_transfer_rate.slice(0*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_interface_mass_transfer_rateY = o_interface_mass_transfer_rate.slice(1*nrs->fieldOffset, nrs->fieldOffset);
-        occa::memory o_interface_mass_transfer_rateZ = o_interface_mass_transfer_rate.slice(2*nrs->fieldOffset, nrs->fieldOffset);
-        platform->linAlg->dotProduct(mesh->Nlocal, nrs->fieldOffset, o_cstSrcVector, o_interfaceNormalVector, o_interface_mass_transfer_rate);
-        // o_interface_mass_transfer_rateX = o_interface_mass_transfer_rateX + o_interface_mass_transfer_rateY + o_interface_mass_transfer_rateZ
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_interface_mass_transfer_rateY, 1.0, o_interface_mass_transfer_rateX);
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_interface_mass_transfer_rateZ, 1.0, o_interface_mass_transfer_rateX);
-
-        // Integrate for total_mass_transfer_rate [mol/s]; divide by volume for vol_avg_mass_transfer_rate [mol/(m^3 s)].
-        dfloat total_mass_transfer_rate = platform->linAlg->innerProd(mesh->Nlocal, o_interface_mass_transfer_rateX, mesh->o_Jw, platform->comm.mpiComm());
-
-        // Calculate c_bulk, c_bubble, and C_total.
-        occa::memory o_cpsi = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        // c_bulk = liquid-volume average of c.
+        auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
         platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
-        dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, platform->comm.mpiComm()) / info.liquid_volume;
-        platform->linAlg->axpby(mesh->Nlocal, 1.0, o_c, -1.0, o_cpsi); // o_cpsi[i] = o_c[i]*(1-o_psi[i])
-        dfloat c_bubble = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, platform->comm.mpiComm()) / info.gas_volume;
-        dfloat C_total = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, platform->comm.mpiComm());
+        const dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, comm) / info.liquid_volume;
 
-        // Calculate MTC and Sh.
-        dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, platform->comm.mpiComm());
-        dfloat mtc = total_mass_transfer_rate / total_area / (c_bubble*solubilityratio - c_bulk);
-        dfloat sherwood_no = mtc*Pe;
+        // MTC and Sh, with c = 0 at the interface (hard sink).
+        const dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, comm);
+        const dfloat mtc = mdot / total_area / c_bulk;
+        const dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", total_mass_transfer_rate, mtc, sherwood_no);
-            printf("total_area=%.4g c_bulk=%.4f c_bubble=%.4f\n", total_area, c_bulk, c_bubble);
-            printf("C conservation error=%.4g (negative=loss, positive=gain)\n", C_total - info.liquid_volume);
+            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
+            printf("total_area=%.4g c_bulk=%.4f\n", total_area, c_bulk);
             printf("----------------------------------------\n");
 
             // Write CSV file
@@ -161,17 +135,17 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_bubble,C_conservation_error,"
+                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,"
                         << "bubble_dx,bubble_dy,bubble_dz,slip_u,slip_v,slip_w,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
             f << tstep << ",";
-            f << std::defaultfloat << std::setprecision(4) << total_mass_transfer_rate << ","
+            f << std::defaultfloat << std::setprecision(4) << mdot << ","
                     << mtc << "," << sherwood_no << "," << total_area << ",";
-            f << std::fixed << std::setprecision(4) << c_bulk << "," << c_bubble << ",";
-            f << std::defaultfloat << std::setprecision(4) << (C_total - info.liquid_volume);
+            f << std::fixed << std::setprecision(4) << c_bulk;
+            f << std::defaultfloat << std::setprecision(4);
             // PID bubble centering: gas centroid offset from the domain center,
             // bubble slip velocity (gas minus liquid mean velocity), the PID
             // force per unit mass applied in the next step, and the integral

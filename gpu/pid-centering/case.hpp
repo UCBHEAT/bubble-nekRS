@@ -7,6 +7,7 @@ static double We = 2.667;
 static double rhoratio = 40;
 static double muratio = 148.1;
 static double nuratio = muratio/rhoratio;
+// Only used by the CST formulation, which is currently off (hard sink instead).
 static double diffratio = 5.698e-6;
 static double solubilityratio = 0.002804;
 

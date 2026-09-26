@@ -44,8 +44,7 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [SCALAR C]
-# Species concentration
-solver = none
+# Species concentration (passive, CST off; hard sink in the gas)
 boundaryTypeMap = none
 transportCoeff = 1.0
 diffusionCoeff = 1e-10
