@@ -127,6 +127,34 @@ void pidRestoreState(double restart_time)
     }
     MPI_Bcast(state, 7, MPI_DOUBLE, 0, platform->comm.mpiComm());
 
+    if (state[0] == 0) {
+        // No data.csv row: take U_frame from the restart field instead, since it
+        // also sets the inflow velocity (resetting it to 0 would stop the liquid
+        // in one step). The inflow face (boundary ID 1, y = ymax) is uniform and
+        // holds U_frame, and no Dirichlet condition has been applied yet.
+        mesh_t* mesh = nrs->meshV;
+        fluidSolver_t* fluid = nrs->fluid.get();
+        MPI_Comm comm = platform->comm.mpiComm();
+        auto [x, y, z] = mesh->xyzHost();
+        double ymax = -1e300;
+        for (dlong n = 0; n < mesh->Nlocal; n++) ymax = std::max(ymax, double(y[n]));
+        MPI_Allreduce(MPI_IN_PLACE, &ymax, 1, MPI_DOUBLE, MPI_MAX, comm);
+        double sum[4] = {0, 0, 0, 0}; // u, v, w, node count
+        const std::string comp[3] = {"x", "y", "z"};
+        std::vector<dfloat> u(mesh->Nlocal);
+        for (int d = 0; d < 3; d++) {
+            fluid->o_solution(comp[d]).copyTo(u, mesh->Nlocal);
+            for (dlong n = 0; n < mesh->Nlocal; n++) {
+                if (std::abs(y[n] - ymax) < 1e-6) {
+                    sum[d] += u[n];
+                    if (d == 0) sum[3] += 1;
+                }
+            }
+        }
+        MPI_Allreduce(MPI_IN_PLACE, sum, 4, MPI_DOUBLE, MPI_SUM, comm);
+        for (int d = 0; d < 3; d++) state[4 + d] = sum[d] / sum[3];
+    }
+
     for (int d = 0; d < 3; d++) {
         pid.integral[d] = state[1 + d];
         pid.frame_velocity[d] = state[4 + d];
@@ -137,8 +165,9 @@ void pidRestoreState(double restart_time)
                     pid.integral[0], pid.integral[1], pid.integral[2],
                     pid.frame_velocity[0], pid.frame_velocity[1], pid.frame_velocity[2], restart_time);
         } else {
-            printf("PID: WARNING no data.csv row at restart time t=%g, integral and frame velocity start from 0\n",
-                    restart_time);
+            printf("PID: WARNING no data.csv row at restart time t=%g, integral starts from 0, "
+                    "frame velocity (%g, %g, %g) taken from the restart field inflow\n", restart_time,
+                    pid.frame_velocity[0], pid.frame_velocity[1], pid.frame_velocity[2]);
         }
     }
 }
