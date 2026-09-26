@@ -89,6 +89,20 @@ prepare-restart.sh moves the finished part's field files and logs to part<N>/
 restart time and sets startFrom. After the last part, finish-runs.sh links
 all parts' checkpoints in time order for ParaView.
 
+A run can also be queued as a chain of jobs that restart themselves: with
+PREPARE_RESTART=1 each job first runs prepare-restart.sh on its cases (and
+skips those that have reached endTime), and DEPEND=<jobid> holds a job until
+the previous one ends successfully, e.g.
+
+```
+A=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 <this dir>/submit-bundle.sh 03:50 0.444x:25)
+B=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 DEPEND=$A <this dir>/submit-bundle.sh 03:50 0.444x:25)
+```
+
+A job whose case fails exits non-zero, so the rest of the chain is not run.
+Short walltimes that end before the next large job in `qstat -T` often start
+at once as backfill (`pbsnodes -aS` shows the free nodes).
+
 A single run can also be submitted with nrsqsub_polaris, e.g. for bringup in
 the debug queue (without BUBBLE_STOP_AT):
 

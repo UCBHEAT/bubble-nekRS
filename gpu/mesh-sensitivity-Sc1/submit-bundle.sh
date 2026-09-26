@@ -12,12 +12,21 @@
 # see bubble3d.udf), so prepare-restart.sh continues from where it stopped.
 # Nodes that fail a CUDA context check (gpucheck.cu) at the start of the job
 # are left out, and the case with the most nodes runs on that many fewer.
+#
+# Jobs can be chained so a run keeps going without anyone requeuing it:
+#   PREPARE_RESTART=1  first run prepare-restart.sh on each case that has new
+#                      checkpoints from an earlier job, and skip any case whose
+#                      data.csv has reached endTime
+#   DEPEND=<jobid>     start only after job <jobid> ends successfully
+# The job exits non-zero if any case fails, which ends the chain there.
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
 : ${QUEUE:?QUEUE must be set}
 : ${NEKRS_HOME:?NEKRS_HOME must be set}
 : ${NEKRS_JITC_NTHREADS:=7}
+: ${PREPARE_RESTART:=0}
+: ${DEPEND:=}
 
 if [ $# -lt 2 ]; then
     echo "Usage: PROJ_ID=<project> QUEUE=<queue> $0 <hh:mm> <dir>:<nodes> [<dir>:<nodes> ...]"
@@ -113,6 +122,8 @@ export MPICH_OFI_NIC_POLICY=NUMA
 export MPIR_CVAR_CH4_OFI_ENABLE_RMA=0
 
 casename=$casename
+prepare_restart=$PREPARE_RESTART
+scripts=$(cd "$(dirname "$0")" && pwd)
 gpu_per_node=$gpu_per_node
 cores_per_numa=$cores_per_numa
 jitc_nthreads=$NEKRS_JITC_NTHREADS
@@ -148,6 +159,28 @@ if [ $missing -gt 0 ]; then
     echo "$(date) left out $missing bad nodes, ${dirs[big]} runs on ${nodes[big]} nodes"
 fi
 
+if [ $prepare_restart = 1 ]; then
+    run_dirs=() run_nodes=()
+    for k in "${!dirs[@]}"; do
+        d=${dirs[k]}
+        end=$(awk -F= '/^endTime/ {print $2+0}' $d/$casename.par)
+        last=$(tail -1 $d/data.csv 2>/dev/null | cut -d, -f1)
+        if [ -n "$last" ] && awk -v a="$last" -v b="$end" 'BEGIN {exit !(a >= b - 1e-3)}'; then
+            echo "$(date) $d reached endTime $end, skipping"
+            continue
+        fi
+        if compgen -G "$d/${casename}0.f[0-9]*" > /dev/null && [ ! -L "$(ls $d/${casename}0.f[0-9]* | head -n 1)" ]; then
+            $scripts/prepare-restart.sh $d || exit 1
+        fi
+        run_dirs+=("$d") run_nodes+=("${nodes[k]}")
+    done
+    if [ ${#run_dirs[@]} -eq 0 ]; then
+        echo "$(date) nothing left to run"
+        exit 0
+    fi
+    dirs=("${run_dirs[@]}") nodes=("${run_nodes[@]}")
+fi
+
 # run_case <dir> <index of first node> <number of nodes>
 run_case() {
     local dir=$1 first=$2 n=$3
@@ -170,6 +203,7 @@ run_case() {
         fi
         echo "$(date) exit status $status"
     } > logfile-$jobid 2>&1
+    echo $status > .status-$jobid
 }
 
 first=0
@@ -179,7 +213,18 @@ for k in "${!dirs[@]}"; do
 done
 wait
 echo "$(date) all cases done"
+failed=0
+for d in "${dirs[@]}"; do
+    s=$(cat $d/.status-$jobid 2>/dev/null || echo 1)
+    rm -f $d/.status-$jobid
+    [ "$s" = 0 ] || { echo "$d failed (exit status $s)"; failed=1; }
+done
+exit $failed
 EOF
 
 nvcc -O2 -o .gpucheck "$(dirname "$0")/gpucheck.cu"
-qsub -q $QUEUE $SFILE
+if [ -n "$DEPEND" ]; then
+    qsub -q $QUEUE -W depend=afterok:$DEPEND $SFILE
+else
+    qsub -q $QUEUE $SFILE
+fi
