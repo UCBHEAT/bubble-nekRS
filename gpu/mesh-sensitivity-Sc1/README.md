@@ -179,10 +179,41 @@ meshes (5.8-8.8 on 2.25x).
 
 ### Finer meshes
 
-0.667x runs from t = 0 in answinter26/Sc1/0.667x on 10 nodes. Level set
-reinitialization dominates the cost: CLSR runs every 20 steps and TLSR every
-200 at dt = 5e-5, and on 10 nodes together they take 40% of the time. Seconds
-per step over steps 200-2000 (t = 0.01-0.1) of short test runs:
+0.667x and 0.444x ran from t = 0 to 30 (September 24-27, 2026) in 8 and 10
+jobs of 5-25 nodes, mostly short jobs fitted into queue gaps and, for the
+last 0.444x parts, a self-restarting chain. Their checkpoints are in
+answinter26/Sc1/{0.667x,0.444x}/part*/.
+
+All four resolved meshes drift at the same rate, but at different times, so
+the drift onset is set by numerical noise, not by the resolution (2.25x
+drifts at once):
+
+| Run    | offset > 0.05 | growth rate |
+|--------|---------------|-------------|
+| 1.5x   | 24.7          | 0.67        |
+| 1x     | 14.8          | 0.74        |
+| 0.667x | 19.5          | 0.68        |
+| 0.444x | 21.1          | 0.71        |
+
+Sh (± batch standard error) in windows where every resolved run is in the
+same phase converges to about 1% at 0.667x, before the drift (t = 5-15) and
+after it (t = 25-30, except 1.5x, which only starts drifting at 24.7):
+
+| Window | 1.5x         | 1x           | 0.667x       | 0.444x       |
+|--------|--------------|--------------|--------------|--------------|
+| 5-10   | 10.01 ± 0.12 | 11.02 ± 0.23 | 11.41 ± 0.23 | 11.47 ± 0.24 |
+| 10-15  | 8.64 ± 0.07  | 9.46 ± 0.05  | 9.83 ± 0.05  | 9.95 ± 0.05  |
+| 25-30  | 8.75 ± 0.37  | 11.24 ± 0.19 | 11.85 ± 0.01 | 11.89 ± 0.03 |
+| 20-30  | 8.40 ± 0.21  | 11.31 ± 0.09 | 11.16 ± 0.31 | 10.90 ± 0.36 |
+
+The t = 20-30 averages mix drifting and not-yet-drifting runs, so they are
+not a mesh comparison. The summaries are in answinter26/Sc1/sherwood_*.csv
+and drift_summary.csv.
+
+Level set reinitialization dominates the cost: CLSR runs every 20 steps and
+TLSR every 200 at dt = 5e-5 (40 and 400 at 2.5e-5), and on 10 nodes together
+they take 40% of the time. 0.667x seconds per step over steps 200-2000
+(t = 0.01-0.1) of short test runs:
 
 | Nodes (GPUs) | GLL points/GPU | mean   | ordinary step | CLSR step | TLSR step |
 |--------------|----------------|--------|---------------|-----------|-----------|
@@ -192,12 +223,13 @@ per step over steps 200-2000 (t = 0.01-0.1) of short test runs:
 
 A run to t = 30 is 600,000 steps: at these rates 38 hours (75 node-hours) on
 2 nodes, 12 hours (123) on 10 and 9.8 hours (244, with 25 nodes charged) on
-24-25. On the 1x mesh the cost per step after the first 0.1 time units was
-about 25% higher, so these are lower bounds.
+24-25. Later steps cost more: the 0.667x production parts averaged about
+0.089 s per step on 10 nodes, and 0.444x (1.2M steps) 0.086 s on 24-25 nodes,
+about 29 hours of stepping.
 
 0.667x checkpoints are 1.84 GB (2.6 GB for each job's first, which also holds
-the coordinates), about 110 GB for t = 0-30 at 0.5. The 0.444x and 0.296x
-checkpoints are 3.4 and 11 times larger, so 0.444x at 0.5 needs about 370 GB
-and 0.296x at 0.25 about 2.5 TB, against the 1 TB nek-vf quota on eagle; their
-checkpoint intervals (or which checkpoints are kept) have to change before
-they run.
+the coordinates), about 130 GB for its 67 checkpoints; 0.444x's are 6.2 GB
+(8.9 GB), about 430 GB for 69. 0.296x checkpoints would be about 21 GB, so at
+0.25 it would need about 2.5 TB against the 1 TB nek-vf quota on eagle; its
+checkpoint interval (or which checkpoints are kept) has to change before it
+runs, if it is still needed given the convergence above.
