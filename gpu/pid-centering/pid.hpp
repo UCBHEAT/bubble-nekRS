@@ -11,8 +11,11 @@
 //
 // which is imposed as the inflow velocity. The uniform acceleration then shifts
 // the whole velocity field uniformly and does not change the bubble/liquid
-// relative motion. Once the bubble reaches terminal velocity V, U_frame = -V:
-// the bubble stays put and the liquid flows down past it.
+// relative motion, up to O(dt) differences between the forward-Euler inflow
+// update and the BDF/EXT integration of the forcing, which a uniform pressure
+// gradient absorbs (~0.1% of gravity on average here). Once the bubble reaches
+// terminal velocity V, U_frame = -V: the bubble stays put and the liquid flows
+// down past it.
 //
 //   e      = x_c - x_0          gas centroid offset from the setpoint x_0
 //   u_gas                       gas-phase mean velocity, used as de/dt
@@ -66,8 +69,9 @@ static pidState_t pid;
 /**
  * Restore the integral term and frame velocity on restart from the data.csv
  * row written at the restart time (the rest of the controller state is
- * re-measured from the restart fields). If there is no such row, both start
- * from zero.
+ * re-measured from the restart fields). If there is no such row, the integral
+ * starts from zero and the frame velocity is taken from the restart field's
+ * (uniform) inflow velocity.
  *
  * @param restart_time simulation time of the restart file
  */
