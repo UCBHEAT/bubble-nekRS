@@ -5,3 +5,5 @@ restart.fld
 # animate.py outputs (animate.pvsm is committed)
 frames/
 *.mp4
+# Archived run outputs
+runs/
