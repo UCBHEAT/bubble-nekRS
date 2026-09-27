@@ -2,9 +2,10 @@
 
 Left: 3D render of the bubble interface (cls = 0.5 contour) over a mid-plane
 slice colored by the liquid z-vorticity, with velocity glyphs showing the
-liquid flowing down past the bubble in the moving (PID-centered) frame.
-Right: the PID centering force and the bubble centroid offset from data.csv,
-drawn up to the current animation time.
+liquid flowing down past the bubble in the moving (PID-centered) frame, and
+the c = 0.9 isoline of species-depleted liquid (drawn only where psi > 0.95).
+Right: the PID centering force (mean over the last 0.5 time units) and the
+bubble centroid offset from data.csv, drawn up to the current animation time.
 
 Usage (from this directory, after running the case):
 
@@ -14,13 +15,17 @@ CASE_DIR defaults to this script's directory and must contain bubble.nek5000
 (written by nekRS) and data.csv. Under pvbatch, frames are written to
 CASE_DIR/frames/, encoded to CASE_DIR/bubble-pid.mp4 with ffmpeg, and the
 pipeline is saved as CASE_DIR/animate.pvsm (open it in the ParaView GUI via
-File > Load State, and pick "Search files under specified directory" to point
-it at another case; the chart time axes follow the loaded data).
+File > Load State; "Search files under specified directory" can point it at a
+continued run or another case with the same domain. The chart time axes follow
+the loaded data, but the camera and the velocity-glyph grid keep the domain
+bounds the state was saved with, so for a different domain rerun
+`pvbatch animate.py OTHER_CASE_DIR`).
 
 In the GUI you can also run this file from View > Python Shell > Run Script to
 build the same pipeline and edit it interactively; nothing is written then.
 """
 
+import itertools
 import os
 import shutil
 import subprocess
@@ -82,6 +87,20 @@ midplane.SliceType = "Plane"
 midplane.SliceType.Origin = [0.0, 0.0, zmid]
 midplane.SliceType.Normal = [0.0, 0.0, 1.0]
 
+# Species-depleted liquid: the c = 0.9 isoline in the mid-plane, drawn only in
+# the liquid (psi > 0.95). c = 1 in the inflowing liquid and 0 in the gas (hard
+# sink at psi < 0.5). Inside the interface band c rings next to that cut, so an
+# unmasked isoline there traces numerical oscillations, not depletion. c starts
+# as the smeared c = psi, so early on the wake is mostly that initially depleted
+# band swept to the rear (and trapped in the recirculating wake), not only
+# species transferred at the interface.
+liquid_c = Calculator(registrationName="liquid_c", Input=midplane)
+liquid_c.ResultArrayName = "c_liquid"
+liquid_c.Function = "S02 > 0.95 ? S03 : 1.0"
+species_wake = Contour(registrationName="species_wake", Input=liquid_c)
+species_wake.ContourBy = ["POINTS", "c_liquid"]
+species_wake.Isosurfaces = [0.9]
+
 interface = Contour(registrationName="interface", Input=nek)
 interface.ContourBy = ["POINTS", "S02"]
 interface.Isosurfaces = [0.5]
@@ -92,20 +111,25 @@ grid = Plane(registrationName="glyph_grid")
 grid.Origin = [bounds[0], bounds[2], zmid]
 grid.Point1 = [bounds[1], bounds[2], zmid]
 grid.Point2 = [bounds[0], bounds[3], zmid]
-grid.XResolution = 16
-grid.YResolution = 16
+# About 0.4 D between arrows.
+grid.XResolution = max(8, int(round((bounds[1] - bounds[0])/0.4)))
+grid.YResolution = max(8, int(round((bounds[3] - bounds[2])/0.4)))
 probe = ResampleWithDataset(registrationName="glyph_probe", SourceDataArrays=nek, DestinationMesh=grid)
 probe.CellLocator = "Static Cell Locator"
 arrows = Glyph(registrationName="velocity_glyphs", Input=probe, GlyphType="Arrow")
 arrows.OrientationArray = ["POINTS", "Velocity"]
 arrows.ScaleArray = ["POINTS", "Velocity Magnitude"]
-arrows.ScaleFactor = 0.09
+# Arrow length = ScaleFactor*|u|: ~0.35 D at |u| = 1, about the arrow spacing.
+arrows.ScaleFactor = 0.35
 arrows.GlyphMode = "All Points"
+# Thicker than the default arrow so the shafts stay visible at this distance.
+arrows.GlyphType.ShaftRadius = 0.06
+arrows.GlyphType.TipRadius = 0.15
 
 rv = CreateView("RenderView")
 rv.Background = [1.0, 1.0, 1.0]
 rv.UseColorPaletteForBackground = 0
-rv.OrientationAxesVisibility = 1
+rv.OrientationAxesVisibility = 0
 rv.EnableRenderOnInteraction = 0
 
 mid_disp = Show(midplane, rv)
@@ -142,6 +166,12 @@ arrow_disp.ColorArrayName = ["POINTS", ""]
 arrow_disp.AmbientColor = [0.15, 0.15, 0.15]
 arrow_disp.DiffuseColor = [0.15, 0.15, 0.15]
 
+wake_disp = Show(species_wake, rv)
+wake_disp.ColorArrayName = ["POINTS", ""]
+wake_disp.AmbientColor = [0.0, 0.55, 0.25]
+wake_disp.DiffuseColor = [0.0, 0.55, 0.25]
+wake_disp.LineWidth = 3.0
+
 outline_disp = Show(Outline(registrationName="domain_outline", Input=nek), rv)
 outline_disp.AmbientColor = [0.3, 0.3, 0.3]
 outline_disp.DiffuseColor = [0.3, 0.3, 0.3]
@@ -160,11 +190,38 @@ title_disp.WindowLocation = "Upper Center"
 title_disp.FontSize = 26
 title_disp.Color = [0.1, 0.1, 0.1]
 
+legend = Text(registrationName="legend")
+legend.Text = "green: c = 0.9 in the liquid"
+legend_disp = Show(legend, rv)
+legend_disp.WindowLocation = "Lower Left Corner"
+legend_disp.FontSize = 16
+legend_disp.Color = [0.0, 0.45, 0.2]
+
+# Fit the whole domain, seen slightly from the side and above: after the
+# rotation, dolly until the domain's projected corners fill 86% of the render
+# view (clear of the title and scalar bar), so taller domains are not cropped.
 cx, cy = 0.5 * (bounds[0] + bounds[1]), 0.5 * (bounds[2] + bounds[3])
-rv.CameraFocalPoint = [cx, cy - 0.05, zmid]
-rv.CameraPosition = [cx + 2.6, cy + 1.6, zmid + 3.6]
+rv.CameraFocalPoint = [cx, cy, zmid]
+rv.CameraPosition = [cx, cy, zmid + 1.0]
 rv.CameraViewUp = [0.0, 1.0, 0.0]
 rv.CameraViewAngle = 30.0
+SetActiveView(rv)
+rv.ResetCamera(False)
+camera = GetActiveCamera()
+camera.Azimuth(22.0)
+camera.Elevation(10.0)
+RENDER_FRACTION = 0.56  # render view width in the layout (SplitHorizontal below)
+aspect = RENDER_FRACTION * WIDTH / HEIGHT
+corners = [c + (1.0,) for c in itertools.product(bounds[0:2], bounds[2:4], bounds[4:6])]
+for _ in range(10):
+    M = camera.GetCompositeProjectionTransformMatrix(aspect, -1.0, 1.0)
+    extent = 0.0
+    for p in corners:
+        x, y, z, w = M.MultiplyPoint(p)
+        extent = max(extent, abs(x / w), abs(y / w))
+    if abs(extent - 0.86) < 1e-3:
+        break
+    camera.Dolly(0.86 / extent)
 
 # -----------------------------------------------------------------------------
 # Charts: data.csv (one row per checkpoint), shown up to the current time.
@@ -207,8 +264,19 @@ for i, j in zip(bounds[:-1], bounds[1:]):
     keep[:i] &= T[:i] < T[i] - n[i] * dt + 0.5 * dt
 # Time is written with 4 decimals, so allow for its rounding.
 mask = keep & (T <= t + 5.1e-5)
+Tm = T[mask]
+# F_pid swings by ~+-0.015 with the level set reinit (TLSR every 0.25, CLSR
+# every 0.025), which checkpoint rows 0.1 apart alias into a sawtooth. Plot its
+# mean over the trailing 0.5 (two TLSR cycles) instead, computed exactly from
+# the frame velocity U_frame = integral(F_pid dt).
+FRAME = dict(F_pid_x="frame_u", F_pid_y="frame_v", F_pid_z="frame_w")
+j = np.searchsorted(Tm, Tm - 0.51)
 for name in {["Time"] + list(columns)!r}:
-    a = numpy_to_vtk(np.ascontiguousarray(vtk_to_numpy(inp.GetColumnByName(name))[mask]), deep=1)
+    v = vtk_to_numpy(inp.GetColumnByName(name))[mask]
+    if name in FRAME:
+        U = vtk_to_numpy(inp.GetColumnByName(FRAME[name]))[mask]
+        v = np.where(j < np.arange(len(Tm)), (U - U[j]) / np.maximum(Tm - Tm[j], 1e-12), v)
+    a = numpy_to_vtk(np.ascontiguousarray(v), deep=1)
     a.SetName(name)
     out.AddColumn(a)
 """
@@ -253,9 +321,9 @@ def make_chart(title, ytitle, xarr_series, yrange):
     return cv
 
 
-force_chart = make_chart("PID centering force (per unit mass)", "F_pid",
+force_chart = make_chart("PID centering force (per unit mass, mean over the last 0.5)", "F_pid",
         [("F_pid_x", "F_pid,x", BLUE), ("F_pid_y", "F_pid,y", RED)], FORCE_RANGE)
-offset_chart = make_chart("Bubble centroid offset from domain center", "offset / D",
+offset_chart = make_chart("Bubble centroid offset from the setpoint", "offset / D",
         [("bubble_dx", "x_c - x_0", BLUE), ("bubble_dy", "y_c - y_0", RED)], OFFSET_RANGE)
 
 # -----------------------------------------------------------------------------
@@ -263,7 +331,7 @@ offset_chart = make_chart("Bubble centroid offset from domain center", "offset /
 # -----------------------------------------------------------------------------
 layout = CreateLayout("bubble-pid")
 layout.AssignView(0, rv)
-layout.SplitHorizontal(0, 0.56)
+layout.SplitHorizontal(0, RENDER_FRACTION)
 layout.SplitVertical(2, 0.5)
 layout.AssignView(5, force_chart)
 layout.AssignView(6, offset_chart)
@@ -274,8 +342,8 @@ scene.UpdateAnimationUsingDataTimeSteps()
 SetActiveView(rv)
 
 # Fit the chart time axes to the loaded data whenever the animation runs, so
-# the saved state also works when reloaded after the run continued or pointed
-# at another case.
+# the saved state also works when reloaded after the run continued (or pointed
+# at another case with the same domain; the camera and glyph grid are fixed).
 axis_cue = PythonAnimationCue()
 axis_cue.Script = """
 from paraview.simple import GetTimeKeeper, GetViews
