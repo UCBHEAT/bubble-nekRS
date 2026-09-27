@@ -45,7 +45,11 @@ void UDF_Setup()
         // Copy to device memory.
         nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
 
-        // Generate psi and c initial conditions from phi.
+        // psi and c from phi. c = psi is smeared over the interface band, so the
+        // liquid side of the band (0.5 < psi < 1) starts partly depleted. A
+        // saturated start (c = 1 wherever psi >= 0.5) is worse numerically: the
+        // hard sink then cuts a full 1 -> 0 jump at psi = 0.5, far sharper than
+        // the mesh can resolve at Pe = 2.7e5, and c rings to ~1.7 by t = 0.5.
         lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
         lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
     }
