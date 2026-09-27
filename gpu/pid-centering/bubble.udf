@@ -78,11 +78,41 @@ void UDF_Setup()
     pidSetup();
 }
 
-// Hard sink accumulators: species removed (integral of c dV) and the time over
-// which it was removed, since the last checkpoint.
-static double sink_removed = 0.0;
-static double sink_time = 0.0;
-static double sink_last_time = 0.0;
+// Species budget since the last checkpoint. The hard sink's own count of the c
+// it zeroes (sink_counted) is low: with BDF2, zeroing a gas node also zeroes
+// its history, so the node holds only 1/g0 = 2/3 of what flowed into it during
+// the step (in the periodic hard-sink tests the count was 63-65% of the c
+// actually lost). The transfer rate is therefore taken from the budget:
+//   removed = integral(net boundary inflow of c) dt - change in integral(c dV).
+static double sink_counted = 0.0;   // c zeroed by the sink (for comparison)
+static double budget_inflow = 0.0;  // time integral of the net boundary inflow of c
+static double budget_C0 = 0.0;      // integral of c dV at the window start
+static double budget_t0 = 0.0;      // window start time
+static double budget_flux = 0.0;    // net boundary inflow rate at the last step
+static double last_time = 0.0;
+// Gas centroid offset at the window start, for the rise velocity.
+static dfloat window_e0[3] = {0, 0, 0};
+// Species concentration of the inflowing liquid (the interface value is 0).
+static const dfloat c_inflow = 1.0;
+
+/**
+ * Net inflow rate of c through the open boundaries (IDs 1 and 2),
+ * -integral(c u.n dS) with n the outward normal.
+ */
+static dfloat speciesInflowRate(const occa::memory& o_c)
+{
+    mesh_t* mesh = nrs->meshV;
+    static deviceMemory<int> o_bIDs;
+    if (o_bIDs.size() == 0) {
+        const std::vector<int> ids = {1, 2};
+        o_bIDs.resize(ids.size());
+        o_bIDs.copyFrom(ids);
+    }
+    auto o_cu = platform->deviceMemoryPool.reserve<dfloat>(3*nrs->fieldOffset);
+    o_cu.copyFrom(nrs->fluid->o_solution(), 3*nrs->fieldOffset);
+    platform->linAlg->axmyMany(mesh->Nlocal, 3, nrs->fieldOffset, 0, 1.0, o_c, o_cu); // o_cu = c*u
+    return -mesh->surfaceAreaNormalMultiplyVectorIntegrate(nrs->fieldOffset, o_bIDs, o_cu);
+}
 
 void UDF_ExecuteStep(double time, int tstep)
 {
@@ -94,45 +124,69 @@ void UDF_ExecuteStep(double time, int tstep)
 
     lvlSet::solve(time);
 
-    // Hard sink: remove the species that has reached the gas (psi < 0.5), and
-    // accumulate the removed amount to measure the interface transfer rate. At
+    // Hard sink: remove the species that has reached the gas (psi < 0.5). At
     // tstep 0 this only clears the smeared initial interface band, which is
     // not mass transfer.
-    {
-        auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
-        hardSink(info, o_c, o_psi, o_cSink);
-        const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
-        if (tstep > 0) {
-            sink_removed += removed;
-            sink_time += time - sink_last_time;
-        }
-        sink_last_time = time;
-    }
+    auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+    hardSink(info, o_c, o_psi, o_cSink);
+    const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
 
     // Update the PID bubble centering force from the (reinitialized) level set.
     pidUpdate(time, tstep);
 
-    if (nrs->checkpointStep) {
-        // Interface transfer rate = species removed by the hard sink per unit time.
-        const dfloat mdot = (sink_time > 0) ? sink_removed/sink_time : 0.0;
-        sink_removed = 0.0;
-        sink_time = 0.0;
+    // Species budget (see above).
+    const dfloat C = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, comm);
+    const dfloat flux = speciesInflowRate(o_c);
+    if (tstep == 0) {
+        budget_C0 = C;
+        budget_t0 = time;
+        budget_inflow = 0.0;
+        sink_counted = 0.0;
+        for (int d = 0; d < 3; d++) window_e0[d] = pid.error[d];
+    } else {
+        budget_inflow += 0.5*(budget_flux + flux)*(time - last_time);
+        sink_counted += removed;
+    }
+    budget_flux = flux;
+    last_time = time;
 
-        // c_bulk = liquid-volume average of c.
+    if (nrs->checkpointStep) {
+        const dfloat window = time - budget_t0;
+        // Interface transfer rate from the species budget, and the sink's own
+        // (low) count for comparison.
+        const dfloat mdot = (budget_inflow - (C - budget_C0))/window;
+        const dfloat mdot_sink = sink_counted/window;
+        // Rise velocity: the lab-frame velocity of the level set centroid, i.e.
+        // its mean drift in the frame over the window minus the frame velocity
+        // (u_gas - U_frame would read ~2% low: u_gas misses the reinit shifts).
+        dfloat rise[3];
+        for (int d = 0; d < 3; d++) {
+            rise[d] = (pid.error[d] - window_e0[d])/window - pid.frame_velocity[d];
+            window_e0[d] = pid.error[d];
+        }
+        budget_C0 = C;
+        budget_t0 = time;
+        budget_inflow = 0.0;
+        sink_counted = 0.0;
+
+        // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
         auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
         platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
         const dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, comm) / info.liquid_volume;
+        const dfloat c_min = platform->linAlg->min(mesh->Nlocal, o_c, comm);
+        const dfloat c_max = platform->linAlg->max(mesh->Nlocal, o_c, comm);
 
-        // MTC and Sh, with c = 0 at the interface (hard sink).
+        // MTC and Sh, driven by the inflow concentration against c = 0 at the
+        // interface (hard sink).
         const dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, comm);
-        const dfloat mtc = mdot / total_area / c_bulk;
+        const dfloat mtc = mdot / total_area / c_inflow;
         const dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
-            printf("total_area=%.4g c_bulk=%.4f\n", total_area, c_bulk);
+            printf("mdot=%.4g (sink count %.4g) MTC=%.4g Sh=%.4g\n", mdot, mdot_sink, mtc, sherwood_no);
+            printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f]\n", total_area, c_bulk, c_min, c_max);
             printf("----------------------------------------\n");
 
             // Write CSV file
@@ -142,24 +196,23 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,"
+                f << "Time,tstep,mdot,mdot_sink,MTC,Sh,total_area,c_bulk,c_min,c_max,"
                         << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
             f << tstep << ",";
-            f << std::defaultfloat << std::setprecision(4) << mdot << ","
+            f << std::defaultfloat << std::setprecision(4) << mdot << "," << mdot_sink << ","
                     << mtc << "," << sherwood_no << "," << total_area << ",";
-            f << std::fixed << std::setprecision(4) << c_bulk;
+            f << std::fixed << std::setprecision(4) << c_bulk << "," << c_min << "," << c_max;
             f << std::defaultfloat << std::setprecision(4);
             // PID bubble centering: gas centroid offset from the setpoint, bubble
-            // rise velocity relative to the quiescent far-field liquid (gas
-            // velocity minus frame velocity), the PID force per unit mass
+            // rise velocity (lab frame, see above), the PID force per unit mass
             // applied in the next step, and the controller state (integral and
             // frame velocity, with more digits as they are read back on restart).
             for (int d = 0; d < 3; d++) f << "," << pid.error[d];
-            for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d] - pid.frame_velocity[d];
+            for (int d = 0; d < 3; d++) f << "," << rise[d];
             for (int d = 0; d < 3; d++) f << "," << pid.force[d];
             f << std::setprecision(10);
             for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
