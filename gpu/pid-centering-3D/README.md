@@ -9,6 +9,11 @@ conditions and species treatment (passive c, CST off, hard sink, budget
 generated with gmsh instead of genbox, refined at the bubble interface and in
 the wake and coarse elsewhere.
 
+The PID controller (`../common/pid.hpp`) and the animation script
+(`../common/animate.py`) are shared with the 2D case. The UDF finds `pid.hpp`
+through the case directory, so run the case inside the repository checkout,
+or copy `gpu/common` next to the case directory.
+
 Status: mesh generation is done and checked, and each mesh type has run a few
 steps of the full case at N = 3 on the laptop (below). The case has not been
 run at N = 7, so `dt` and the level-set settings in `bubble.par` are derived

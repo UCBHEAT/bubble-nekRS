@@ -1,6 +1,16 @@
 // PID controller that keeps the bubble (gas-phase centroid) at a fixed point in
 // the mesh, by accelerating the reference frame (moving reference frame).
 //
+// Shared by the gpu/ cases (gpu/pid-centering, gpu/pid-centering-3D): include
+// it from the case .udf as "../common/pid.hpp". A case using it needs
+//   - the conservative level set scalar "cls" (psi = 1 in the liquid),
+//   - a [PID] par section (kp, ki, kd, and optionally the setpoint x0, y0, z0),
+//   - pidSetup() in UDF_Setup, pidUpdate(time, tstep) in UDF_ExecuteStep after
+//     the level set solve, and pidApply(o_uSource, dt) in the user source,
+//   - its inflow Dirichlet condition to take the velocity from bc->usrwrk[0..2]
+//     (the frame velocity, see pidApply), and
+//   - for restarts, the pid_int_* and frame_* columns in data.csv.
+//
 // The controller output F_pid is a force per unit mass (an acceleration, in the
 // same nondimensional units as the -1/Fr^2 gravity term in buoyancySource) that
 // is added to every velocity point: the fictitious force of a frame

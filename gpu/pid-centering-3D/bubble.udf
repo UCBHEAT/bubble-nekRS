@@ -8,7 +8,9 @@
 #include "util.hpp"
 
 #include "case.hpp"
-#include "pid.hpp"
+// Shared by the gpu/ cases; found through the case directory, which nekRS
+// puts on the UDF include path.
+#include "../common/pid.hpp"
 #include "customhooks.hpp"
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)

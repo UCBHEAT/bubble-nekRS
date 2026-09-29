@@ -1,28 +1,31 @@
-"""ParaView animation of the PID-centered rising bubble.
+"""ParaView animation of the PID-centered rising bubble (2D or 3D cases).
 
-Left: 3D render of the bubble interface (cls = 0.5 contour) over a mid-plane
-slice colored by the liquid z-vorticity, with velocity glyphs showing the
-liquid flowing down past the bubble in the moving (PID-centered) frame, and
-the c = 0.9 isoline of species-depleted liquid (drawn only where psi > 0.95).
-Right: the PID centering force (mean over the last 0.5 time units) and the
-bubble centroid offset from data.csv, drawn up to the current animation time.
+Left: 3D render of the bubble interface (cls = 0.5 contour) over the z mid-plane
+slice (through the bubble centre) colored by the liquid z-vorticity, with
+velocity glyphs showing the liquid flowing down past the bubble in the moving
+(PID-centered) frame, and the c = 0.9 isoline of species-depleted liquid
+(drawn only where psi > 0.95). Right: the PID centering force (mean over the
+last 0.5 time units) and the bubble centroid offset from data.csv, drawn up to
+the current animation time.
 
-Usage (from this directory, after running the case):
+Shared by gpu/pid-centering (quasi-2D, one z element) and gpu/pid-centering-3D.
+Usage, from a case directory after running it:
 
-    ~/.local/paraview-5.13.2/bin/pvbatch animate.py [CASE_DIR] [--no-movie]
+    ~/.local/paraview-5.13.2/bin/pvbatch ../common/animate.py [CASE_DIR] [--no-movie]
 
-CASE_DIR defaults to this script's directory and must contain bubble.nek5000
-(written by nekRS) and data.csv. Under pvbatch, frames are written to
-CASE_DIR/frames/, encoded to CASE_DIR/bubble-pid.mp4 with ffmpeg, and the
-pipeline is saved as CASE_DIR/animate.pvsm (open it in the ParaView GUI via
-File > Load State; "Search files under specified directory" can point it at a
-continued run or another case with the same domain. The chart time axes follow
-the loaded data, but the camera and the velocity-glyph grid keep the domain
-bounds the state was saved with, so for a different domain rerun
-`pvbatch animate.py OTHER_CASE_DIR`).
+CASE_DIR defaults to the current directory (or $BUBBLE_CASE if set) and must
+contain bubble.nek5000 (written by nekRS) and data.csv. Under pvbatch, frames
+are written to CASE_DIR/frames/, encoded to CASE_DIR/bubble-pid.mp4 with
+ffmpeg, and the pipeline is saved as CASE_DIR/animate.pvsm (open it in the
+ParaView GUI via File > Load State; "Search files under specified directory"
+can point it at a continued run or another case with the same domain. The
+chart time axes follow the loaded data, but the camera and the velocity-glyph
+grid keep the domain bounds the state was saved with, so for a different
+domain rerun `pvbatch ../common/animate.py OTHER_CASE_DIR`).
 
 In the GUI you can also run this file from View > Python Shell > Run Script to
-build the same pipeline and edit it interactively; nothing is written then.
+build the same pipeline and edit it interactively (set BUBBLE_CASE, or start
+ParaView from the case directory); nothing is written then.
 """
 
 import itertools
@@ -34,9 +37,8 @@ import sys
 from paraview.simple import *
 from paraview import servermanager
 
-HERE = os.path.dirname(os.path.abspath(__file__))
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
-CASE = os.path.abspath(args[0]) if args else HERE
+CASE = os.path.abspath(args[0] if args else os.environ.get("BUBBLE_CASE", os.getcwd()))
 # Only write the state, frames, and movie under pvbatch (not from the GUI).
 _pm = servermanager.vtkProcessModule
 IN_BATCH = _pm.GetProcessType() == _pm.PROCESS_BATCH

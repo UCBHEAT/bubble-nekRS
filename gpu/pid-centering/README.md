@@ -47,10 +47,10 @@ gradient absorbs (~0.1% of gravity on average here). The buoyancy reference
 density is the liquid's, since the far-field pressure gradient is the
 liquid's hydrostatic one.
 
-Implementation: `pid.hpp`. The controller is updated once per step in
-`UDF_ExecuteStep` (after `lvlSet::solve`); `customSource` adds the stored
-force after `applySurfaceTensionAcc` (which overwrites the explicit term
-buffer) and sets that step's inflow velocity. On restart, the integral term
+Implementation: `../common/pid.hpp`. The controller is updated once per
+step in `UDF_ExecuteStep` (after `lvlSet::solve`); `customSource` adds the
+stored force after `applySurfaceTensionAcc` (which overwrites the explicit
+term buffer) and sets that step's inflow velocity. On restart, the integral term
 and `U_frame` are restored from the `data.csv` row at the restart time.
 
 ## Boundary conditions
@@ -104,7 +104,7 @@ integral starts from 0 and `U_frame` is taken from the restart field's
 inflow velocity. nekRS numbers the new output from `bubble0.f00000` again
 and rewrites `bubble.nek5000` to list only the new files, so move the
 existing `bubble0.f*` aside first, or restart in a copy of the case
-directory. `animate.py` then shows the fields of the restarted segment only.
+directory. The animation then shows the fields of the restarted segment only.
 
 ## Output
 
@@ -140,21 +140,25 @@ directory. `animate.py` then shows the fields of the restarted segment only.
 ## Animation
 
 ```
-~/.local/paraview-5.13.2/bin/pvbatch animate.py [CASE_DIR]
+~/.local/paraview-5.13.2/bin/pvbatch ../common/animate.py [CASE_DIR]
 ```
 
-Builds the pipeline (3D render of the interface over a liquid z-vorticity
-mid-plane with velocity glyphs and the c = 0.9 isoline of species-depleted
-liquid, drawn only where psi > 0.95 because c rings inside the interface
-band next to the hard-sink cut; plus charts of `F_pid`, as its mean over the
-last 0.5 time units from `frame_*`, and of the centroid offset from
-`data.csv`, drawn up to the current time), writes `frames/`, encodes
-`bubble-pid.mp4` with ffmpeg, and saves `animate.pvsm`. To edit in the GUI,
-load `animate.pvsm` (File > Load State, "Search files under specified
-directory" to point it at a case directory with the same domain; the camera
-and glyph grid keep the saved domain bounds, so for a different domain rerun
-`pvbatch animate.py CASE_DIR`) or run `animate.py` from the Python shell,
-which only builds the pipeline.
+`gpu/common/animate.py` is shared with `gpu/pid-centering-3D`; CASE_DIR
+defaults to the current directory. It builds the pipeline:
+- a 3D render of the interface over a liquid z-vorticity mid-plane, with
+  velocity glyphs and the c = 0.9 isoline of species-depleted liquid (drawn
+  only where psi > 0.95, because c rings inside the interface band next to
+  the hard-sink cut);
+- charts of `F_pid`, as its mean over the last 0.5 time units from `frame_*`,
+  and of the centroid offset from `data.csv`, drawn up to the current time.
+
+It writes `frames/`, encodes `bubble-pid.mp4` with ffmpeg, and saves this
+case's `animate.pvsm`. To edit in the GUI, load `animate.pvsm` (File > Load
+State, "Search files under specified directory" to point it at a case
+directory with the same domain; the camera and glyph grid keep the saved
+domain bounds, so for a different domain rerun `pvbatch ../common/animate.py
+CASE_DIR`), or run `animate.py` from the Python shell, which only builds the
+pipeline.
 
 ## Domain size
 
@@ -210,8 +214,8 @@ shared the GPU) and check a wider one. The `bubble.box` node lines are
 ```
 
 The committed 6 D domain is kept as the fast testbed for the PID and species
-numerics; `animate.py` fits its camera and glyph grid to whichever domain it
-is run on.
+numerics; the animation script fits its camera and glyph grid to whichever
+domain it is run on.
 
 The 2x2 D periodic box used earlier was far too small: a dense bubble
 array, and with an outlet 0.55 D behind the bubble its wake would give
