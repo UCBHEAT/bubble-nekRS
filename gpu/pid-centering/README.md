@@ -118,13 +118,15 @@ directory. The animation then shows the fields of the restarted segment only.
   - `mdot`: species removed per unit time since the previous row, from the
     budget
     `integral(net boundary inflow of c) dt - change in integral(c dV)`.
-    `mdot_sink` is the hard sink's own count of the c it zeroes, which
-    is 1.34-1.41x lower (over 4 time-unit windows): with BDF2, zeroing a gas
-    node also zeroes its history, so it only holds 1/g0 = 2/3 of what flowed
-    in during the step. (A run with the sink disabled gives |mdot| < 3e-6,
-    <0.1% of the signal.) The same undercount affects any hard-sink
-    bookkeeping that sums the zeroed c, including
-    `gpu/match-nek5000-202605`.
+    It uses only the stored c and the boundary fluxes, not the time
+    integrator. With the sink disabled it reads |mdot| <= 1.4e-5 per 0.05
+    window (<= 0.4% of the signal, ~0.1% on average) with both BDF1 and
+    BDF2 (t = 0-1.5 tests). Adding up the c the hard sink zeroes instead
+    reads 1.34-1.41x low with BDF2: zeroing a gas node also zeroes its
+    history, so it only holds 1/g0 = 2/3 of what flowed in during the step.
+    With BDF1 (g0 = 1) that count agrees with the budget to 0.3%. The same
+    undercount affects any hard-sink bookkeeping that sums the zeroed c
+    under BDF2, including `gpu/match-nek5000-202605`.
   - `MTC = mdot/(area * (c_inflow - 0))`, `Sh = MTC Pe`, with the inflow
     concentration c_inflow = 1 and c = 0 at the interface; `total_area` is
     the integral of the interface delta function.

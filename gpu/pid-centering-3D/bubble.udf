@@ -80,13 +80,12 @@ void UDF_Setup()
     pidSetup();
 }
 
-// Species budget since the last checkpoint. The hard sink's own count of the c
-// it zeroes (sink_counted) is low: with BDF2, zeroing a gas node also zeroes
-// its history, so the node holds only 1/g0 = 2/3 of what flowed into it during
-// the step (in the periodic hard-sink tests the count was 63-65% of the c
-// actually lost). The transfer rate is therefore taken from the budget:
-//   removed = integral(net boundary inflow of c) dt - change in integral(c dV).
-static double sink_counted = 0.0;   // c zeroed by the sink (for comparison)
+// Species budget since the last checkpoint. The interface transfer rate is
+//   removed = integral(net boundary inflow of c) dt - change in integral(c dV),
+// which uses only the stored c and the boundary fluxes. (Adding up the c the
+// hard sink zeroes would read low and depend on the time integrator: with
+// BDF2, zeroing a gas node also zeroes its history, so the node holds only
+// 1/g0 = 2/3 of what flowed into it during the step.)
 static double budget_inflow = 0.0;  // time integral of the net boundary inflow of c
 static double budget_C0 = 0.0;      // integral of c dV at the window start
 static double budget_t0 = 0.0;      // window start time
@@ -128,10 +127,8 @@ void UDF_ExecuteStep(double time, int tstep)
 
     // Hard sink: remove the species that has reached the gas (psi < 0.5). At
     // tstep 0 this only clears the smeared initial interface band, which is
-    // not mass transfer.
-    auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
-    hardSink(info, o_c, o_psi, o_cSink);
-    const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
+    // not mass transfer (the budget starts after it).
+    hardSink(info, o_c, o_psi);
 
     // Update the PID bubble centering force from the (reinitialized) level set.
     pidUpdate(time, tstep);
@@ -143,21 +140,17 @@ void UDF_ExecuteStep(double time, int tstep)
         budget_C0 = C;
         budget_t0 = time;
         budget_inflow = 0.0;
-        sink_counted = 0.0;
         for (int d = 0; d < 3; d++) window_e0[d] = pid.error[d];
     } else {
         budget_inflow += 0.5*(budget_flux + flux)*(time - last_time);
-        sink_counted += removed;
     }
     budget_flux = flux;
     last_time = time;
 
     if (nrs->checkpointStep) {
         const dfloat window = time - budget_t0;
-        // Interface transfer rate from the species budget, and the sink's own
-        // (low) count for comparison.
+        // Interface transfer rate from the species budget.
         const dfloat mdot = (budget_inflow - (C - budget_C0))/window;
-        const dfloat mdot_sink = sink_counted/window;
         // Rise velocity: the lab-frame velocity of the level set centroid, i.e.
         // its mean drift in the frame over the window minus the frame velocity
         // (u_gas - U_frame would read ~2% low: u_gas misses the reinit shifts).
@@ -169,7 +162,6 @@ void UDF_ExecuteStep(double time, int tstep)
         budget_C0 = C;
         budget_t0 = time;
         budget_inflow = 0.0;
-        sink_counted = 0.0;
 
         // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
         auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
@@ -187,7 +179,7 @@ void UDF_ExecuteStep(double time, int tstep)
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("mdot=%.4g (sink count %.4g) MTC=%.4g Sh=%.4g\n", mdot, mdot_sink, mtc, sherwood_no);
+            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
             printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f]\n", total_area, c_bulk, c_min, c_max);
             printf("----------------------------------------\n");
 
@@ -198,14 +190,14 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,mdot_sink,MTC,Sh,total_area,c_bulk,c_min,c_max,"
+                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_min,c_max,"
                         << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
             f << std::fixed << std::setprecision(4) << time << ",";
             f << tstep << ",";
-            f << std::defaultfloat << std::setprecision(4) << mdot << "," << mdot_sink << ","
+            f << std::defaultfloat << std::setprecision(4) << mdot << ","
                     << mtc << "," << sherwood_no << "," << total_area << ",";
             f << std::fixed << std::setprecision(4) << c_bulk << "," << c_min << "," << c_max;
             f << std::defaultfloat << std::setprecision(4);
