@@ -74,11 +74,18 @@ maximumSteps = 80
 interfaceWidthValue = 0.0536
 
 [PID]
-# Bubble centering controller (see pid.hpp): a uniform acceleration
+# Bubble centering controller (see ../common/pid.hpp): a uniform acceleration
 # F_pid = -(kp*e + ki*integral(e dt) + kd*u_gas) is applied to the whole domain,
-# where e is the gas centroid offset from the setpoint (x0, y0) and u_gas is the
-# gas-phase mean velocity (used as de/dt). Triple closed-loop pole at s = -2
-# (per unit time): kp = 3*2^2, ki = 2^3, kd = 3*2.
+# where e is the gas centroid offset from the setpoint (x0, y0, z0) and u_gas is
+# the gas-phase mean velocity (used as de/dt). F_pid accelerates the bubble
+# directly (e'' = F_pid + buoyancy - drag), so e obeys
+#   e''' + kd e'' + kp e' + ki e = d/dt(buoyancy - drag),
+# whose characteristic polynomial s^3 + kd s^2 + kp s + ki (s: the Laplace
+# variable, i.e. solutions ~ e^(s t)) is (s + 2)^3 for the gains below. All
+# three roots are at s = -2 (a "triple closed-loop pole at s = -2"): an offset
+# decays like e^(-2t), with a time constant of 0.5, without oscillating. To make
+# the loop faster or slower, put the poles at s = -a with kp = 3a^2, ki = a^3,
+# kd = 3a.
 kp = 12
 ki = 8
 kd = 6

@@ -41,8 +41,11 @@
 //
 // Gains are read from the [PID] section of the .par file. The plant (F_pid ->
 // x_c) is a double integrator, so the closed-loop characteristic polynomial is
-// s^3 + kd*s^2 + kp*s + ki, which is stable (Routh-Hurwitz) for kd > 0, ki > 0
-// and kd*kp > ki (which implies kp > 0); with ki = 0 it needs kd > 0, kp > 0.
+// s^3 + kd*s^2 + kp*s + ki (s: the Laplace variable, solutions ~ e^(s t)),
+// which is stable (Routh-Hurwitz) for kd > 0, ki > 0 and kd*kp > ki (which
+// implies kp > 0); with ki = 0 it needs kd > 0, kp > 0. Putting all three
+// roots at s = -a, (s + a)^3, gives kp = 3a^2, ki = a^3, kd = 3a: offsets decay
+// like e^(-a t) without oscillating (the cases use a = 2: kp, ki, kd = 12, 8, 6).
 
 #include <algorithm>
 #include <fstream>

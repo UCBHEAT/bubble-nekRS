@@ -32,9 +32,13 @@ whole domain, i.e. the fictitious force of an accelerating frame:
 - Gains are in the `[PID]` section of `bubble.par`. The plant (`F_pid` to
   centroid) is a double integrator, so the loop is stable for `kd > 0`,
   `ki > 0` and `kd*kp > ki` (`ki = 0`: `kd > 0`, `kp > 0`); the setup prints
-  a warning otherwise. The defaults `kp=12, ki=8, kd=6` put a triple
-  closed-loop pole at `s = -2`: the offset peaks at ~0.02 D near t = 1 while
-  the bubble accelerates.
+  a warning otherwise. The defaults `kp=12, ki=8, kd=6` make the closed-loop
+  characteristic polynomial `s^3 + kd s^2 + kp s + ki` equal to `(s + 2)^3`
+  (s is the Laplace variable: solutions go like `e^(s t)`). So all three
+  closed-loop poles are at `s = -2`, and an offset decays like `e^(-2t)`, with
+  a time constant of 0.5, without oscillating. For poles at `s = -a`, use
+  `kp = 3a^2, ki = a^3, kd = 3a`. The offset peaks at ~0.02 D near t = 1
+  while the bubble accelerates.
 
 The liquid far from the bubble is at rest in the lab frame, so in the
 accelerated frame it moves with the frame velocity
