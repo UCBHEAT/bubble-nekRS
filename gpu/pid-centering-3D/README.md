@@ -118,7 +118,8 @@ The nekRS-LS columns are at N = 7, from `bubble.plan.json`.
 `bubble.par` is set for the default mesh at N = 7:
 - `interfaceWidthValue = 0.0429`;
 - `dt = 1.5e-3`, about 0.67x the capillary estimate (in 2D, 0.8x was stable);
-- TLSR/CLSR every 100/10 steps, capped at 200/80 pseudo-steps.
+- TLSR/CLSR every 100/10 steps (the lvlSet defaults 100*dt and 10*dt, so
+  they follow dt), capped at 200/80 pseudo-steps.
 
 For another preset, take the values from `bubble.plan.json`. Do not leave eps
 at the lvlSet default: it is taken from the largest element, which here gives

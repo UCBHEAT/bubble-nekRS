@@ -7,7 +7,7 @@ stopAt = endTime
 endTime = 20
 # Explicit surface tension limits dt to ~0.8x the capillary estimate
 # sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) = 3.1e-3 on this mesh: 0.0025 is
-# stable, 0.003 is not (see README). Scale the TLSR/CLSR solveFrequency with dt.
+# stable, 0.003 is not (see README).
 dt = 0.0025
 timeStepper = tombo2
 #startFrom = restart.fld
@@ -55,19 +55,15 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
-# Every 100 steps (the lvlSet default of 100*dt)
-solveFrequency = 0.25
-residualTol = 1e-8
-# The pseudo-step count scales with the largest/smallest element size; cap it
-# at the uniform-mesh value 25*(N+1), which covers the fine block around the
-# bubble.
+# The reinitialization intervals are left at the lvlSet defaults, every 100
+# (TLSR) and 10 (CLSR) steps (solveFrequency = 100*dt and 10*dt, so they follow
+# dt), as is residualTol (1e-8). The pseudo-step count scales with the
+# largest/smallest element size; cap it at the uniform-mesh value 25*(N+1),
+# which covers the fine block around the bubble (the default cap is 1000).
 maximumSteps = 200
 
 [CLSR]
-# Every 10 steps (the lvlSet default of 10*dt)
-solveFrequency = 0.025
-residualTol = 1e-8
-# Capped at the uniform-mesh value 10*(N+1), as for TLSR.
+# Capped at the uniform-mesh value 10*(N+1), as for TLSR (default 500).
 maximumSteps = 80
 
 [LVLSET]
