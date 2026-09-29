@@ -5,14 +5,18 @@ polynomialOrder = 7
 
 stopAt = endTime
 endTime = 20
-# Explicit surface tension limits dt to ~0.8x the capillary estimate
-# sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) = 3.1e-3 on this mesh: 0.0025 is
-# stable, 0.003 is not (see README). Scale the TLSR/CLSR solveFrequency with dt.
-dt = 0.0025
+# Settings for the default mesh (./mesh, 0.2 cubes around the bubble); for
+# another preset take them from bubble.plan.json ("nekrs_ls").
+# Explicit surface tension limits dt: in 2D, 0.8x the capillary estimate
+# sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) was stable and ~0.96x was not. That
+# 0.8x value is 1.8e-3 at h = 0.2, N = 7; dt = 1.5e-3 leaves some margin, since
+# 3D has not been tested yet. Scale the TLSR/CLSR solveFrequency with dt.
+dt = 0.0015
 timeStepper = tombo2
 #startFrom = restart.fld
 checkpointControl = simulationTime
-checkpointInterval = 0.1
+# A 3D field file is ~0.1-0.2 GB at N = 7 (4.3 M GLL points).
+checkpointInterval = 0.5
 
 scalars = tls, cls, c
 
@@ -57,26 +61,28 @@ regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
 # Every 100 steps (the lvlSet default of 100*dt)
-solveFrequency = 0.25
+solveFrequency = 0.15
 residualTol = 1e-8
-# The pseudo-step count scales with the largest/smallest element size; cap it
-# at the uniform-mesh value 25*(N+1), which covers the fine block around the
-# bubble.
+# The pseudo-step count scales with the largest/smallest element size (4.3 on
+# the default mesh); cap it at the uniform-mesh value 25*(N+1), which covers
+# the fine cube around the bubble.
 maximumSteps = 200
 
 [CLSR]
 # Every 10 steps (the lvlSet default of 10*dt)
-solveFrequency = 0.025
+solveFrequency = 0.015
 residualTol = 1e-8
 # Capped at the uniform-mesh value 10*(N+1), as for TLSR.
 maximumSteps = 80
 
 [LVLSET]
-# eps = 1.5*h/N for the h = 0.25 cube elements around the bubble. Set it
-# directly, since by default lvlSet uses the largest element of the (graded)
-# mesh. R/eps = 9.3 here; at eps = 0.085 (R/eps = 5.9) the gas core goes
-# unstable (spurious velocities ~1 in a bubble rising at 0.26).
-interfaceWidthValue = 0.0536
+# eps = 1.5*h/N for the h = 0.2 cube elements around the bubble (default
+# mesh, N = 7; bubble.plan.json gives it for other meshes). Set it directly,
+# since by default lvlSet uses the largest element of the graded mesh, which
+# here would give eps ~0.12 (R/eps ~4.1; 0.18 with interfaceWidthFactor =
+# 1.5). R/eps = 11.7 here; in 2D the gas core went unstable at R/eps = 5.9 and
+# was clean at 9.3.
+interfaceWidthValue = 0.0429
 
 [PID]
 # Bubble centering controller (see pid.hpp): a uniform acceleration
