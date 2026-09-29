@@ -204,8 +204,9 @@ meshes (5.8-8.8 on 2.25x).
 
 0.667x and 0.444x ran from t = 0 to 30 (September 24-27, 2026) in 8 and 10
 jobs of 5-25 nodes, mostly short jobs fitted into queue gaps and, for the
-last 0.444x parts, a self-restarting chain. Their checkpoints are in
-answinter26/Sc1/{0.667x,0.444x}/part*/.
+last 0.444x parts, a self-restarting chain. As for the coarser runs, their
+field files were deleted after the animations; answinter26/Sc1/<run>/ keeps
+the inputs, data.csv, post.csv, animation.mp4, logs/ and bubble3d_t15.fld.
 
 All four resolved meshes drift at the same rate, but at different times, so
 the drift onset is set by numerical noise, not by the resolution (2.25x
