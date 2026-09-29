@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Average the Sherwood number over a time window for each run directory.
 
-Usage: sherwood.py [--tmin 20] [--tmax 30] [--csv summary.csv] <run dir>...
+Usage: sherwood.py [--tmin 20] [--tmax 30] [--pe PE] [--csv summary.csv] <run dir>...
 
 Each data.csv row holds mdot averaged over the sample interval ending at
 Time (the checkpoint interval in the 2.25x, 1.5x and 1x runs), with
@@ -10,15 +10,29 @@ whose intervals lie inside (tmin, tmax]. Rows are weighted by the length of
 their interval, so the short rows at job boundaries (bubble3d.udf also
 samples each job's last step) count proportionally less. The uncertainty is
 the standard error of 1 time unit batch means, which are much less correlated
-than individual samples.
+than individual samples. Sh_ratio_of_means uses Pe = Re*Sc from each run's
+case.hpp unless --pe is given.
 """
 import argparse
 import csv
 import os
+import re
 
 import numpy as np
 
-Pe = 231.4  # Re*Sc, Sc = 1 (case.hpp)
+
+
+def case_pe(run_dir):
+    """Pe = Re*Sc from the run's case.hpp."""
+    with open(os.path.join(run_dir, "case.hpp")) as f:
+        text = f.read()
+    value = {}
+    for name in ("Re", "Sc"):
+        m = re.search(r"^static double {} = ([0-9.eE+-]+);".format(name), text, re.M)
+        if not m:
+            raise SystemExit("{}: no {} in case.hpp, use --pe".format(run_dir, name))
+        value[name] = float(m.group(1))
+    return value["Re"]*value["Sc"]
 
 
 def load(path):
@@ -27,7 +41,8 @@ def load(path):
     return {k: np.array([float(r[k]) for r in rows]) for k in rows[0]}
 
 
-def summarize(run_dir, tmin, tmax):
+def summarize(run_dir, tmin, tmax, Pe=None):
+    Pe = Pe or case_pe(run_dir)
     data = load(os.path.join(run_dir, "data.csv"))
     t = data["Time"]
     weight = np.diff(t, prepend=0.0)
@@ -67,11 +82,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--tmin", type=float, default=20.0)
     parser.add_argument("--tmax", type=float, default=30.0)
+    parser.add_argument("--pe", type=float, help="Peclet number for Sh_ratio_of_means (default Re*Sc from case.hpp)")
     parser.add_argument("--csv", help="also write the summary to this CSV file")
     parser.add_argument("dirs", nargs="+")
     args = parser.parse_args()
 
-    results = [summarize(d, args.tmin, args.tmax) for d in args.dirs]
+    results = [summarize(d, args.tmin, args.tmax, args.pe) for d in args.dirs]
     print("{:>8} {:>7} {:>9} {:>8} {:>7} {:>8} {:>9} {:>7} {:>7}".format(
         "run", "t_end", "samples", "Sh", "+/-", "Sh_std", "Sh(means)", "area", "c_bulk"))
     for r in results:

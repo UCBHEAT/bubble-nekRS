@@ -6,6 +6,8 @@
 #   GENBOX=~/answinter26/tools/genbox-maxnel1.5M ./setup-runs.sh ~/answinter26/Sc1 \
 #       0.667x:40:5e-5:0.5 0.444x:60:2.5e-5:0.5 0.296x:90:1.25e-5:0.25
 # (genbox must be built with MAXNEL >= Nelx*2*Nelx*Nelx).
+# SC sets the Schmidt number in each run's case.hpp (default 1), e.g.
+#   SC=4 ./setup-runs.sh ~/answinter26/Sc4 1x:27:1e-4:0.1 0.667x:40:5e-5:0.5
 #
 # Resolutions are multiples of the Kolmogorov scale lambda_k = 0.0671 mm
 # (lambda_k/d = 0.021536), using the mean unique GLL spacing dx = h/N with
@@ -20,6 +22,7 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+: ${SC:=1}
 src=$(cd "$(dirname "$0")" && pwd)
 dest=$1
 shift
@@ -36,11 +39,13 @@ for spec in "${specs[@]}"; do
         continue
     fi
     mkdir -p "$dir"
-    cp "$src"/{bubble3d.udf,bubble3d.oudf,case.hpp,customhooks.hpp,util.hpp,mesh} "$dir"/
+    cp "$src"/{bubble3d.udf,bubble3d.oudf,customhooks.hpp,util.hpp,mesh} "$dir"/
+    sed -e "s/^static double Sc = .*/static double Sc = $SC;/" -e "s/(Sc=[0-9.]*)/(Sc=$SC)/" \
+        "$src/case.hpp" > "$dir/case.hpp"
     sed -e "s/^dt = .*/dt = $dt/" -e "s/^checkpointInterval = .*/checkpointInterval = $ckpt/" \
         "$src/bubble3d.par" > "$dir/bubble3d.par"
     sed -e "s/^-27 -54 -27 .*/-$nx -$((2*nx)) -$nx            Nelx Nely Nelz ($name Kolmogorov)/" \
         "$src/bubble3d.box" > "$dir/bubble3d.box"
     (cd "$dir" && ./mesh > mesh.log)
-    echo "$dir: ${nx}x$((2*nx))x${nx} elements, dt = $dt, checkpointInterval = $ckpt"
+    echo "$dir: ${nx}x$((2*nx))x${nx} elements, dt = $dt, checkpointInterval = $ckpt, Sc = $SC"
 done

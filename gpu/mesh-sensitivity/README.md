@@ -1,13 +1,16 @@
-# mesh-sensitivity-Sc1
+# mesh-sensitivity
 
-Mesh sensitivity study of the Sherwood number for the gpu/3D bubble case at
-Sc = 1 with the physical FLiBe/Ar density ratio, at 2.25x, 1.5x and 1x the
-Kolmogorov scale, followed by 0.667x, 0.444x and 0.296x ((1.5)^-1 to
-(1.5)^-3).
+Mesh sensitivity study of the Sherwood number for the gpu/3D bubble case with
+the physical FLiBe/Ar density ratio, on meshes that are multiples of the
+Kolmogorov scale. The Schmidt number is a parameter of the run directories
+(SC in setup-runs.sh). Sc = 1 was run first, at 2.25x, 1.5x, 1x, 0.667x and
+0.444x the Kolmogorov scale (results below); Sc = 4 is next, so the Sc
+exponent of Sh can be fitted.
 
 Physics follows gpu/3D (4x8x4 fully periodic domain, bubble of diameter 1
 starting at y = 1, Re = 231.4, Fr = 1.633, We = 2.667, muratio = 148.1) with:
-* Sc = 1, so Pe = Re = 231.4 (flibe1/ar in cpu/common/calc_dimensionless_numbers.py).
+* Sc from case.hpp (setup-runs.sh sets it) and Pe = Re*Sc; Sc = 1 gives
+  Pe = Re = 231.4 (flibe1/ar in cpu/common/calc_dimensionless_numbers.py).
 * Physical density ratio rhoratio = 1/0.0002709 = 3691 instead of 40.
 
 Species transport and the Sherwood number follow gpu/match-nek5000-202605
@@ -54,6 +57,11 @@ element size h = 4/Nelx.
 | 0.444x | 60x120x60 | 0.442       | 148M               | 2.5e-5  | 0.5         |
 | 0.296x | 90x180x90 | 0.295       | 500M               | 1.25e-5 | 0.25        |
 
+The species boundary layer is thinner than the momentum one by about
+Sc^-1/2 (the Batchelor scale is lambda_k/sqrt(Sc)), so at Sc = 4 the same
+meshes are twice as coarse relative to the concentration field: 1x the
+Kolmogorov scale is 2x the Batchelor scale.
+
 ## Running on Polaris
 
 Create the run directories and meshes (genbox must be on PATH; the finer
@@ -64,6 +72,15 @@ genbox-maxnel1.5M):
 ./setup-runs.sh ~/answinter26/Sc1
 GENBOX=~/answinter26/tools/genbox-maxnel1.5M ./setup-runs.sh ~/answinter26/Sc1 \
     0.667x:40:5e-5:0.5 0.444x:60:2.5e-5:0.5 0.296x:90:1.25e-5:0.25
+```
+
+Each spec is name:Nelx:dt:checkpointInterval. For another Schmidt number, set
+SC, e.g. the Sc = 4 study on the three meshes that bracket convergence at
+Sc = 1:
+
+```
+SC=4 GENBOX=~/answinter26/tools/genbox-maxnel1.5M ./setup-runs.sh ~/answinter26/Sc4 \
+    1x:27:1e-4:0.1 0.667x:40:5e-5:0.5 0.444x:60:2.5e-5:0.5
 ```
 
 The first three meshes are small compared to the 10-node minimum of the prod
@@ -113,7 +130,8 @@ QUEUE=debug PROJ_ID=nek-vf nrsqsub_polaris bubble3d.par 1 1:00
 
 ## Postprocessing
 
-* `sherwood.py --tmin 20 --tmax 30 <runs>`: window-averaged Sh from data.csv.
+* `sherwood.py --tmin 20 --tmax 30 <runs>`: window-averaged Sh from data.csv
+  (Pe for the ratio-of-means column from each run's case.hpp).
 * `drift.py <runs>`: when the bubble leaves its initial rise axis, and the
   exponential growth rate of the lateral offset.
 * `submit-animate.sh` and `animate.py`: animation.mp4 and post.csv (centroid,
@@ -122,8 +140,13 @@ QUEUE=debug PROJ_ID=nek-vf nrsqsub_polaris bubble3d.par 1 1:00
 * `add-coords.py`: makes a checkpoint self-contained (nekRS writes the mesh
   coordinates only into each job's first checkpoint), so it can seed a run on
   another mesh with `startFrom = <file>+int`.
+* The paper figure (Sh and lateral offset against time with the literature
+  correlations) is made by 2026-11-nek-cst/data/mesh_sensitivity_sc1.py in
+  UCBHEAT/papers from copies of the runs' data.csv and post.csv. It evaluates
+  the correlations at the Reynolds number of the simulated rise (Re = 266 at
+  Sc = 1, from the finest mesh's slip velocity), not the nominal 231.4.
 
-## Results (Polaris, September 2026)
+## Sc = 1 results (Polaris, September 2026)
 
 ### 2.25x, 1.5x and 1x
 
