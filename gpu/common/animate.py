@@ -52,10 +52,9 @@ STATE = os.path.join(CASE, "animate.pvsm")
 
 WIDTH, HEIGHT = 1920, 1080
 FPS = 20
-# Colormap ranges, fixed so colors mean the same thing in every frame.
+# Colormap range, fixed so colors mean the same thing in every frame. (The
+# chart ranges are set from the data, see series_range.)
 VORTICITY_RANGE = 5.0
-FORCE_RANGE = (-0.4, 0.1)
-OFFSET_RANGE = (-0.025, 0.025)
 
 # -----------------------------------------------------------------------------
 # 3D data: nekRS field files. S01 = tls, S02 = cls (psi, 1 = liquid), S03 = c.
@@ -293,9 +292,23 @@ BLUE = ["0.12", "0.47", "0.71"]
 RED = ["0.84", "0.15", "0.16"]
 
 
-def make_chart(title, ytitle, xarr_series, yrange):
+def series_range(table, names, pad=0.1):
+    """(min, max) of the named columns of the table over the whole run, padded
+    by pad times the span and always including 0, so the chart axes stay fixed
+    through the animation and fit both the 2D and 3D cases."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+    data = servermanager.Fetch(table)
+    vals = [vtk_to_numpy(data.GetColumnByName(n)) for n in names]
+    lo = min([0.0] + [float(v.min()) for v in vals if len(v)])
+    hi = max([0.0] + [float(v.max()) for v in vals if len(v)])
+    span = (hi - lo) or 1.0
+    return lo - pad * span, hi + pad * span
+
+
+def make_chart(title, ytitle, xarr_series):
     """Line chart of the given (array, label, color) series up to the current time."""
     table = data_up_to_time(f"{xarr_series[0][0]}_upto_t", [s[0] for s in xarr_series])
+    yrange = series_range(table, [s[0] for s in xarr_series])
     cv = CreateView("XYChartView")
     cv.ChartTitle = title
     cv.ChartTitleFontSize = 20
@@ -324,9 +337,9 @@ def make_chart(title, ytitle, xarr_series, yrange):
 
 
 force_chart = make_chart("PID centering force (per unit mass, mean over the last 0.5)", "F_pid",
-        [("F_pid_x", "F_pid,x", BLUE), ("F_pid_y", "F_pid,y", RED)], FORCE_RANGE)
+        [("F_pid_x", "F_pid,x", BLUE), ("F_pid_y", "F_pid,y", RED)])
 offset_chart = make_chart("Bubble centroid offset from the setpoint", "offset / D",
-        [("bubble_dx", "x_c - x_0", BLUE), ("bubble_dy", "y_c - y_0", RED)], OFFSET_RANGE)
+        [("bubble_dx", "x_c - x_0", BLUE), ("bubble_dy", "y_c - y_0", RED)])
 
 # -----------------------------------------------------------------------------
 # Layout: render view on the left, the two charts stacked on the right.

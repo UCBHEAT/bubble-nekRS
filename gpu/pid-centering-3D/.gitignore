@@ -10,3 +10,6 @@ restart.fld
 __pycache__/
 # Archived run outputs
 runs/
+# animate.py outputs (animate.pvsm is committed)
+frames/
+*.mp4

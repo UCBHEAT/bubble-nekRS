@@ -159,6 +159,29 @@ interface and wake zones, with edge aspect up to 5.3.
   estimated ~25% but makes the far field non-affine.
 - The fine y-layers are inherent to any layered block mesh.
 
+## Animation
+
+```
+~/.local/paraview-5.13.2/bin/pvbatch ../common/animate.py [CASE_DIR]
+```
+
+The shared script (see the 2D README) shows the interface over the z = 0
+mid-plane, which passes through the bubble centre, coloured by the liquid
+z-vorticity, with velocity glyphs and the c = 0.9 isoline. Next to it are
+charts of the PID force and the centroid offset, with ranges taken from
+`data.csv`.
+
+`animate.pvsm` was saved from an N = 3 preview run on the laptop (ogrid mesh,
+t = 0-2, in the gitignored `runs/preview_ogrid_n3`), because the case has not
+been run at N = 7 yet. At N = 3 the interface is wide (eps = 0.063) and the
+flow is under-resolved, so the preview only shows that the pipeline works on
+the 3D fields. In it:
+- the bubble rises at 0.74 by t = 2;
+- the offset peaks at 0.045 D near t = 1;
+- the lateral offsets stay at 1e-7.
+
+Regenerate the state from the first real run with the command above.
+
 ## Smoke tests (laptop, GTX 1050, N = 3)
 
 Each mesh ran 40 steps (t = 0-0.1) of the full case: level set, PID, c with
