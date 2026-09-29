@@ -20,8 +20,9 @@ scalars = tls, cls, c
 equation = navierStokes+variableViscosity
 
 [FLUID VELOCITY]
-# Boundary IDs (bubble.box/bubble.usr): 1 = top (inflow), 2 = bottom (outflow);
-# x and z are periodic. The inflow velocity is the PID frame velocity.
+# Boundary IDs (gmsh physical groups, see generate_mesh.py): 1 = top (inflow),
+# 2 = bottom (outflow); x and z are periodic. The inflow velocity is the PID
+# frame velocity.
 boundaryTypeMap = udfDirichlet, zeroNeumann
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
@@ -89,3 +90,4 @@ kd = 6
 # Setpoint: the initial bubble position (the default is the mesh centroid).
 x0 = 0
 y0 = 0
+z0 = 0
