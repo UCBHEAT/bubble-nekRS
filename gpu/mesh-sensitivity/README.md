@@ -137,9 +137,10 @@ QUEUE=debug PROJ_ID=nek-vf nrsqsub_polaris bubble3d.par 1 1:00
 * `submit-animate.sh` and `animate.py`: animation.mp4 and post.csv (centroid,
   velocities, interface area, shape) from the checkpoints, with ParaView on a
   compute node.
-* `add-coords.py`: makes a checkpoint self-contained (nekRS writes the mesh
-  coordinates only into each job's first checkpoint), so it can seed a run on
-  another mesh with `startFrom = <file>+int`.
+* `scripts/add-coords.py` (top level of the repository): makes a checkpoint
+  self-contained (nekRS writes the mesh coordinates only into each job's first
+  checkpoint), so it can seed a run on another mesh with
+  `startFrom = <file>+int`.
 * The paper figure (Sh and lateral offset against time with the literature
   correlations) is made by 2026-11-nek-cst/data/mesh_sensitivity_sc1.py in
   UCBHEAT/papers from copies of the runs' data.csv and post.csv. It evaluates

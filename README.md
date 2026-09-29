@@ -148,6 +148,16 @@ than taking command line arguments).
 [gmsh]: https://gmsh.info/doc/texinfo/gmsh.html
 [gmsh2nek]: https://github.com/Nek5000/Nek5000/tree/master/tools/gmsh2nek
 
+## Scripts
+
+Case-independent tools are in `scripts/`:
+
+* `add-coords.py <checkpoint> <file with coordinates> <output>`: nekRS writes
+  the mesh coordinates only into the first checkpoint of each job, so a later
+  checkpoint cannot seed an interpolated restart on another mesh
+  (`startFrom = <file>+int`). This copies the coordinates from the same job's
+  first checkpoint into it.
+
 ## Acknowledgements
 
 This material is based upon work supported under a Department of Energy,
