@@ -1,0 +1,230 @@
+#!/usr/bin/env bash
+# Submit several run directories of this study as one Polaris PBS job, each
+# case on its own set of nodes, e.g. from the directory holding the runs:
+#   PROJ_ID=nek-vf QUEUE=prod ./submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
+# The prod queue needs at least 10 nodes, which is far more than any single
+# case of this study needs, so all meshes share one job.
+#
+# The job environment follows $NEKRS_HOME/bin/nrsqsub_polaris. The batch
+# script is written to bundle.batch, the PBS log to nekRS_bundle.e<jobid>,
+# and each case's nekRS output to <dir>/logfile-<jobid>. Each case stops
+# with a checkpoint 5 minutes before the walltime runs out (BUBBLE_STOP_AT,
+# see bubble3d.udf), so prepare-restart.sh continues from where it stopped.
+# Nodes that fail a CUDA context check (gpucheck.cu) at the start of the job
+# are left out, and the case with the most nodes runs on that many fewer.
+#
+# Jobs can be chained so a run keeps going without anyone requeuing it:
+#   PREPARE_RESTART=1  first run prepare-restart.sh on each case that has new
+#                      checkpoints from an earlier job, and skip any case whose
+#                      data.csv has reached endTime
+#   DEPEND=<jobid>     start only after job <jobid> ends successfully
+# The job exits non-zero if any case fails, which ends the chain there.
+set -euo pipefail
+
+: ${PROJ_ID:?PROJ_ID must be set}
+: ${QUEUE:?QUEUE must be set}
+: ${NEKRS_HOME:?NEKRS_HOME must be set}
+: ${NEKRS_JITC_NTHREADS:=7}
+: ${PREPARE_RESTART:=0}
+: ${DEPEND:=}
+
+if [ $# -lt 2 ]; then
+    echo "Usage: PROJ_ID=<project> QUEUE=<queue> $0 <hh:mm> <dir>:<nodes> [<dir>:<nodes> ...]"
+    exit 1
+fi
+
+casename=bubble3d
+time=$1
+shift
+IFS=: read -r hh mm <<< "$time"
+walltime_s=$((10#$hh*3600 + 10#$mm*60))
+stop_margin=300
+gpu_per_node=4
+cores_per_numa=8
+
+dirs=()
+nodes=()
+total_nodes=0
+for spec in "$@"; do
+    dir=$(cd "${spec%:*}" && pwd)
+    n=${spec##*:}
+    for f in $casename.par $casename.udf $casename.re2; do
+        if [ ! -f "$dir/$f" ]; then
+            echo "Cannot find $dir/$f"
+            exit 1
+        fi
+    done
+    dirs+=("$dir")
+    nodes+=("$n")
+    total_nodes=$((total_nodes + n))
+
+    # Same GPU binding helper as nrsqsub_polaris.
+    cat > "$dir/.lhelper" <<EOF
+#!/bin/bash
+gpu_id=\$(($gpu_per_node - 1 - \${PMI_LOCAL_RANK} % $gpu_per_node))
+export CUDA_VISIBLE_DEVICES=\$gpu_id
+\$*
+EOF
+    chmod 755 "$dir/.lhelper"
+done
+
+striping_factor=$((total_nodes / 2))
+if [ $striping_factor -lt 1 ]; then striping_factor=1; fi
+if [ $striping_factor -gt 128 ]; then striping_factor=128; fi
+
+SFILE=bundle.batch
+cat > $SFILE <<EOF
+#!/bin/bash
+#PBS -A $PROJ_ID
+#PBS -N nekRS_bundle
+#PBS -q $QUEUE
+#PBS -l walltime=${time}:00
+#PBS -l filesystems=home:eagle:grand
+#PBS -l select=$total_nodes:system=polaris
+#PBS -l place=scatter
+#PBS -k doe
+#PBS -j eo
+
+# bubble3d.udf ends each case cleanly, with a checkpoint, once the job is
+# within $stop_margin s of its walltime.
+export BUBBLE_STOP_AT=\$((\$(date +%s) + $walltime_s - $stop_margin))
+EOF
+cat >> $SFILE <<'EOF'
+
+cd $PBS_O_WORKDIR
+echo Jobid: $PBS_JOBID
+echo Running on host `hostname`
+echo Running on nodes `cat $PBS_NODEFILE`
+
+module restore
+module use /soft/modulefiles
+module swap PrgEnv-nvidia PrgEnv-gnu
+module load cudatoolkit-standalone/13.0.1
+module load cuda/13.0
+module load gcc-native/14
+module load craype-x86-milan craype-accel-nvidia80
+module load spack-pe-base cmake
+module unload darshan
+module list
+nvidia-smi
+ulimit -s unlimited
+
+EOF
+cat >> $SFILE <<EOF
+export NEKRS_HOME=$NEKRS_HOME
+export NEKRS_GPU_MPI=1
+export MPICH_MPIIO_HINTS=*:striping_unit=16777216:striping_factor=${striping_factor}:romio_cb_write=enable:romio_ds_write=disable:romio_no_indep_rw=true
+export MPICH_MPIIO_STATS=1
+export NEKRS_CACHE_BCAST=0
+export NEKRS_LOCAL_TMP_DIR=/local/scratch
+export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_OFI_NIC_POLICY=NUMA
+export MPIR_CVAR_CH4_OFI_ENABLE_RMA=0
+
+casename=$casename
+prepare_restart=$PREPARE_RESTART
+scripts=$(cd "$(dirname "$0")" && pwd)
+gpu_per_node=$gpu_per_node
+cores_per_numa=$cores_per_numa
+jitc_nthreads=$NEKRS_JITC_NTHREADS
+dirs=(${dirs[*]})
+nodes=(${nodes[*]})
+EOF
+cat >> $SFILE <<'EOF'
+jobid=${PBS_JOBID%%.*}
+bin=$NEKRS_HOME/bin/nekrs
+mapfile -t all_hosts < <(awk '!seen[$0]++' $PBS_NODEFILE)
+
+# Leave out nodes whose GPUs are missing or fail CUDA context creation; the
+# case with the most nodes then runs on fewer nodes.
+mpiexec -n ${#all_hosts[@]} -ppn 1 ./.gpucheck $gpu_per_node > gpucheck-$jobid 2>&1
+cat gpucheck-$jobid
+hosts=()
+for h in "${all_hosts[@]}"; do
+    if grep -q "^${h%%.*} OK" gpucheck-$jobid; then
+        hosts+=("$h")
+    fi
+done
+missing=$((${#all_hosts[@]} - ${#hosts[@]}))
+if [ $missing -gt 0 ]; then
+    big=0
+    for k in "${!nodes[@]}"; do
+        if [ ${nodes[k]} -gt ${nodes[big]} ]; then big=$k; fi
+    done
+    if [ ${nodes[big]} -le $missing ]; then
+        echo "$(date) $missing bad nodes, too few left to run"
+        exit 1
+    fi
+    nodes[big]=$((nodes[big] - missing))
+    echo "$(date) left out $missing bad nodes, ${dirs[big]} runs on ${nodes[big]} nodes"
+fi
+
+if [ $prepare_restart = 1 ]; then
+    run_dirs=() run_nodes=()
+    for k in "${!dirs[@]}"; do
+        d=${dirs[k]}
+        end=$(awk -F= '/^endTime/ {print $2+0}' $d/$casename.par)
+        last=$(tail -1 $d/data.csv 2>/dev/null | cut -d, -f1)
+        if [ -n "$last" ] && awk -v a="$last" -v b="$end" 'BEGIN {exit !(a >= b - 1e-3)}'; then
+            echo "$(date) $d reached endTime $end, skipping"
+            continue
+        fi
+        if compgen -G "$d/${casename}0.f[0-9]*" > /dev/null && [ ! -L "$(ls $d/${casename}0.f[0-9]* | head -n 1)" ]; then
+            $scripts/prepare-restart.sh $d || exit 1
+        fi
+        run_dirs+=("$d") run_nodes+=("${nodes[k]}")
+    done
+    if [ ${#run_dirs[@]} -eq 0 ]; then
+        echo "$(date) nothing left to run"
+        exit 0
+    fi
+    dirs=("${run_dirs[@]}") nodes=("${run_nodes[@]}")
+fi
+
+# run_case <dir> <index of first node> <number of nodes>
+run_case() {
+    local dir=$1 first=$2 n=$3
+    local ntasks=$((n * gpu_per_node))
+    cd $dir
+    printf "%s\n" "${hosts[@]:first:n}" > nodes-$jobid
+    {
+        echo "Running on nodes $(tr '\n' ' ' < nodes-$jobid)"
+        echo "$(date) precompilation"
+        NEKRS_JITC_NTHREADS=$jitc_nthreads mpiexec --hostfile nodes-$jobid \
+            -n $gpu_per_node -ppn $gpu_per_node -d $cores_per_numa --cpu-bind depth \
+            ./.lhelper $bin --setup $casename --backend CUDA --device-id 0 --build-only $ntasks
+        status=$?
+        if [ $status -eq 0 ]; then
+            echo "$(date) actual run"
+            mpiexec --hostfile nodes-$jobid \
+                -n $ntasks -ppn $gpu_per_node -d $cores_per_numa --cpu-bind depth \
+                ./.lhelper $bin --setup $casename --backend CUDA --device-id 0
+            status=$?
+        fi
+        echo "$(date) exit status $status"
+    } > logfile-$jobid 2>&1
+    echo $status > .status-$jobid
+}
+
+first=0
+for k in "${!dirs[@]}"; do
+    run_case ${dirs[k]} $first ${nodes[k]} &
+    first=$((first + nodes[k]))
+done
+wait
+echo "$(date) all cases done"
+failed=0
+for d in "${dirs[@]}"; do
+    s=$(cat $d/.status-$jobid 2>/dev/null || echo 1)
+    rm -f $d/.status-$jobid
+    [ "$s" = 0 ] || { echo "$d failed (exit status $s)"; failed=1; }
+done
+exit $failed
+EOF
+
+nvcc -O2 -o .gpucheck "$(dirname "$0")/gpucheck.cu"
+if [ -n "$DEPEND" ]; then
+    qsub -q $QUEUE -W depend=afterok:$DEPEND $SFILE
+else
+    qsub -q $QUEUE $SFILE
+fi

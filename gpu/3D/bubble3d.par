@@ -73,7 +73,6 @@ residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
 [TLSR]
-boundaryTypeMap = none
 #solveFrequency = 0.2 # local development (40 timesteps)
 solveFrequency = 0.1 # 127% Kolmogorov scale (40 timesteps)
 #solveFrequency = 0.025 # 64% Kolmogorov scale (40 timesteps)
@@ -88,7 +87,6 @@ targetCFL = 0.4
 maximumSteps = 200
 
 [CLSR]
-boundaryTypeMap = none
 #solveFrequency = 0.02 # local development (4 timesteps)
 solveFrequency = 0.01 # 127% Kolmogorov scale (4 timesteps)
 #solveFrequency = 0.0025 # 64% Kolmogorov scale (4 timesteps)

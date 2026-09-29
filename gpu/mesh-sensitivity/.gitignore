@@ -1,0 +1,8 @@
+.lhelper
+JOB_DESC
+*.batch
+data.csv
+logfile*
+nodes-*
+mesh.log
+restart.fld
