@@ -1,0 +1,91 @@
+userSections = tlsr, clsr, lvlset, pid
+
+[GENERAL]
+polynomialOrder = 7
+
+stopAt = endTime
+endTime = 20
+# Explicit surface tension limits dt to ~0.8x the capillary estimate
+# sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) = 3.1e-3 on this mesh: 0.0025 is
+# stable, 0.003 is not (see README). Scale the TLSR/CLSR solveFrequency with dt.
+dt = 0.0025
+timeStepper = tombo2
+#startFrom = restart.fld
+checkpointControl = simulationTime
+checkpointInterval = 0.1
+
+scalars = tls, cls, c
+
+[PROBLEMTYPE]
+equation = navierStokes+variableViscosity
+
+[FLUID VELOCITY]
+# Boundary IDs (bubble.box/bubble.usr): 1 = top (inflow), 2 = bottom (outflow);
+# x and z are periodic. The inflow velocity is the PID frame velocity.
+boundaryTypeMap = udfDirichlet, zeroNeumann
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+
+[FLUID PRESSURE]
+residualTol = 1e-4
+
+[SCALAR TLS]
+# TLS (traditional level set), domain: (-infty, infty)
+boundaryTypeMap = zeroNeumann, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR CLS]
+# CLS (conservative level set), domain: [0, 1]; psi = 1 (liquid) at the inflow
+boundaryTypeMap = udfDirichlet, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR C]
+# Species concentration (passive, CST off; hard sink in the gas); saturated
+# c = 1 liquid at the inflow
+boundaryTypeMap = udfDirichlet, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[TLSR]
+# Every 100 steps (the lvlSet default of 100*dt)
+solveFrequency = 0.25
+residualTol = 1e-8
+# The pseudo-step count scales with the largest/smallest element size; cap it
+# at the uniform-mesh value 25*(N+1), which covers the fine block around the
+# bubble.
+maximumSteps = 200
+
+[CLSR]
+# Every 10 steps (the lvlSet default of 10*dt)
+solveFrequency = 0.025
+residualTol = 1e-8
+# Capped at the uniform-mesh value 10*(N+1), as for TLSR.
+maximumSteps = 80
+
+[LVLSET]
+# eps = 1.5*h/N for the h = 0.25 cube elements around the bubble. Set it
+# directly, since by default lvlSet uses the largest element of the (graded)
+# mesh. R/eps = 9.3 here; at eps = 0.085 (R/eps = 5.9) the gas core goes
+# unstable (spurious velocities ~1 in a bubble rising at 0.26).
+interfaceWidthValue = 0.0536
+
+[PID]
+# Bubble centering controller (see pid.hpp): a uniform acceleration
+# F_pid = -(kp*e + ki*integral(e dt) + kd*u_gas) is applied to the whole domain,
+# where e is the gas centroid offset from the setpoint (x0, y0) and u_gas is the
+# gas-phase mean velocity (used as de/dt). Triple closed-loop pole at s = -2
+# (per unit time): kp = 3*2^2, ki = 2^3, kd = 3*2.
+kp = 12
+ki = 8
+kd = 6
+# Setpoint: the initial bubble position (the default is the mesh centroid).
+x0 = 0
+y0 = 0
