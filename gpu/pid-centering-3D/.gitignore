@@ -1,0 +1,15 @@
+# Run outputs (field files, .cache, .msh and .re2 are ignored at the top level)
+data.csv
+logfile
+restart.fld
+# ./mesh outputs besides bubble.msh/bubble.re2
+*.plan.json
+*.gmsh2nek*.log
+*.failed.re2
+*.vtk
+__pycache__/
+# Archived run outputs
+runs/
+# animate.py outputs (animate.pvsm is committed)
+frames/
+*.mp4

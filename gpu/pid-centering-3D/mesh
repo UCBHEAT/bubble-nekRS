@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Build the hex mesh in this directory: generate_mesh.py writes NAME.msh and
+# NAME.plan.json (NAME = bubble unless --name is given; all arguments are
+# passed on, e.g. ./mesh --preset ogrid --W 8), gmsh2nek converts NAME.msh to
+# NAME.re2 with xmin/xmax and zmin/zmax periodic, and check_mesh.py checks
+# both files. The outputs of an earlier run with the same NAME are removed
+# first, so a failed run leaves no stale NAME.re2. Stops with an error on a
+# missed target, a gmsh2nek error, a missing .re2 or periodic faces that do
+# not match. ./mesh --help lists the generate_mesh.py options.
+#   PYTHON    python with gmsh and numpy (default python3)
+#   GMSH2NEK  gmsh2nek executable (default gmsh2nek on PATH)
+set -euo pipefail
+cd "$(dirname "$0")"
+PYTHON=${PYTHON:-python3}
+GMSH2NEK=${GMSH2NEK:-gmsh2nek}
+
+fail() { echo "mesh: $*" >&2; exit 1; }
+
+for arg; do
+  if [[ $arg == -h || $arg == --help ]]; then
+    echo "usage: [PYTHON=python3] [GMSH2NEK=gmsh2nek] ./mesh [generate_mesh.py options]"
+    exec "$PYTHON" generate_mesh.py --help
+  fi
+done
+
+# NAME as generate_mesh.py resolves it from the arguments.
+name=$("$PYTHON" generate_mesh.py "$@" --print_name) || fail "generate_mesh.py rejected the arguments (see above)"
+rm -f "$name.msh" "$name.plan.json" "$name.re2" "$name.failed.re2" "${name}_ids.re2" "$name".gmsh2nek*.log
+"$PYTHON" generate_mesh.py "$@" || fail "generate_mesh.py failed"
+
+# Run gmsh2nek with the given answers to its prompts, logging to $1.
+gmsh2nek_run() {
+  local log=$1
+  shift
+  printf '%s\n' "$@" | GFORTRAN_UNBUFFERED_ALL=1 "$GMSH2NEK" > "$log" 2>&1 || { cat "$log"; fail "gmsh2nek failed (see $log)"; }
+  if grep -qiE 'error|eorror|elements detected|unknown input|invalid option' "$log"; then
+    cat "$log"
+    fail "gmsh2nek reported an error (see $log)"
+  fi
+}
+
+# gmsh2nek numbers the physical groups 1..6 in order (inflow, outflow, xmin,
+# xmax, zmin, zmax). A first pass without periodicity lists the IDs; in 3D
+# gmsh2nek then needs only the two IDs of each periodic pair.
+gmsh2nek_run "$name.gmsh2nek.pass1.log" 3 "$name" 0 0 "${name}_ids"
+rm -f "${name}_ids.re2"
+id() { awk -v g="$1" '$1 == g { print $2; exit }' "$name.gmsh2nek.pass1.log"; }
+xmin=$(id xmin) xmax=$(id xmax) zmin=$(id zmin) zmax=$(id zmax)
+[[ -n $xmin && -n $xmax && -n $zmin && -n $zmax ]] || fail "periodic groups missing from $name.msh"
+gmsh2nek_run "$name.gmsh2nek.log" 3 "$name" 0 2 "$xmin $xmax" "$zmin $zmax" "$name"
+[[ -s $name.re2 ]] || fail "gmsh2nek wrote no $name.re2 (see $name.gmsh2nek.log)"
+
+if ! "$PYTHON" check_mesh.py "$name.msh" --re2 "$name.re2" --plan "$name.plan.json"; then
+  mv "$name.re2" "$name.failed.re2"  # keep it for inspection, but not where nekRS would read it
+  fail "check_mesh.py failed (the mesh is in $name.failed.re2)"
+fi
+echo "mesh: $name.msh and $name.re2 meet all targets"
