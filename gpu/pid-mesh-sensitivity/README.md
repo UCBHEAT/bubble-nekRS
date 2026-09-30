@@ -83,8 +83,8 @@ As in `gpu/mesh-sensitivity`, except:
 - The buoyancy reference density is the liquid's (open domain), not the
   domain average.
 
-Two changes to the PID case were needed at the physical density ratio (it
-had only run at rho ratio 40):
+Besides the odd fine cube (see Meshes), three changes to the PID case were
+needed at the physical density ratio (it had only run at rho ratio 40):
 - **Fixed outflow.** The outflow imposes the frame velocity, like the
   inflow, so both fluxes balance exactly and the pressure has no Dirichlet
   boundary. The pressure outflow of `gpu/pid-centering-3D` (zeroNeumann
@@ -92,27 +92,39 @@ had only run at rho ratio 40):
   t = 0.073 on the 1x and 0.667x meshes alike, the velocity there growing
   ~500x per step, with either pressure extrapolation order of the rho
   splitting. The wake is still 10 D long before it meets the outflow.
-- **Pure far-field liquid.** psi is reset to 1 farther than 2 D from the
-  PID setpoint after every level set step. Without that, the CLS
-  reinitialization amplifies the ~1e-9 deficits the CLS solve leaves in the
-  far-field liquid by ~2x per call wherever its normals diverge, which they
-  do where the TLS is not a distance function (beyond the reach of the
-  capped TLSR) or is bent by the zero-Neumann TLSR boundary condition at the
-  inflow. Spurious gas pockets then form at element vertices of the coarse
-  far field (psi down to 0.04), and their buoyancy blows the run up
-  (t = 0.35 on 1x and 0.78 on 2.25x; with the default reinit caps, which
-  redistance the whole domain, already from t = 0.035 near the inflow). The
-  uniform periodic meshes of gpu/mesh-sensitivity have neither the
-  boundaries nor the coarse far field. The bubble stays within ~0.04 D of
-  the setpoint, and its interface band within ~1 D, so the reset only
-  removes noise: data.csv records the largest deficit found beyond 2 D
-  before each reset (`far_deficit_max`, ~1e-7) and the gas volume removed
-  (`far_removed`, ~1e-7 per 0.1 time units, against a bubble of 0.54).
+- **No noise in the liquid (psi snap).** After every level set step psi is
+  set to 1 wherever 1 - psi < 1e-6 ([CASEDATA] psiSnap). CLSR takes its
+  normals from the TLS, which TLSR makes a distance function only within
+  ~5 finest elements of the interface (200 pseudo-steps at CFL 0.4, the
+  same reach as the default on gpu/mesh-sensitivity's uniform meshes).
+  Farther out the normals are arbitrary, and CLSR amplifies the ~1e-7
+  deficits the CLS solve leaves in the liquid wherever they diverge, until
+  spurious gas pockets form at element edges and vertices and their
+  buoyancy blows the run up. Without the snap this happened 1-2 D from the
+  bubble on the 0.667x and 0.444x meshes (0.667x: deficit 5e-7 at t = 0.1,
+  5e-3 at t = 0.9, blow-up at t = 1.26), and, before the far-field reset
+  below, anywhere in the coarse far field (t = 0.35 on 1x, 0.78 on 2.25x;
+  with the default reinit caps, which redistance farther, already from
+  t = 0.035 near the inflow, where the zero-Neumann TLSR condition bends the
+  distance function). The uniform periodic meshes of gpu/mesh-sensitivity
+  are fine everywhere and have no boundaries. The real interface tail only
+  falls below 1e-6 about 14 eps (3 finest elements) from the interface, so
+  the snap removes noise and the outermost tail, which CLSR partly restores
+  at every call: data.csv records the volume removed (`snap_removed`,
+  ~1.6e-5 per 0.1 time units on 0.667x, i.e. ~1% of the bubble by t = 30,
+  in proportion to eps).
+- **Pure far-field liquid.** psi is also reset to 1 farther than 2 D from
+  the PID setpoint after every level set step, which catches anything
+  larger that gets there (the bubble stays within ~0.04 D of the setpoint
+  and its interface band within ~1 D). data.csv records the largest deficit
+  found there before the reset (`far_deficit_max`, ~1e-7) and the gas volume
+  removed (`far_removed`).
 
 `[CASEDATA]` switches for tests: `traceVelocity` and `traceFarField` print
 where the largest velocity or the far-field deficit is while they exceed the
-given value; `farFieldClean`, `scalarSVV`, `rhoSplittingFilter` and
-`pressureExtOrder` turn the corresponding features on or off.
+given value; `psiSnap = 0`, `farFieldClean`, `scalarSVV`,
+`rhoSplittingFilter` and `pressureExtOrder` turn the corresponding features
+off or on.
 
 | Run    | dt      | TLSR/CLSR every | checkpoints |
 |--------|---------|-----------------|-------------|
@@ -166,8 +178,8 @@ data.csv has one row every 0.1 time units and at each job's last step:
 - `mdot_sink`, `Sh_sink`: the same from what the hard sink zeroed, which is
   how gpu/mesh-sensitivity measured mdot; with BDF2 it reads low;
 - `total_area`, `c_bulk`, `c_min`, `c_max`, `gas_volume`;
-- `far_deficit_max`, `far_removed`: the far-field reset (see Numerics), and
-  `u_max`, the largest velocity;
+- `far_deficit_max`, `far_removed`, `snap_removed`: the far-field reset and
+  the psi snap (see Numerics), and `u_max`, the largest velocity;
 - `bubble_dx/dy/dz`: gas centroid offset from the setpoint;
 - `rise_u/v/w`: lab-frame velocity of the bubble over the interval;
 - `u_gas_*`, `u_liq_*`: gas and liquid mean velocities in the frame;
