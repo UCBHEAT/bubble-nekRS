@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prepare run directories to continue from their last checkpoint after a job
 # ended before endTime, e.g. ./prepare-restart.sh 1x 1.5x
+# The case name is that of the run directory's .par file.
 #
 # nekRS restarts checkpoint numbering at 0, so the finished part's field
 # files and logs move to part<N>/ first. data.csv keeps accumulating in
@@ -11,7 +12,13 @@ set -euo pipefail
 for dir in "$@"; do
     (
     cd "$dir"
-    files=($(ls bubble3d0.f[0-9]* 2>/dev/null || true))
+    pars=(*.par)
+    if [ ${#pars[@]} -ne 1 ] || [ ! -f "${pars[0]}" ]; then
+        echo "$dir: must hold exactly one .par file"
+        exit 1
+    fi
+    casename=${pars[0]%.par}
+    files=($(ls ${casename}0.f[0-9]* 2>/dev/null || true))
     if [ ${#files[@]} -eq 0 ]; then
         echo "$dir: no checkpoints to restart from"
         exit 1
@@ -30,12 +37,12 @@ for dir in "$@"; do
     part=1
     while [ -e part$part ]; do part=$((part + 1)); done
     mkdir part$part
-    mv bubble3d0.f[0-9]* part$part/
+    mv ${casename}0.f[0-9]* part$part/
     mv logfile-* nodes-* nekRS_*.e* part$part/ 2>/dev/null || true
-    if [ -e bubble3d.nek5000 ]; then mv bubble3d.nek5000 part$part/; fi
+    if [ -e $casename.nek5000 ]; then mv $casename.nek5000 part$part/; fi
 
     ln -sfn part$part/$last restart.fld
-    sed -i 's/^#\?startFrom *=.*/startFrom = restart.fld/' bubble3d.par
+    sed -i 's/^#\?startFrom *=.*/startFrom = restart.fld/' $casename.par
 
     if [ -e data.csv ]; then
         # data.csv times are rounded to 4 decimals.
