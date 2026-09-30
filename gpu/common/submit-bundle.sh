@@ -67,14 +67,16 @@ for spec in "$@"; do
     nodes+=("$n")
     total_nodes=$((total_nodes + n))
 
-    # Same GPU binding helper as nrsqsub_polaris.
-    cat > "$dir/.lhelper" <<EOF
+    # Same GPU binding helper as nrsqsub_polaris. Written to a new file and
+    # renamed, as a running job of the same case may be executing it.
+    cat > "$dir/.lhelper.new" <<EOF
 #!/bin/bash
 gpu_id=\$(($gpu_per_node - 1 - \${PMI_LOCAL_RANK} % $gpu_per_node))
 export CUDA_VISIBLE_DEVICES=\$gpu_id
 \$*
 EOF
-    chmod 755 "$dir/.lhelper"
+    chmod 755 "$dir/.lhelper.new"
+    mv -f "$dir/.lhelper.new" "$dir/.lhelper"
 done
 
 striping_factor=$((total_nodes / 2))
@@ -231,7 +233,8 @@ done
 exit $failed
 EOF
 
-nvcc -O2 -o .gpucheck "$(dirname "$0")/gpucheck.cu"
+nvcc -O2 -o .gpucheck.new "$(dirname "$0")/gpucheck.cu"
+mv -f .gpucheck.new .gpucheck
 if [ -n "$DEPEND" ]; then
     qsub -q $QUEUE -W depend=afterok:$DEPEND $SFILE
 else
