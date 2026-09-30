@@ -4,14 +4,31 @@
 
 #endif
 
+#include <ctime>
+
 #include "lvlSet.hpp"
 #include "util.hpp"
 
 #include "case.hpp"
 // Shared by the gpu/ cases; found through the case directory, which nekRS
-// puts on the UDF include path.
+// puts on the UDF include path (setup-runs.sh copies it next to the run
+// directories).
 #include "../common/pid.hpp"
 #include "customhooks.hpp"
+
+// data.csv is written every sampleInterval ([CASEDATA] sampleInterval in the
+// .par, default checkpointInterval) rather than at checkpoints, so the finer
+// meshes can checkpoint less often.
+static double sampleInterval = 0.0;
+static int sampleCount = 1;
+
+// submit-bundle.sh (gpu/common) sets BUBBLE_STOP_AT (seconds since the epoch)
+// a few minutes before the job's walltime runs out. Past it, the run ends
+// after the next step, which writes a checkpoint, by moving endTime the same
+// way nekrs.upd does, so a job doesn't lose the steps after its last regular
+// checkpoint.
+static double stopAt = -1;
+static double dtStep = 0.0;
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
@@ -25,7 +42,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
     options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
 }
 
-void UDF_Setup() 
+void UDF_Setup()
 {
     mesh_t *mesh = nrs->meshV;
 
@@ -47,11 +64,9 @@ void UDF_Setup()
         // Copy to device memory.
         nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
 
-        // psi and c from phi. c = psi is smeared over the interface band, so the
-        // liquid side of the band (0.5 < psi < 1) starts partly depleted. A
-        // saturated start (c = 1 wherever psi >= 0.5) is worse numerically: the
-        // hard sink then cuts a full 1 -> 0 jump at psi = 0.5, far sharper than
-        // the mesh can resolve at Pe = 2.7e5, and c rings to ~1.7 by t = 0.5.
+        // psi and c from phi. c = psi is smeared over the interface band, as in
+        // gpu/mesh-sensitivity (see ../pid-centering/README.md for why a
+        // saturated start is worse).
         lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
         lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
     }
@@ -65,7 +80,7 @@ void UDF_Setup()
     // the number of elements on this MPI rank when the number of elements is not exactly
     // divisble by the MPI rank.
     info.fieldOffset = nrs->fieldOffset;
-    info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal, 
+    info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal,
             nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
     info.gas_volume = mesh->volume - info.liquid_volume;
     // Buoyancy reference density: the liquid, since in the open (inflow/outflow)
@@ -78,21 +93,40 @@ void UDF_Setup()
     }
 
     pidSetup();
+
+    // Same bookkeeping as nekRS's checkpointStep so restarts stay on the grid.
+    platform->options.getArgs("DT", dtStep);
+    platform->options.getArgs("CHECKPOINT INTERVAL", sampleInterval);
+    platform->par->extract("casedata", "sampleinterval", sampleInterval);
+    double startTime = 0.0;
+    platform->options.getArgs("START TIME", startTime);
+    if (startTime > 0) {
+        sampleCount = startTime/sampleInterval + 1;
+    }
+
+    if (const char* s = getenv("BUBBLE_STOP_AT")) {
+        stopAt = atof(s);
+    }
 }
 
-// Species budget since the last checkpoint. The interface transfer rate is
+// Species budget since the last sample. The interface transfer rate is
 //   removed = integral(net boundary inflow of c) dt - change in integral(c dV),
-// which uses only the stored c and the boundary fluxes. (Adding up the c the
-// hard sink zeroes would read low and depend on the time integrator: with
-// BDF2, zeroing a gas node also zeroes its history, so the node holds only
-// 1/g0 = 2/3 of what flowed into it during the step.)
+// which uses only the stored c and the boundary fluxes. Adding up the c the
+// hard sink zeroes (gpu/mesh-sensitivity's mdot, kept here as mdot_sink for
+// comparison) reads low and depends on the time integrator: with BDF2,
+// zeroing a gas node also zeroes its history, so the node holds only
+// 1/g0 = 2/3 of what flowed into it during the step.
 static double budget_inflow = 0.0;  // time integral of the net boundary inflow of c
 static double budget_C0 = 0.0;      // integral of c dV at the window start
 static double budget_t0 = 0.0;      // window start time
 static double budget_flux = 0.0;    // net boundary inflow rate at the last step
+static double sink_removed = 0.0;   // c zeroed by the hard sink in the window
 static double last_time = 0.0;
-// Gas centroid offset at the window start, for the rise velocity.
+// Gas centroid offset at the window start and the frame displacement
+// integral(U_frame dt) over the window, for the lab-frame bubble velocity.
 static dfloat window_e0[3] = {0, 0, 0};
+static double window_frame_shift[3] = {0, 0, 0};
+static double last_frame_velocity[3] = {0, 0, 0};
 // Species concentration of the inflowing liquid (the interface value is 0).
 static const dfloat c_inflow = 1.0;
 
@@ -125,10 +159,31 @@ void UDF_ExecuteStep(double time, int tstep)
 
     lvlSet::solve(time);
 
+    if (stopAt > 0 && tstep % 20 == 0) {
+        int stop = platform->comm.mpiRank() == 0 && std::time(nullptr) >= stopAt;
+        MPI_Bcast(&stop, 1, MPI_INT, 0, comm);
+        double endTime = -1;
+        platform->options.getArgs("END TIME", endTime);
+        if (stop && time + dtStep < endTime) {
+            platform->options.setArgs("END TIME", to_string_f(time + dtStep));
+            if (platform->comm.mpiRank() == 0) {
+                printf("BUBBLE_STOP_AT reached: stopping at t = %.6f\n", time + dtStep);
+            }
+            stopAt = -1;
+        }
+    }
+
     // Hard sink: remove the species that has reached the gas (psi < 0.5). At
-    // tstep 0 this only clears the smeared initial interface band, which is
-    // not mass transfer (the budget starts after it).
-    hardSink(info, o_c, o_psi);
+    // tstep 0 this only clears the smeared initial interface band (or nothing,
+    // on restart), which is not mass transfer (the budget starts after it).
+    {
+        auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        hardSink(info, o_c, o_psi, o_cSink);
+        const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
+        if (tstep > 0) {
+            sink_removed += removed;
+        }
+    }
 
     // Update the PID bubble centering force from the (reinitialized) level set.
     pidUpdate(time, tstep);
@@ -140,28 +195,49 @@ void UDF_ExecuteStep(double time, int tstep)
         budget_C0 = C;
         budget_t0 = time;
         budget_inflow = 0.0;
-        for (int d = 0; d < 3; d++) window_e0[d] = pid.error[d];
+        sink_removed = 0.0;
+        for (int d = 0; d < 3; d++) {
+            window_e0[d] = pid.error[d];
+            window_frame_shift[d] = 0.0;
+        }
     } else {
         budget_inflow += 0.5*(budget_flux + flux)*(time - last_time);
+        for (int d = 0; d < 3; d++) {
+            window_frame_shift[d] += 0.5*(last_frame_velocity[d] + pid.frame_velocity[d])*(time - last_time);
+        }
     }
     budget_flux = flux;
     last_time = time;
+    for (int d = 0; d < 3; d++) last_frame_velocity[d] = pid.frame_velocity[d];
 
-    if (nrs->checkpointStep) {
+    // The last step (endTime or BUBBLE_STOP_AT) is sampled too, so the budget
+    // since the previous sample isn't lost and a restart from the last
+    // checkpoint finds the PID state in data.csv; sherwood.py weights each row
+    // by the length of its interval.
+    const bool regularSample = time > sampleCount*sampleInterval;
+    if (regularSample) {
+        sampleCount++;
+    }
+    if (tstep > 0 && (regularSample || nrs->lastStep)) {
         const dfloat window = time - budget_t0;
-        // Interface transfer rate from the species budget.
+        // Interface transfer rate from the species budget, and what the hard
+        // sink counted.
         const dfloat mdot = (budget_inflow - (C - budget_C0))/window;
-        // Rise velocity: the lab-frame velocity of the level set centroid, i.e.
-        // its mean drift in the frame over the window minus the frame velocity
-        // (u_gas - U_frame would read ~2% low: u_gas misses the reinit shifts).
+        const dfloat mdot_sink = sink_removed/window;
+        // Rise velocity: the lab-frame velocity of the level set centroid over
+        // the window, its displacement in the frame minus the frame's
+        // displacement (u_gas - U_frame would read ~2% low: u_gas misses the
+        // reinit shifts).
         dfloat rise[3];
         for (int d = 0; d < 3; d++) {
-            rise[d] = (pid.error[d] - window_e0[d])/window - pid.frame_velocity[d];
+            rise[d] = (pid.error[d] - window_e0[d] - window_frame_shift[d])/window;
             window_e0[d] = pid.error[d];
+            window_frame_shift[d] = 0.0;
         }
         budget_C0 = C;
         budget_t0 = time;
         budget_inflow = 0.0;
+        sink_removed = 0.0;
 
         // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
         auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
@@ -175,12 +251,14 @@ void UDF_ExecuteStep(double time, int tstep)
         const dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, comm);
         const dfloat mtc = mdot / total_area / c_inflow;
         const dfloat sherwood_no = mtc*Pe;
+        const dfloat sherwood_sink = mdot_sink / total_area / c_inflow * Pe;
 
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
-            printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f]\n", total_area, c_bulk, c_min, c_max);
+            printf("mdot=%.4g MTC=%.4g Sh=%.4g (hard sink count: Sh=%.4g)\n", mdot, mtc, sherwood_no, sherwood_sink);
+            printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f] gas_volume=%.6g rise=(%.4g, %.4g, %.4g)\n",
+                    total_area, c_bulk, c_min, c_max, pid.gas_volume, rise[0], rise[1], rise[2]);
             printf("----------------------------------------\n");
 
             // Write CSV file
@@ -190,23 +268,26 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_min,c_max,"
-                        << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,F_pid_x,F_pid_y,F_pid_z,"
+                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,"
+                        << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,"
+                        << "u_gas_x,u_gas_y,u_gas_z,u_liq_x,u_liq_y,u_liq_z,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
             }
-            // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
-            f << std::fixed << std::setprecision(4) << time << ",";
+            // %.6f = fixed, precision 6; %.6g = defaultfloat, precision 6
+            f << std::fixed << std::setprecision(6) << time << ",";
             f << tstep << ",";
-            f << std::defaultfloat << std::setprecision(4) << mdot << ","
-                    << mtc << "," << sherwood_no << "," << total_area << ",";
-            f << std::fixed << std::setprecision(4) << c_bulk << "," << c_min << "," << c_max;
-            f << std::defaultfloat << std::setprecision(4);
+            f << std::defaultfloat << std::setprecision(6) << mdot << "," << mtc << "," << sherwood_no << ","
+                    << mdot_sink << "," << sherwood_sink << "," << total_area << ","
+                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume;
             // PID bubble centering: gas centroid offset from the setpoint, bubble
-            // rise velocity (lab frame, see above), the PID force per unit mass
-            // applied in the next step, and the controller state (integral and
-            // frame velocity, with more digits as they are read back on restart).
+            // rise velocity (lab frame, see above), gas and liquid mean velocities
+            // (in the frame), the PID force per unit mass applied in the next
+            // step, and the controller state (integral and frame velocity, with
+            // more digits as they are read back on restart).
             for (int d = 0; d < 3; d++) f << "," << pid.error[d];
             for (int d = 0; d < 3; d++) f << "," << rise[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.u_liquid[d];
             for (int d = 0; d < 3; d++) f << "," << pid.force[d];
             f << std::setprecision(10);
             for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
@@ -214,5 +295,5 @@ void UDF_ExecuteStep(double time, int tstep)
             f << std::endl;
             f.close();
         } // if (platform->comm.mpiRank() == 0)
-    } // if (nrs->checkpointStep)
+    } // if (tstep > 0 && (regularSample || nrs->lastStep))
 }
