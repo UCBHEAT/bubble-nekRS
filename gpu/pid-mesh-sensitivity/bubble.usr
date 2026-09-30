@@ -1,0 +1,18 @@
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+        include 'SIZE'
+        include 'TOTAL'
+
+        ! gmsh2nek keeps the physical-group ID (3-6 = xmin, xmax, zmin, zmax)
+        ! on the periodic faces it pairs, and nekRS takes the number of
+        ! boundary IDs to be the largest ID on any face ("lookup of bid 5
+        ! failed"). Clear the periodic faces' IDs so only 1 (inflow) and
+        ! 2 (outflow) remain.
+        do iel=1,nelv
+          do ifc=1,2*ndim
+            if (cbc(ifc,iel,1) .eq. 'P  ') boundaryID(ifc,iel) = 0
+          enddo
+        enddo
+        return
+      end
+c-----------------------------------------------------------------------

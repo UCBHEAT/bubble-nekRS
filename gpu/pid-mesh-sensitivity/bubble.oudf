@@ -1,0 +1,93 @@
+#include "util.hpp"
+// OCCA kernels used in customProperties and customSource.
+
+/**
+ * Compute two-phase property ((1-psi)*ratio + psi)/divisor.
+ *
+ * @param info common data about the case
+ * @param psi conservative level set (CLS) scalar field
+ * @param ratio gas property/liquid property ratio
+ * @param divisor non-dimensionalization
+ * @param out output two-phase mixed value for this property
+ */
+@kernel void weightedMixing(const caseinfo_t info, @restrict const dfloat *psi,
+        const dfloat ratio, const dfloat divisor, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            out[i] = ((1-psi[i])*ratio + psi[i])/divisor;
+        }
+    }
+}
+
+/**
+ * Calculate buoyancy Y-acceleration terms (gravitational force
+ * balanced by pressure gradient force).
+ *
+ * @param info common data about the case
+ * @param rho local density field
+ * @param psi conservative level set (CLS) scalar field
+ * @param Fr Froude number u/sqrt(gL)
+ * @param out output Y-acceleration term
+ */
+@kernel void buoyancySource(const caseinfo_t info, @restrict const dfloat *psi,
+        @restrict const dfloat *rho, const dfloat Fr, @restrict dfloat *out)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            // Non-dimensional gravitational acceleration -gL/(u^2).
+            out[i] -= 1.0/(Fr*Fr);
+            // Pressure gradient force, converted to acceleration by dividing rho[i].
+            out[i] += (1.0/(Fr*Fr))*(info.rho_average)/rho[i];
+        }
+    }
+}
+
+/**
+ * Hard sink: remove the species that has reached the gas (psi < 0.5).
+ *
+ * @param info common data about the case
+ * @param c species concentration scalar field, set to 0 in the gas
+ * @param psi conservative level set (CLS) scalar field
+ */
+@kernel void hardSink(const caseinfo_t info, @restrict dfloat *c,
+        @restrict const dfloat *psi)
+{
+    for (dlong e = 0; e < info.Nelements; ++e; @outer) {
+        for (int n = 0; n < p_Np; ++n; @inner) {
+            const int i = e*p_Np + n;
+            if (psi[i] < 0.5) {
+                c[i] = 0.0;
+            }
+        }
+    }
+}
+
+/**
+ * Boundary conditions. x and z are periodic; the top face (boundary ID 1) is
+ * the inflow and the bottom face (boundary ID 2) the outflow.
+ */
+void udfDirichlet(bcData *bc)
+{
+    if (isField("fluid velocity")) {
+        // The liquid is at rest in the lab frame, so it enters with the frame
+        // velocity U_frame = integral(F_pid dt), set each step by pidApply.
+        bc->uxFluid = bc->usrwrk[0];
+        bc->uyFluid = bc->usrwrk[1];
+        bc->uzFluid = bc->usrwrk[2];
+    } else if (isField("fluid pressure")) {
+        // Stabilized outflow (Dong et al., as in the nekRS hemi/pb146/turbPipe
+        // examples): p = 0, lowered where the flow re-enters the domain.
+        const dfloat iU0delta = 20.0;
+        const dfloat un = bc->uxFluid*bc->nx + bc->uyFluid*bc->ny + bc->uzFluid*bc->nz;
+        const dfloat s0 = 0.5*(1.0 - tanh(un*iU0delta));
+        bc->pFluid = -0.5*bc->transCoeff*(bc->uxFluid*bc->uxFluid + bc->uyFluid*bc->uyFluid
+                + bc->uzFluid*bc->uzFluid)*s0;
+    } else if (isField("scalar cls") || isField("clsr") || isField("scalar c")) {
+        // Pure liquid (psi = 1) saturated with species (c = 1). "clsr" is the
+        // CLS reinitialization, which otherwise imposes psi = 0 (gas) here.
+        bc->sScalar = 1.0;
+    }
+}
