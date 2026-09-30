@@ -134,4 +134,7 @@ data.csv has one row every 0.1 time units and at each job's last step:
 
 `sherwood.py --tmin 10 --tmax 30 <runs>` averages Sh (with the standard error
 of 1 time unit batch means), Sh_sink, the rise velocity, the lateral speed
-and the rise Reynolds number over a window.
+and the rise Reynolds number over a window. `path.py <runs>` integrates the
+lab-frame lateral velocity into the bubble's sideways path, the counterpart
+of gpu/mesh-sensitivity's drift.py: when it exceeds 0.01, 0.05 and 0.25 D,
+and the growth rate of the lateral speed.
