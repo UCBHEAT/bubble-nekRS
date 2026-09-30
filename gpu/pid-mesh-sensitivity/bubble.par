@@ -103,3 +103,8 @@ z0 = 0
 [CASEDATA]
 # data.csv sampling interval, independent of checkpoints.
 sampleInterval = 0.1
+# Set psi = 1 wherever 1 - psi < 1e-6 after every level set step (see
+# bubble.udf and the README). Beyond ~5 finest elements from the interface
+# the TLS is not a distance function, and CLSR slowly amplifies the ~1e-7
+# solver noise in the liquid there into spurious gas.
+psiSnap = 1e-6
