@@ -47,17 +47,24 @@ by h/0.2, so the whole mesh is refined together:
 
 | Run    | h (finest) | dx/lambda_K | fine cube | elements (x y z) | GLL points (E N^3) | uniform mesh of the same h | largest edge | Hmax/Hmin |
 |--------|------------|-------------|-----------|------------------|--------------------|----------------------------|--------------|-----------|
-| 2.25x  | 4/12       | 2.21        | 6^3, half-width 1.0   | 12x22x12 = 3168   | 1.09M | 3456 (1.2M)    | 1.63 | 2.91 |
-| 1.5x   | 4/18       | 1.47        | 8^3, half-width 0.889 | 16x32x16 = 8192   | 2.81M | 11664 (4.0M)   | 0.89 | 3.20 |
-| 1x     | 4/27       | 0.98        | 12^3, half-width 0.889 | 22x44x22 = 21296 | 7.30M | 39366 (13.5M)  | 0.81 | 4.11 |
-| 0.667x | 4/40       | 0.663       | 16^3, half-width 0.8  | 28x62x28 = 48608  | 16.7M | 128000 (43.9M) | 0.60 | 5.27 |
-| 0.444x | 4/60       | 0.442       | 24^3, half-width 0.8  | 40x92x40 = 147200 | 50.5M | 432000 (148M)  | 0.38 | 5.35 |
+| 2.25x  | 4/12       | 2.21        | 7^3, half-width 1.17   | 13x23x13 = 3887   | 1.33M | 3456 (1.19M)   | 1.46 | 2.60 |
+| 1.5x   | 4/18       | 1.47        | 9^3, half-width 1.0    | 17x31x17 = 8959   | 3.07M | 11664 (4.0M)   | 1.29 | 3.42 |
+| 1x     | 4/27       | 0.98        | 13^3, half-width 0.963 | 23x45x23 = 23805  | 8.17M | 39366 (13.5M)  | 0.77 | 3.87 |
+| 0.667x | 4/40       | 0.663       | 17^3, half-width 0.85  | 29x62x29 = 52142  | 17.9M | 128000 (43.9M) | 0.61 | 5.19 |
+| 0.444x | 4/60       | 0.442       | 25^3, half-width 0.833 | 41x92x41 = 154652 | 53.0M | 432000 (148M)  | 0.41 | 5.42 |
 
-The fine cube is the smallest multiple of h that covers the interface zone
-r <= 0.76, so its half-width varies a little with h. The interface width is
-eps = 1.5 h/N ([LVLSET] interfaceWidthValue), which is what
-interfaceWidthFactor = 1.5 gives on the uniform meshes; the lvlSet default
-would take h from the largest element.
+The fine cube has the generator's cell count (the smallest even number of
+cells that covers the interface zone r <= 0.76) plus one, so the bubble centre
+lies inside an element. With an even count the centre is an element vertex
+and all three axes through it are element edges; there the gas core carries
+strong spurious currents at the physical density ratio (u_max up to 7 on the
+1.5x mesh at t = 0.5, against 1.4 with the odd count), which then corrupt the
+level set along the edges and seed spurious gas in the liquid, and the 2.25x
+bubble breaks up at t = 1.7.
+
+The interface width is eps = 1.5 h/N ([LVLSET] interfaceWidthValue), which is
+what interfaceWidthFactor = 1.5 gives on the uniform meshes; the lvlSet
+default would take h from the largest element.
 
 ## Numerics
 
@@ -74,6 +81,37 @@ As in `gpu/mesh-sensitivity`, except:
   the same as in gpu/mesh-sensitivity.
 - The buoyancy reference density is the liquid's (open domain), not the
   domain average.
+
+Two changes to the PID case were needed at the physical density ratio (it
+had only run at rho ratio 40):
+- **Fixed outflow.** The outflow imposes the frame velocity, like the
+  inflow, so both fluxes balance exactly and the pressure has no Dirichlet
+  boundary. The pressure outflow of `gpu/pid-centering-3D` (zeroNeumann
+  velocity, p = 0 with Dong's backflow term) blew up at an outflow node at
+  t = 0.073 on the 1x and 0.667x meshes alike, the velocity there growing
+  ~500x per step, with either pressure extrapolation order of the rho
+  splitting. The wake is still 10 D long before it meets the outflow.
+- **Pure far-field liquid.** psi is reset to 1 farther than 2 D from the
+  PID setpoint after every level set step. Without that, the CLS
+  reinitialization amplifies the ~1e-9 deficits the CLS solve leaves in the
+  far-field liquid by ~2x per call wherever its normals diverge, which they
+  do where the TLS is not a distance function (beyond the reach of the
+  capped TLSR) or is bent by the zero-Neumann TLSR boundary condition at the
+  inflow. Spurious gas pockets then form at element vertices of the coarse
+  far field (psi down to 0.04), and their buoyancy blows the run up
+  (t = 0.35 on 1x and 0.78 on 2.25x; with the default reinit caps, which
+  redistance the whole domain, already from t = 0.035 near the inflow). The
+  uniform periodic meshes of gpu/mesh-sensitivity have neither the
+  boundaries nor the coarse far field. The bubble stays within ~0.02 D of
+  the setpoint, and its interface band within ~1 D, so the reset only
+  removes noise: data.csv records the largest deficit found beyond 2 D
+  before each reset (`far_deficit_max`, ~1e-7) and the gas volume removed
+  (`far_removed`, ~1e-7 per 0.1 time units, against a bubble of 0.54).
+
+`[CASEDATA]` switches for tests: `traceVelocity` and `traceFarField` print
+where the largest velocity or the far-field deficit is while they exceed the
+given value; `farFieldClean`, `scalarSVV`, `rhoSplittingFilter` and
+`pressureExtOrder` turn the corresponding features on or off.
 
 | Run    | dt      | TLSR/CLSR every | checkpoints |
 |--------|---------|-----------------|-------------|
@@ -127,6 +165,8 @@ data.csv has one row every 0.1 time units and at each job's last step:
 - `mdot_sink`, `Sh_sink`: the same from what the hard sink zeroed, which is
   how gpu/mesh-sensitivity measured mdot; with BDF2 it reads low;
 - `total_area`, `c_bulk`, `c_min`, `c_max`, `gas_volume`;
+- `far_deficit_max`, `far_removed`: the far-field reset (see Numerics), and
+  `u_max`, the largest velocity;
 - `bubble_dx/dy/dz`: gas centroid offset from the setpoint;
 - `rise_u/v/w`: lab-frame velocity of the bubble over the interval;
 - `u_gas_*`, `u_liq_*`: gas and liquid mean velocities in the frame;

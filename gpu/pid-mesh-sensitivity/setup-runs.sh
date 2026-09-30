@@ -9,6 +9,12 @@
 # size of gpu/mesh-sensitivity's Nk x 2Nk x Nk mesh of the same name. Every
 # size target of ../pid-centering-3D/generate_mesh.py's default mesh (made for
 # h_iface = 0.2) is scaled by h/0.2, so the whole mesh is refined together.
+# The fine cube around the bubble has an odd number of cells per side (the
+# generator's even count plus one), so the bubble centre is inside an element
+# rather than on a vertex with element edges along all three axes through it,
+# where the gas core develops strong spurious currents at the physical
+# density ratio (u_max 7 against 1.4 on the 1.5x mesh, and the 2.25x bubble
+# breaks up).
 # The interface width is eps = 1.5 h/N (N = 7), as interfaceWidthFactor = 1.5
 # gives on the uniform meshes.
 # SC sets the Schmidt number in each run's case.hpp (default 1).
@@ -47,12 +53,16 @@ for spec in "${specs[@]}"; do
     mkdir -p "$dir"
     # h = 4/Nk, the mesh size targets (generate_mesh.py defaults times h/0.2)
     # and eps = 1.5 h/N.
-    read -r h h_wake_cross h_wake_near h_wake_far h_far eps <<< "$(awk -v nk="$nk" 'BEGIN {
+    # The fine cube has n = 2 ceil(0.76/h) + 1 cells (0.76 = the generator's
+    # r_iface_out + iface_margin), half-width n h/2.
+    read -r h h_wake_cross h_wake_near h_wake_far h_far eps fine_half <<< "$(awk -v nk="$nk" 'BEGIN {
         h = 4/nk; s = h/0.2
-        printf "%.10g %.10g %.10g %.10g %.10g %.8g\n", h, 0.3*s, 0.25*s, 0.5*s, 1.25*s, 1.5*h/7 }')"
+        c = 0.76/h - 1e-9; n = int(c); if (c > n) n++; n = 2*n + 1
+        printf "%.17g %.17g %.17g %.17g %.17g %.8g %.17g\n", h, 0.3*s, 0.25*s, 0.5*s, 1.25*s, 1.5*h/7, n*h/2 }')"
     MESH_DIR=$dir "$src/../pid-centering-3D/mesh" --name bubble --h_iface "$h" \
         --h_wake_cross "$h_wake_cross" --h_wake_near "$h_wake_near" --h_wake_far "$h_wake_far" \
-        --h_far "$h_far" --rho_ratio 3691.4 --max_elements 1000000 > "$dir/mesh.log" 2>&1 \
+        --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements 1000000 \
+        > "$dir/mesh.log" 2>&1 \
         || { tail -20 "$dir/mesh.log"; echo "$dir: meshing failed (see $dir/mesh.log)"; exit 1; }
     cp "$src"/{bubble.udf,bubble.oudf,bubble.usr,customhooks.hpp,util.hpp} "$dir"/
     sed -e "s/^static double Sc = .*/static double Sc = $SC;/" -e "s/(Sc=[0-9.]*)/(Sc=$SC)/" \
