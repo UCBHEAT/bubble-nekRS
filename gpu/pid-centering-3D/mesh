@@ -9,24 +9,30 @@
 # not match. ./mesh --help lists the generate_mesh.py options.
 #   PYTHON    python with gmsh and numpy (default python3)
 #   GMSH2NEK  gmsh2nek executable (default gmsh2nek on PATH)
+#   MESH_DIR  directory to write the mesh files to (default this directory)
 set -euo pipefail
-cd "$(dirname "$0")"
+here=$(cd "$(dirname "$0")" && pwd)
+cd "${MESH_DIR:-$here}"
 PYTHON=${PYTHON:-python3}
 GMSH2NEK=${GMSH2NEK:-gmsh2nek}
+# numpy's OpenBLAS otherwise starts a thread per core, and on a large login
+# node (256 cores on Polaris) its buffers alone exceed the address-space cap of
+# generate_mesh.py and check_mesh.py (max_memory_gb).
+export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-4}
 
 fail() { echo "mesh: $*" >&2; exit 1; }
 
 for arg; do
   if [[ $arg == -h || $arg == --help ]]; then
-    echo "usage: [PYTHON=python3] [GMSH2NEK=gmsh2nek] ./mesh [generate_mesh.py options]"
-    exec "$PYTHON" generate_mesh.py --help
+    echo "usage: [PYTHON=python3] [GMSH2NEK=gmsh2nek] [MESH_DIR=<dir>] ./mesh [generate_mesh.py options]"
+    exec "$PYTHON" "$here/generate_mesh.py" --help
   fi
 done
 
 # NAME as generate_mesh.py resolves it from the arguments.
-name=$("$PYTHON" generate_mesh.py "$@" --print_name) || fail "generate_mesh.py rejected the arguments (see above)"
+name=$("$PYTHON" "$here/generate_mesh.py" "$@" --print_name) || fail "generate_mesh.py rejected the arguments (see above)"
 rm -f "$name.msh" "$name.plan.json" "$name.re2" "$name.failed.re2" "${name}_ids.re2" "$name".gmsh2nek*.log
-"$PYTHON" generate_mesh.py "$@" || fail "generate_mesh.py failed"
+"$PYTHON" "$here/generate_mesh.py" "$@" || fail "generate_mesh.py failed"
 
 # Run gmsh2nek with the given answers to its prompts, logging to $1.
 gmsh2nek_run() {
@@ -50,7 +56,7 @@ xmin=$(id xmin) xmax=$(id xmax) zmin=$(id zmin) zmax=$(id zmax)
 gmsh2nek_run "$name.gmsh2nek.log" 3 "$name" 0 2 "$xmin $xmax" "$zmin $zmax" "$name"
 [[ -s $name.re2 ]] || fail "gmsh2nek wrote no $name.re2 (see $name.gmsh2nek.log)"
 
-if ! "$PYTHON" check_mesh.py "$name.msh" --re2 "$name.re2" --plan "$name.plan.json"; then
+if ! "$PYTHON" "$here/check_mesh.py" "$name.msh" --re2 "$name.re2" --plan "$name.plan.json"; then
   mv "$name.re2" "$name.failed.re2"  # keep it for inspection, but not where nekRS would read it
   fail "check_mesh.py failed (the mesh is in $name.failed.re2)"
 fi
