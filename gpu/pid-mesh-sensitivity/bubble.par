@@ -1,22 +1,21 @@
-userSections = tlsr, clsr, lvlset, pid
+userSections = tlsr, clsr, lvlset, pid, casedata
 
 [GENERAL]
+# Uncomment to resume from a checkpoint.
+#startFrom = restart.fld
+
+# Kolmogorov scale = 0.0671 mm. The mesh (setup-runs.sh, ../pid-centering-3D/
+# generate_mesh.py) sets the resolution.
 polynomialOrder = 7
 
 stopAt = endTime
-endTime = 20
-# Settings for the default mesh (./mesh, 0.2 cubes around the bubble); for
-# another preset take them from bubble.plan.json ("nekrs_ls").
-# Explicit surface tension limits dt: in 2D, 0.8x the capillary estimate
-# sqrt((rho_l+rho_g)*(h/N)^3/(4*pi*sigma)) was stable and ~0.96x was not. That
-# 0.8x value is 1.8e-3 at h = 0.2, N = 7; dt = 1.5e-3 leaves some margin, since
-# 3D has not been tested yet.
-dt = 0.0015
+endTime = 30
+# Same dt as gpu/mesh-sensitivity on the same finest element size:
+# 1e-4 for 2.25x, 1.5x and 1x, then halved per level (setup-runs.sh sets it).
+dt = 1e-4
 timeStepper = tombo2
-#startFrom = restart.fld
 checkpointControl = simulationTime
-# A 3D field file is ~0.1-0.2 GB at N = 7 (4.3 M GLL points).
-checkpointInterval = 0.5
+checkpointInterval = 1.0
 
 scalars = tls, cls, c
 
@@ -24,9 +23,9 @@ scalars = tls, cls, c
 equation = navierStokes+variableViscosity
 
 [FLUID VELOCITY]
-# Boundary IDs (gmsh physical groups, see generate_mesh.py): 1 = top (inflow),
-# 2 = bottom (outflow); x and z are periodic. The inflow velocity is the PID
-# frame velocity.
+# Boundary IDs (gmsh physical groups, see ../pid-centering-3D/
+# generate_mesh.py): 1 = top (inflow), 2 = bottom (outflow); x and z are
+# periodic. The inflow velocity is the PID frame velocity.
 boundaryTypeMap = udfDirichlet, zeroNeumann
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
@@ -59,40 +58,40 @@ diffusionCoeff = 1e-10
 residualTol = 1e-8
 regularization = svv+scalingCoeff=1.0+filterPower=2.0
 
+# TLSR and CLSR run at the same simulation-time intervals as in
+# gpu/mesh-sensitivity (every 100 and 10 steps at dt = 1e-4), with the level
+# set defaults otherwise, except maximumSteps. The default pseudo-step count
+# is proportional to the largest/smallest element size, 200/80 steps on a
+# uniform mesh; on these graded meshes it would hit the default caps of
+# 1000/500. maximumSteps keeps the uniform-mesh counts, so reinitialization
+# covers the same distance, in units of the finest element, as in
+# gpu/mesh-sensitivity, which is all the interface band needs.
+# boundaryTypeMap is inherited from SCALAR TLS and SCALAR CLS.
 [TLSR]
-# The reinitialization intervals are left at the lvlSet defaults, every 100
-# (TLSR) and 10 (CLSR) steps (solveFrequency = 100*dt and 10*dt, so they follow
-# dt), as is residualTol (1e-8). The pseudo-step count scales with the
-# largest/smallest element size; cap it at the uniform-mesh value 25*(N+1),
-# which covers the fine block around the bubble (the default cap is 1000).
+solveFrequency = 0.01
+residualTol = 1e-8
 maximumSteps = 200
 
 [CLSR]
-# Capped at the uniform-mesh value 10*(N+1), as for TLSR (default 500).
+solveFrequency = 0.001
+residualTol = 1e-8
 maximumSteps = 80
 
 [LVLSET]
-# eps = 1.5*h/N for the h = 0.2 cube elements around the bubble (default
-# mesh, N = 7; bubble.plan.json gives it for other meshes). Set it directly,
-# since by default lvlSet uses the largest element of the graded mesh, which
-# here would give eps ~0.12 (R/eps ~4.1; 0.18 with interfaceWidthFactor =
-# 1.5). R/eps = 11.7 here; in 2D the gas core went unstable at R/eps = 5.9 and
-# was clean at 9.3.
-interfaceWidthValue = 0.0429
+# eps = 1.5*h/N for the finest (interface) elements, as interfaceWidthFactor
+# = 1.5 gives on gpu/mesh-sensitivity's uniform meshes; setup-runs.sh sets it
+# (by default lvlSet would take h from the largest element of the graded
+# mesh). This value is for the 1x mesh (h = 4/27).
+interfaceWidthValue = 0.031746
 
 [PID]
 # Bubble centering controller (see ../common/pid.hpp): a uniform acceleration
 # F_pid = -(kp*e + ki*integral(e dt) + kd*u_gas) is applied to the whole domain,
 # where e is the gas centroid offset from the setpoint (x0, y0, z0) and u_gas is
-# the gas-phase mean velocity (used as de/dt). F_pid accelerates the bubble
-# directly (e'' = F_pid + buoyancy - drag), so e obeys
-#   e''' + kd e'' + kp e' + ki e = d/dt(buoyancy - drag),
-# whose characteristic polynomial s^3 + kd s^2 + kp s + ki (s: the Laplace
-# variable, i.e. solutions ~ e^(s t)) is (s + 2)^3 for the gains below. All
-# three roots are at s = -2 (a "triple closed-loop pole at s = -2"): an offset
-# decays like e^(-2t), with a time constant of 0.5, without oscillating. To make
-# the loop faster or slower, put the poles at s = -a with kp = 3a^2, ki = a^3,
-# kd = 3a.
+# the gas-phase mean velocity (used as de/dt). The characteristic polynomial
+# s^3 + kd s^2 + kp s + ki of the closed loop is (s + 2)^3 for the gains below:
+# an offset decays like e^(-2t), with a time constant of 0.5, without
+# oscillating (see ../pid-centering-3D/bubble.par).
 kp = 12
 ki = 8
 kd = 6
@@ -100,3 +99,7 @@ kd = 6
 x0 = 0
 y0 = 0
 z0 = 0
+
+[CASEDATA]
+# data.csv sampling interval, independent of checkpoints.
+sampleInterval = 0.1

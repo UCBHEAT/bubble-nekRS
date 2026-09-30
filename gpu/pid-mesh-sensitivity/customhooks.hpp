@@ -20,8 +20,8 @@ void customProperties(double t)
 
     // nekRS-LS only computes the scalar SVV viscosity when userProperties is
     // unset (nrs_t::evaluateProperties), so compute it here or the [SCALAR *]
-    // svv regularization has no effect. Without it c (Pe = 2.7e5) overshoots
-    // to c ~ 1.5 within t = 1.
+    // svv regularization has no effect (gpu/mesh-sensitivity does not, so its
+    // scalars ran without SVV).
     scalar->mueSVV();
 }
 
