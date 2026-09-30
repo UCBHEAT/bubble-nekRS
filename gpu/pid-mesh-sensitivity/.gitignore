@@ -1,15 +1,16 @@
 # Run outputs (field files, .cache, .msh and .re2 are ignored at the top level)
+.lhelper
+.gpucheck
+JOB_DESC
+*.batch
 data.csv
-logfile
+logfile*
+nodes-*
+gpucheck-*
 restart.fld
-# ./mesh outputs besides bubble.msh/bubble.re2
+# Mesh outputs besides bubble.msh/bubble.re2
+mesh.log
 *.plan.json
 *.gmsh2nek*.log
 *.failed.re2
-*.vtk
 __pycache__/
-# Archived run outputs
-runs/
-# animate.py outputs (animate.pvsm is committed)
-frames/
-*.mp4
