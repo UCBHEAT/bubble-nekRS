@@ -60,7 +60,8 @@ and all three axes through it are element edges; there the gas core carries
 strong spurious currents at the physical density ratio (u_max up to 7 on the
 1.5x mesh at t = 0.5, against 1.4 with the odd count), which then corrupt the
 level set along the edges and seed spurious gas in the liquid, and the 2.25x
-bubble breaks up at t = 1.7.
+bubble breaks up at t = 1.7. (In gpu/mesh-sensitivity the bubble rose through
+the mesh, so it only passed such points; here the PID holds it in place.)
 
 The interface width is eps = 1.5 h/N ([LVLSET] interfaceWidthValue), which is
 what interfaceWidthFactor = 1.5 gives on the uniform meshes; the lvlSet
@@ -102,7 +103,7 @@ had only run at rho ratio 40):
   (t = 0.35 on 1x and 0.78 on 2.25x; with the default reinit caps, which
   redistance the whole domain, already from t = 0.035 near the inflow). The
   uniform periodic meshes of gpu/mesh-sensitivity have neither the
-  boundaries nor the coarse far field. The bubble stays within ~0.02 D of
+  boundaries nor the coarse far field. The bubble stays within ~0.04 D of
   the setpoint, and its interface band within ~1 D, so the reset only
   removes noise: data.csv records the largest deficit found beyond 2 D
   before each reset (`far_deficit_max`, ~1e-7) and the gas volume removed
