@@ -89,6 +89,10 @@ interfaceWidthValue = 0.0536
 kp = 12
 ki = 8
 kd = 6
+# Frontal area for the steady-state C_D report (per unit z depth: 1 * 0.25 for
+# the D = 1 cylinder in the 0.25-thick periodic z element). The 2D drag and C_D
+# are likewise per unit depth.
+frontalArea = 0.25
 # Setpoint: the initial bubble position (the default is the mesh centroid).
 x0 = 0
 y0 = 0

@@ -159,6 +159,11 @@ void UDF_ExecuteStep(double time, int tstep)
             rise[d] = (pid.error[d] - window_e0[d])/window - pid.frame_velocity[d];
             window_e0[d] = pid.error[d];
         }
+        // Steady-state drag from the frame force balance (Fan et al. 2020
+        // metrology, see doc/pid-vs-fan-2020.md): the window mean of the
+        // applied PID force is the convergence indicator, ~0 once centered.
+        dfloat F_drag, Cd, F_pid_mean;
+        pidSteadyReport(rise, &F_drag, &Cd, &F_pid_mean);
         budget_C0 = C;
         budget_t0 = time;
         budget_inflow = 0.0;
@@ -177,10 +182,17 @@ void UDF_ExecuteStep(double time, int tstep)
         const dfloat sherwood_no = mtc*Pe;
 
         if (platform->comm.mpiRank() == 0) {
+            const dfloat U_term = sqrt(rise[0]*rise[0] + rise[1]*rise[1] + rise[2]*rise[2]);
+            const dfloat r_eq = cbrt(3*pid.gas_volume/(4*M_PI));
+            const dfloat A_eff = pid.frontal_area ? pid.frontal_area : M_PI*r_eq*r_eq;
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
             printf("mdot=%.4g MTC=%.4g Sh=%.4g\n", mdot, mtc, sherwood_no);
             printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f]\n", total_area, c_bulk, c_min, c_max);
+            printf("Steady-state drag (frame balance): F_drag=%.6g, F_pid mean=%.3g (%.1f%% of buoyancy)\n",
+                    F_drag, F_pid_mean, 100.0*F_pid_mean/((1.0 - 1.0/rhoratio)*pid.gas_volume/Fr/Fr));
+            printf("C_D=%.4f (U_term=%.4f, A=%.4f)%s\n", Cd, U_term, A_eff,
+                    pid.frontal_area ? "" : "  [WARNING: A from the equivalent sphere, set [PID] frontalArea in 2D]");
             printf("----------------------------------------\n");
 
             // Write CSV file
@@ -192,6 +204,7 @@ void UDF_ExecuteStep(double time, int tstep)
             if (newly_created) {
                 f << "Time,tstep,mdot,MTC,Sh,total_area,c_bulk,c_min,c_max,"
                         << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,F_pid_x,F_pid_y,F_pid_z,"
+                        << "F_drag,C_D,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
             }
             // %.4g = defaultfloat, precision 4; %.4f = fixed, precision 4
@@ -208,6 +221,7 @@ void UDF_ExecuteStep(double time, int tstep)
             for (int d = 0; d < 3; d++) f << "," << pid.error[d];
             for (int d = 0; d < 3; d++) f << "," << rise[d];
             for (int d = 0; d < 3; d++) f << "," << pid.force[d];
+            f << "," << F_drag << "," << Cd;
             f << std::setprecision(10);
             for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
             for (int d = 0; d < 3; d++) f << "," << pid.frame_velocity[d];

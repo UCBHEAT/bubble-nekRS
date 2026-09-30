@@ -96,6 +96,10 @@ interfaceWidthValue = 0.0429
 kp = 12
 ki = 8
 kd = 6
+# Frontal area for the steady-state C_D report; 0 (default) uses the frontal
+# area of the sphere of equal gas volume, which is the right estimate while the
+# bubble is near-spherical here (comment out to fall back to it).
+# frontalArea = 0.7854
 # Setpoint: the initial bubble position (the default is the mesh centroid).
 x0 = 0
 y0 = 0
