@@ -55,6 +55,10 @@ static occa::memory o_farJw;       // Jw at r > farRadius, 0 within
 static double farVolume = 0.0;
 static double farRemoved = 0.0;    // gas volume reset to liquid in the sample interval
 static double farDeficitMax = 0.0; // largest 1 - psi beyond farRadius in the interval
+// [CASEDATA] psiSnap (default 0: off): after every level set step, also set
+// psi = 1 wherever 1 - psi is below this, and record the volume removed.
+static double psiSnap = 0.0;
+static double snapRemoved = 0.0;   // gas volume snapped to liquid in the sample interval
 
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
@@ -77,6 +81,7 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
     platform->par->extract("casedata", "tracevelocity", traceVelocity);
     platform->par->extract("casedata", "tracefarfield", traceFarField);
     platform->par->extract("casedata", "farfieldclean", farFieldClean);
+    platform->par->extract("casedata", "psisnap", psiSnap);
     platform->par->extract("casedata", "scalarsvv", scalarSVV);
     if (platform->comm.mpiRank() == 0) {
         printf("rho splitting filter %s, pressure ext order %s, scalar SVV %d, far-field clean %d, "
@@ -319,6 +324,11 @@ void UDF_ExecuteStep(double time, int tstep)
         } else {
             farDeficitMax = std::max(farDeficitMax, deficit);
         }
+        if (psiSnap > 0) {
+            auto o_removed = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+            snapLiquid(info, psiSnap, o_psi, o_removed);
+            snapRemoved += platform->linAlg->innerProd(mesh->Nlocal, o_removed, mesh->o_Jw, comm);
+        }
     }
 
     // Hard sink: remove the species that has reached the gas (psi < 0.5). At
@@ -388,8 +398,10 @@ void UDF_ExecuteStep(double time, int tstep)
         sink_removed = 0.0;
         const double far_deficit_max = farDeficitMax;
         const double far_removed = farRemoved;
+        const double snap_removed = snapRemoved;
         farDeficitMax = 0.0;
         farRemoved = 0.0;
+        snapRemoved = 0.0;
 
         // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
         auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
@@ -425,7 +437,7 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,far_deficit_max,far_removed,u_max,"
+                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,far_deficit_max,far_removed,snap_removed,u_max,"
                         << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,"
                         << "u_gas_x,u_gas_y,u_gas_z,u_liq_x,u_liq_y,u_liq_z,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
@@ -435,7 +447,7 @@ void UDF_ExecuteStep(double time, int tstep)
             f << tstep << ",";
             f << std::defaultfloat << std::setprecision(6) << mdot << "," << mtc << "," << sherwood_no << ","
                     << mdot_sink << "," << sherwood_sink << "," << total_area << ","
-                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume << "," << far_deficit_max << "," << far_removed << "," << u_max;
+                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume << "," << far_deficit_max << "," << far_removed << "," << snap_removed << "," << u_max;
             // PID bubble centering: gas centroid offset from the setpoint, bubble
             // rise velocity (lab frame, see above), gas and liquid mean velocities
             // (in the frame), the PID force per unit mass applied in the next
