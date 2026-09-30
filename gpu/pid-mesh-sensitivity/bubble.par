@@ -25,8 +25,8 @@ equation = navierStokes+variableViscosity
 [FLUID VELOCITY]
 # Boundary IDs (gmsh physical groups, see ../pid-centering-3D/
 # generate_mesh.py): 1 = top (inflow), 2 = bottom (outflow); x and z are
-# periodic. The inflow velocity is the PID frame velocity.
-boundaryTypeMap = udfDirichlet, zeroNeumann
+# periodic. Both impose the PID frame velocity (see udfDirichlet).
+boundaryTypeMap = udfDirichlet, udfDirichlet
 regularization = svv+scalingCoeff=1.0+filterPower=4.0
 residualTol = 1e-8
 

@@ -30,6 +30,32 @@ static int sampleCount = 1;
 static double stopAt = -1;
 static double dtStep = 0.0;
 
+// [CASEDATA] traceVelocity: print the largest velocity and where it is on
+// every step on which it exceeds this, to see where a blow-up starts.
+static double traceVelocity = 0.0;
+// The only gas is the bubble, held at the PID setpoint, so farther than
+// farRadius from the setpoint the liquid is pure (psi = 1). The CLS
+// reinitialization amplifies the ~1e-9 deficits the CLS solve leaves there by
+// ~2x per call wherever its normals (from a TLS that is not a distance
+// function far from the bubble, or is bent by the zero-Neumann TLSR boundary
+// condition at the inflow) diverge, until spurious gas pockets form at element
+// vertices of the coarse far field and their buoyancy blows the run up
+// (t = 0.13-0.6 on the 1x and 2.25x meshes; the uniform periodic meshes of
+// gpu/mesh-sensitivity have neither the boundaries nor the coarse far field).
+// So after every level set step psi is reset to 1 beyond farRadius
+// ([CASEDATA] farFieldClean = false turns this off), and data.csv records the
+// largest deficit found there before the reset and the gas volume removed.
+// [CASEDATA] traceFarField prints where the deficit is, every 10 steps, while
+// it exceeds this value.
+static const double farRadius = 2.0;
+static bool farFieldClean = true;
+static double traceFarField = 0.0;
+static occa::memory o_nearPenalty; // 2 at r <= farRadius, 0 beyond
+static occa::memory o_farJw;       // Jw at r > farRadius, 0 within
+static double farVolume = 0.0;
+static double farRemoved = 0.0;    // gas volume reset to liquid in the sample interval
+static double farDeficitMax = 0.0; // largest 1 - psi beyond farRadius in the interval
+
 void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 {
     kernelInfo.define("p_PI") = M_PI;
@@ -38,8 +64,78 @@ void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
 void UDF_Setup0(MPI_Comm comm, setupAide &options)
 {
     options.setArgs("FLUID PRESSURE RHO SPLITTING", "TRUE");
-    options.setArgs("FLUID PRESSURE RHO SPLITTING FILTER", "TRUE");
     options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
+    // [CASEDATA] rhoSplittingFilter (true/false) and pressureExtOrder (1 or 2,
+    // the extrapolation order of the pressure in the splitting term).
+    std::string filter = "true";
+    platform->par->extract("casedata", "rhosplittingfilter", filter);
+    options.setArgs("FLUID PRESSURE RHO SPLITTING FILTER", upperCase(filter));
+    std::string extOrder;
+    if (platform->par->extract("casedata", "pressureextorder", extOrder)) {
+        options.setArgs("FLUID PRESSURE EXT ORDER", extOrder);
+    }
+    platform->par->extract("casedata", "tracevelocity", traceVelocity);
+    platform->par->extract("casedata", "tracefarfield", traceFarField);
+    platform->par->extract("casedata", "farfieldclean", farFieldClean);
+    platform->par->extract("casedata", "scalarsvv", scalarSVV);
+    if (platform->comm.mpiRank() == 0) {
+        printf("rho splitting filter %s, pressure ext order %s, scalar SVV %d, far-field clean %d, "
+                "traceVelocity %g, traceFarField %g\n", upperCase(filter).c_str(),
+                extOrder.empty() ? "default" : extOrder.c_str(), int(scalarSVV), int(farFieldClean),
+                traceVelocity, traceFarField);
+    }
+}
+
+/**
+ * Smallest psi at r > farRadius and where it is: {psi, x, y, z}.
+ */
+static void farFieldPsiMin(double out[4], bool locate)
+{
+    mesh_t* mesh = nrs->meshV;
+    const auto comm = platform->comm.mpiComm();
+    auto o_tmp = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+    o_tmp.copyFrom(nrs->scalar->o_solution("cls"), mesh->Nlocal);
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_nearPenalty, 1.0, o_tmp);
+    out[0] = platform->linAlg->min(mesh->Nlocal, o_tmp, comm);
+    out[1] = out[2] = out[3] = 0.0;
+    if (!locate) {
+        return;
+    }
+    std::vector<dfloat> v(mesh->Nlocal);
+    o_tmp.copyTo(v.data(), mesh->Nlocal);
+    auto [x, y, z] = mesh->xyzHost();
+    const dlong n = std::min_element(v.begin(), v.end()) - v.begin();
+    struct { double v; int rank; } in = {v[n], platform->comm.mpiRank()}, loc;
+    MPI_Allreduce(&in, &loc, 1, MPI_DOUBLE_INT, MPI_MINLOC, comm);
+    if (loc.rank == platform->comm.mpiRank()) {
+        const double w[4] = {v[n], x[n], y[n], z[n]};
+        std::copy(w, w + 4, out);
+    }
+    MPI_Bcast(out, 4, MPI_DOUBLE, loc.rank, comm);
+}
+
+/**
+ * Largest velocity magnitude and where it is: {|u|, x, y, z, psi}.
+ */
+static void largestVelocity(double out[5])
+{
+    mesh_t* mesh = nrs->meshV;
+    const auto comm = platform->comm.mpiComm();
+    const occa::memory o_U = nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset);
+    auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(nrs->fieldOffset);
+    platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, o_U, o_umag);
+    std::vector<dfloat> umag(mesh->Nlocal), psiHost(mesh->Nlocal);
+    o_umag.copyTo(umag.data(), mesh->Nlocal);
+    nrs->scalar->o_solution("cls").copyTo(psiHost, mesh->Nlocal);
+    auto [x, y, z] = mesh->xyzHost();
+    const dlong n = std::max_element(umag.begin(), umag.end()) - umag.begin();
+    struct { double v; int rank; } in = {umag[n], platform->comm.mpiRank()}, loc;
+    MPI_Allreduce(&in, &loc, 1, MPI_DOUBLE_INT, MPI_MAXLOC, comm);
+    if (loc.rank == platform->comm.mpiRank()) {
+        const double v[5] = {umag[n], x[n], y[n], z[n], psiHost[n]};
+        std::copy(v, v + 5, out);
+    }
+    MPI_Bcast(out, 5, MPI_DOUBLE, loc.rank, comm);
 }
 
 void UDF_Setup()
@@ -93,6 +189,23 @@ void UDF_Setup()
     }
 
     pidSetup();
+
+    {
+        auto [x, y, z] = mesh->xyzHost();
+        std::vector<dfloat> penalty(nrs->fieldOffset, 0.0), jw(nrs->fieldOffset, 0.0);
+        mesh->o_Jw.copyTo(jw.data(), mesh->Nlocal);
+        for (int n = 0; n < mesh->Nlocal; n++) {
+            const double dx = x[n] - pid.center[0], dy = y[n] - pid.center[1], dz = z[n] - pid.center[2];
+            const bool near = dx*dx + dy*dy + dz*dz <= farRadius*farRadius;
+            penalty[n] = near ? 2.0 : 0.0;
+            if (near) jw[n] = 0.0;
+        }
+        o_nearPenalty = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        o_nearPenalty.copyFrom(penalty.data(), nrs->fieldOffset);
+        o_farJw = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        o_farJw.copyFrom(jw.data(), nrs->fieldOffset);
+        farVolume = platform->linAlg->sum(mesh->Nlocal, o_farJw, platform->comm.mpiComm());
+    }
 
     // Same bookkeeping as nekRS's checkpointStep so restarts stay on the grid.
     platform->options.getArgs("DT", dtStep);
@@ -173,6 +286,41 @@ void UDF_ExecuteStep(double time, int tstep)
         }
     }
 
+    if (traceVelocity > 0) {
+        const occa::memory o_U = nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset);
+        auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(nrs->fieldOffset);
+        platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, o_U, o_umag);
+        if (platform->linAlg->max(mesh->Nlocal, o_umag, comm) > traceVelocity) {
+            double umax[5];
+            largestVelocity(umax);
+            if (platform->comm.mpiRank() == 0) {
+                printf("trace: step=%d t=%.7e u_max=%.4g at (%.5f, %.5f, %.5f) psi=%.4f\n",
+                        tstep, time, umax[0], umax[1], umax[2], umax[3], umax[4]);
+            }
+        }
+    }
+
+    // Far-field liquid (see farRadius).
+    {
+        double far[4];
+        farFieldPsiMin(far, false);
+        const double deficit = 1.0 - far[0];
+        if (traceFarField > 0 && tstep % 10 == 0 && deficit > traceFarField) {
+            farFieldPsiMin(far, true);
+            if (platform->comm.mpiRank() == 0) {
+                printf("trace: step=%d t=%.7e far-field psi_min=%.6g at (%.5f, %.5f, %.5f)\n",
+                        tstep, time, far[0], far[1], far[2], far[3]);
+            }
+        }
+        if (farFieldClean) {
+            farRemoved += farVolume - platform->linAlg->innerProd(mesh->Nlocal, o_psi, o_farJw, comm);
+            farDeficitMax = std::max(farDeficitMax, deficit);
+            setFarFieldLiquid(info, o_nearPenalty, o_psi);
+        } else {
+            farDeficitMax = std::max(farDeficitMax, deficit);
+        }
+    }
+
     // Hard sink: remove the species that has reached the gas (psi < 0.5). At
     // tstep 0 this only clears the smeared initial interface band (or nothing,
     // on restart), which is not mass transfer (the budget starts after it).
@@ -238,6 +386,10 @@ void UDF_ExecuteStep(double time, int tstep)
         budget_t0 = time;
         budget_inflow = 0.0;
         sink_removed = 0.0;
+        const double far_deficit_max = farDeficitMax;
+        const double far_removed = farRemoved;
+        farDeficitMax = 0.0;
+        farRemoved = 0.0;
 
         // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
         auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
@@ -252,6 +404,11 @@ void UDF_ExecuteStep(double time, int tstep)
         const dfloat mtc = mdot / total_area / c_inflow;
         const dfloat sherwood_no = mtc*Pe;
         const dfloat sherwood_sink = mdot_sink / total_area / c_inflow * Pe;
+
+        // Health of the run: the far-field deficit and the largest velocity.
+        auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset), o_umag);
+        const dfloat u_max = platform->linAlg->max(mesh->Nlocal, o_umag, comm);
 
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
@@ -268,7 +425,7 @@ void UDF_ExecuteStep(double time, int tstep)
             check_file.close();
             std::ofstream f(filename, std::ios_base::app);
             if (newly_created) {
-                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,"
+                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,far_deficit_max,far_removed,u_max,"
                         << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,"
                         << "u_gas_x,u_gas_y,u_gas_z,u_liq_x,u_liq_y,u_liq_z,F_pid_x,F_pid_y,F_pid_z,"
                         << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
@@ -278,7 +435,7 @@ void UDF_ExecuteStep(double time, int tstep)
             f << tstep << ",";
             f << std::defaultfloat << std::setprecision(6) << mdot << "," << mtc << "," << sherwood_no << ","
                     << mdot_sink << "," << sherwood_sink << "," << total_area << ","
-                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume;
+                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume << "," << far_deficit_max << "," << far_removed << "," << u_max;
             // PID bubble centering: gas centroid offset from the setpoint, bubble
             // rise velocity (lab frame, see above), gas and liquid mean velocities
             // (in the frame), the PID force per unit mass applied in the next
