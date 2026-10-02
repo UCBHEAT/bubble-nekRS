@@ -27,6 +27,10 @@
 #   DEPEND=<jobid>     start only after job <jobid> ends successfully
 #   DRYRUN=1           write bundle.sbatch but don't submit it
 #   NEKRS_GPU_MPI=1    GPU-aware MPI (default 0, as in nrsqsub)
+#   NEKRS_CACHE_BCAST=0  run nekrs, its libraries and the JIT kernels from
+#                      Lustre instead of each node's NVMe (default 1, as in
+#                      nrsqsub; from Lustre, an Orion outage can kill the run
+#                      with a bus error by taking away its code pages)
 # Prints the job id. The job exits non-zero if any case fails, which ends a
 # chain of DEPEND jobs there.
 set -euo pipefail
@@ -41,6 +45,7 @@ set -euo pipefail
 : ${STOP_MARGIN:=300}
 : ${DRYRUN:=0}
 : ${NEKRS_GPU_MPI:=0}
+: ${NEKRS_CACHE_BCAST:=1}
 
 if [ $# -lt 2 ]; then
     echo "Usage: PROJ_ID=<project> [PARTITION=batch] [QOS=] $0 <hh:mm> <dir>:<nodes> [<dir>:<nodes> ...]"
@@ -97,6 +102,9 @@ EOF
 if [ -n "$QOS" ]; then
     echo "#SBATCH -q $QOS" >> $SFILE
 fi
+if [ $NEKRS_CACHE_BCAST = 1 ]; then
+    echo "#SBATCH -C nvme" >> $SFILE
+fi
 cat >> $SFILE <<EOF
 
 # The case's .udf ends each case cleanly, with a checkpoint, once the job is
@@ -131,11 +139,11 @@ export MPICH_OFI_NIC_POLICY=NUMA
 export FI_CXI_RX_MATCH_MODE=hybrid
 export PMI_MMAP_SYNC_WAIT_TIME=600
 export MPICH_MPIIO_STATS=1
-export NEKRS_CACHE_BCAST=0
 EOF
 cat >> $SFILE <<EOF
 export NEKRS_HOME=$NEKRS_HOME
 export NEKRS_GPU_MPI=$NEKRS_GPU_MPI
+export NEKRS_CACHE_BCAST=$NEKRS_CACHE_BCAST
 export MPICH_MPIIO_HINTS="*:cray_cb_write_lock_mode=2:cray_cb_nodes_multiplier=4:striping_unit=16777216:striping_factor=${striping_factor}:romio_cb_write=enable:romio_ds_write=disable:romio_no_indep_rw=true"
 
 prepare_restart=$PREPARE_RESTART
@@ -151,6 +159,44 @@ cat >> $SFILE <<'EOF'
 jobid=$SLURM_JOB_ID
 bin=$NEKRS_HOME/bin/nekrs
 mapfile -t all_hosts < <(scontrol show hostnames "$SLURM_JOB_NODELIST")
+
+# As in nrsqsub: copy nekrs and its libraries to every node's NVMe, preload
+# the copies (the binary's RPATH points to $NEKRS_HOME/lib), and let nekRS
+# copy its JIT cache there too (NEKRS_CACHE_BCAST), so no code runs from
+# Lustre. The preload is set for the nekRS tasks only (srun --export).
+nek_env=ALL
+if [ $NEKRS_CACHE_BCAST = 1 ]; then
+    nvme=/mnt/bb/$USER
+    libs=$nvme/nekrs-bin_libs
+    # sbcast lists the libraries with ldd and sends none of them if that takes
+    # more than 5 s, which it can with a cold Lustre cache: warm the cache,
+    # retry, and check that every node has them.
+    sent=0
+    for attempt in 1 2 3; do
+        ldd $bin > /dev/null 2>&1 || true
+        if sbcast -fp --send-libs $bin $nvme/nekrs-bin &&
+           srun -N ${#all_hosts[@]} --ntasks-per-node=1 test -d $libs; then
+            sent=1
+            break
+        fi
+        echo "$(date) sbcast attempt $attempt did not send the libraries"
+    done
+    if [ $sent = 0 ]; then
+        echo "$(date) running nekrs from $NEKRS_HOME instead of the NVMe"
+        export NEKRS_CACHE_BCAST=0
+    fi
+fi
+if [ $NEKRS_CACHE_BCAST = 1 ]; then
+    export NEKRS_LOCAL_TMP_DIR=$nvme
+    # Preload every copied library that is one of nekRS's own (in
+    # $NEKRS_HOME/lib), not only libnekrs, libocca and hypre as nrsqsub does:
+    # libnekrs.so's RPATH would otherwise load its ADIOS2 libraries from Lustre.
+    preload=$(for f in $libs/*.so*; do
+                  if [ -e $NEKRS_HOME/lib/$(basename $f) ]; then echo $f; fi
+              done | paste -sd:)
+    nek_env=ALL,LD_LIBRARY_PATH=$libs:$LD_LIBRARY_PATH,LD_PRELOAD=$preload
+    bin=$nvme/nekrs-bin
+fi
 
 # Leave out nodes whose GPUs are missing or fail HIP context creation; the
 # case with the most nodes then runs on fewer nodes.
@@ -211,13 +257,13 @@ run_case() {
         echo "Running on nodes $nodelist"
         echo "$(date) precompilation"
         NEKRS_JITC_NTHREADS=$jitc_nthreads srun -N 1 -n $gpu_per_node -w ${hosts[first]} \
-            -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest \
+            -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest --export=$nek_env \
             $bin --setup $casename --backend HIP --device-id 0 --build-only $ntasks
         status=$?
         if [ $status -eq 0 ]; then
             echo "$(date) actual run"
             srun -N $n -n $ntasks -w $nodelist \
-                -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest \
+                -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest --export=$nek_env \
                 $bin --setup $casename --backend HIP --device-id 0
             status=$?
         fi
