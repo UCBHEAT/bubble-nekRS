@@ -174,6 +174,77 @@ PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 <common>/submit-bundle.sh 03:00 \
 A restart takes the PID integral and frame velocity from the data.csv row at
 the restart time, which the clean stop always writes.
 
+## Running on Frontier
+
+The Sc = 4 study ran on Frontier, with a sixth mesh, 0.296x (Nk = 90: 37^3
+fine cells of half-width 0.822, 441,864 elements, 151.6M GLL points,
+eps = 0.0095238, dt = 1.25e-5), because the species boundary layer is
+thinner than at Sc = 1 by about Sc^-1/2. It used nekRS-LS a48ee9fc5, the
+commit of the Sc = 1 runs on Polaris, built with PrgEnv-gnu and
+gcc-native/13.2 as in nekRS_HPCsupport/Frontier/install.md, with
+`-DENABLE_HYPRE_GPU=off`. (That does not change the pressure solve: nekRS
+runs the BoomerAMG coarse solve on the CPU whenever the multigrid coarse grid
+is not SEMFEM, on Polaris too.) The PyPI gmsh wheel works on the Frontier
+login nodes:
+
+```
+module load cray-python/3.11.7
+python3 -m venv ~/answinter26/tools/venv
+~/answinter26/tools/venv/bin/pip install "gmsh==4.15.*" numpy
+SC=4 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/bin/gmsh2nek \
+    ./setup-runs.sh ~/answinter26/Sc4-pid 2.25x:12:1e-4:0.5 1.5x:18:1e-4:0.5 \
+    1x:27:1e-4:0.5 0.667x:40:5e-5:1 0.444x:60:2.5e-5:1 0.296x:90:1.25e-5:1
+```
+
+The five shared meshes come out with the element counts above; 0.296x takes
+1.5 min.
+
+Jobs are submitted with `../common/submit-bundle-frontier.sh`, the Slurm
+counterpart of submit-bundle.sh (same BUBBLE_STOP_AT clean stop,
+PREPARE_RESTART and DEPEND chaining, and prepare-restart.sh). Frontier
+limits batch jobs below 92 nodes to 2 h, so the two finest runs used the
+`extended` partition (at most 64 nodes and 24 h, one running job per user;
+a second extended job waits for the first and accrues priority meanwhile),
+and the coarser four a chain of 2 h batch jobs:
+
+```
+cd ~/answinter26/Sc4-pid-prod
+PROJ_ID=fus167 PARTITION=extended PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 24:00 0.296x:56 0.444x:8
+A=$(PROJ_ID=fus167 PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+B=$(PROJ_ID=fus167 PREPARE_RESTART=1 DEPEND=$A <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+```
+
+`../common/bundle-status.sh <study dir> <jobid>...` shows the jobs' states
+and each case's step, time, CFL, recent s/step and Sh (with `--wait <s>` it
+first blocks until a job starts or ends or a log shows an error), and
+`../common/step-costs.sh <log>` splits a run's mean s/step into ordinary,
+CLSR and TLSR steps.
+
+The `debug` QOS (2 h, one job per user) is for tests only: OLCF does not
+allow production work or job chaining there. The bringup (all six meshes,
+t = 0 to 1.3-7.9) ran in debug in its own directory, and production started
+again from t = 0. GPU-aware MPI (`NEKRS_GPU_MPI=1`, which the Polaris script
+uses) aborts the multi-node runs at startup on Frontier ("Memory access fault
+by GPU"), so submit-bundle-frontier.sh keeps nrsqsub's default of 0.
+
+Seconds per step on Frontier nodes (8 GCDs each), over the bringup's steps 500
+to the end (t up to 1.3-7.9; `ordinary` is a step without reinitialization),
+and over the second production job of the coarse runs (t = 4-14):
+
+| Run    | Nodes | GLL points/GCD | ordinary | CLSR step | TLSR step | mean (bringup) | mean (production) |
+|--------|-------|----------------|----------|-----------|-----------|----------------|-------------------|
+| 2.25x  | 1     | 0.17M          | 0.024    | 0.27      | 1.08      | 0.057          | 0.064             |
+| 1.5x   | 1     | 0.38M          | 0.032    | 0.36      | 1.47      | 0.076          | 0.091             |
+| 1x     | 2     | 0.51M          | 0.042    | 0.43      | 1.80      | 0.095          | 0.113             |
+| 0.667x | 4     | 0.56M          | 0.044    | 0.41      | 1.82      | 0.069          | 0.080             |
+| 0.444x | 8     | 0.83M          | 0.056    | 0.47      | 2.14      | 0.070          |                   |
+| 0.296x | 56    | 0.34M          | 0.037    | 0.30      | 1.35      | 0.041          |                   |
+
+An ordinary step costs about 0.016 s plus 48 ns per GLL point per GCD, so
+the small runs are latency-bound and gain little from more nodes. On the
+same node counts the coarse runs are 15-30% slower than on Polaris (Sc = 1
+production: 0.048, 0.074, 0.096 and 0.070 s per step from 2.25x to 0.667x).
+
 ## Output
 
 data.csv has one row every 0.1 time units and at each job's last step:
