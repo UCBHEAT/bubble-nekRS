@@ -32,7 +32,9 @@
 #                      nrsqsub; from Lustre, an Orion outage can kill the run
 #                      with a bus error by taking away its code pages)
 # Prints the job id. The job exits non-zero if any case fails, which ends a
-# chain of DEPEND jobs there.
+# chain of DEPEND jobs there. A case runs in one job at a time (<dir>/.running
+# names it), so jobs in different partitions can be queued for the same cases:
+# whichever starts first runs them, and the other skips them.
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
@@ -223,27 +225,47 @@ if [ $missing -gt 0 ]; then
     echo "$(date) left out $missing bad nodes, ${dirs[big]} runs on ${nodes[big]} nodes"
 fi
 
-if [ $prepare_restart = 1 ]; then
-    run_dirs=() run_cases=() run_nodes=()
-    for k in "${!dirs[@]}"; do
-        d=${dirs[k]} casename=${cases[k]}
+# A case runs in one job at a time: <dir>/.running holds the id of the job
+# running it. A job skips a case that another running job holds, so several
+# jobs (say a batch chain and an extended job) can be queued for the same
+# cases and whichever starts first runs them; the lock of a job that ended
+# without releasing it is stale and taken over.
+claim() {
+    local d=$1 owner
+    owner=$(cat $d/.running 2>/dev/null || true)
+    if [ -n "$owner" ] && [ "$owner" != "$jobid" ] &&
+       [ "$(squeue -h -j $owner -o %T 2>/dev/null)" = RUNNING ]; then
+        return 1
+    fi
+    echo $jobid > $d/.running
+}
+
+run_dirs=() run_cases=() run_nodes=()
+for k in "${!dirs[@]}"; do
+    d=${dirs[k]} casename=${cases[k]}
+    if ! claim $d; then
+        echo "$(date) $d is running in job $(cat $d/.running), skipping"
+        continue
+    fi
+    if [ $prepare_restart = 1 ]; then
         end=$(awk -F= '/^endTime/ {print $2+0}' $d/$casename.par)
         last=$(tail -1 $d/data.csv 2>/dev/null | cut -d, -f1)
         if [ -n "$last" ] && awk -v a="$last" -v b="$end" 'BEGIN {exit !(a >= b - 1e-3)}'; then
             echo "$(date) $d reached endTime $end, skipping"
+            rm -f $d/.running
             continue
         fi
         if compgen -G "$d/${casename}0.f[0-9]*" > /dev/null && [ ! -L "$(ls $d/${casename}0.f[0-9]* | head -n 1)" ]; then
             $scripts/prepare-restart.sh $d || exit 1
         fi
-        run_dirs+=("$d") run_cases+=("$casename") run_nodes+=("${nodes[k]}")
-    done
-    if [ ${#run_dirs[@]} -eq 0 ]; then
-        echo "$(date) nothing left to run"
-        exit 0
     fi
-    dirs=("${run_dirs[@]}") cases=("${run_cases[@]}") nodes=("${run_nodes[@]}")
+    run_dirs+=("$d") run_cases+=("$casename") run_nodes+=("${nodes[k]}")
+done
+if [ ${#run_dirs[@]} -eq 0 ]; then
+    echo "$(date) nothing left to run"
+    exit 0
 fi
+dirs=("${run_dirs[@]}") cases=("${run_cases[@]}") nodes=("${run_nodes[@]}")
 
 # run_case <dir> <case name> <index of first node> <number of nodes>
 run_case() {
@@ -270,6 +292,9 @@ run_case() {
         echo "$(date) exit status $status"
     } > logfile-$jobid 2>&1
     echo $status > .status-$jobid
+    if [ "$(cat .running 2>/dev/null)" = "$jobid" ]; then
+        rm -f .running
+    fi
 }
 
 first=0
