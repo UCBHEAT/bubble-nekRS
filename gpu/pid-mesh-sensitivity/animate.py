@@ -5,7 +5,8 @@ names come from its .par, the bubble stays near the middle of the (only x
 and z periodic) domain, so plain averages and extents replace the periodic
 ones, the view follows the bubble and its wake, the arrows show the velocity
 relative to the far-field liquid (the frame velocity from data.csv
-subtracted) and the rise velocity chart is data.csv's lab-frame rise_v.
+subtracted), c is on a linear scale (it stays near 1 away from the wake)
+and the rise velocity chart is data.csv's lab-frame rise_v.
 
   pvbatch animate.py post <run dir> <first> <last>
       Bubble statistics for checkpoints first..last-1 (0-based) ->
@@ -15,10 +16,10 @@ subtracted) and the rise velocity chart is data.csv's lab-frame rise_v.
   pvbatch animate.py frames <run dir> <first> <last> <label>
       Render checkpoints first..last-1 -> <run dir>/frames/frame_<i>.png
 
-The look follows answinter26/example/paraview.pvsm: domain outline, a z = 0
-slice colored by c on a log scale, the psi = 0.5 bubble surface, velocity
-arrows on the slice, and bubble rise velocity, MTC and Sh charts with a
-current time marker. pvbatch needs the EGL ParaView on a GPU node.
+The look follows answinter26/example/paraview.pvsm: a z = 0 slice colored
+by c, the psi = 0.5 bubble surface, velocity arrows on the slice, and bubble
+rise velocity, MTC and Sh charts with a current time marker. pvbatch needs
+the EGL ParaView on a GPU node.
 """
 import builtins
 import csv
@@ -225,7 +226,7 @@ def merge(run):
 
 def frames(run, first, last, label):
     from paraview.simple import (CSVReader, Calculator, ColorBy, Contour, CreateLayout, CreateView,
-                                 Delete, GetColorTransferFunction, GetScalarBar, Glyph, Hide,
+                                 Delete, GetColorTransferFunction, GetScalarBar, Glyph,
                                  ProgrammableSource, SaveScreenshot, Show, Slice, Text)
     cps = checkpoints(run)
     current = cps[builtins.min(first, len(cps) - 1)][0]
@@ -235,36 +236,34 @@ def frames(run, first, last, label):
     rv = CreateView("RenderView")
     rv.OrientationAxesVisibility = 1
     rv.UseColorPaletteForBackground = 0
-    rv.Background = [0.32, 0.34, 0.43]
-    # Camera from the example state, scaled from its 2x4x2 domain to show
-    # what gpu/mesh-sensitivity's 4x8x4 box showed: here the bubble (at the
-    # origin) and about 7 D of its wake, not the whole 6x15x6 domain.
-    scale = 2.0
-    focal = np.array([0.0, -2.0, 0.0])
+    # White, with dark text: the saturated liquid of the slice is near white.
+    rv.Background = [1.0, 1.0, 1.0]
+    dark = [0.1, 0.1, 0.1]
+    rv.OrientationAxesLabelColor = dark
+    # Camera from the example state, scaled from its 2x4x2 domain to show the
+    # bubble (at the origin) and about 5 D of its wake, not the whole 6x15x6
+    # domain.
+    scale = 1.5
+    focal = np.array([0.0, -1.5, 0.0])
     rv.CameraFocalPoint = list(focal)
     rv.CameraPosition = list(focal + scale*np.array([5.795554957734411, 4.7320508075688785, 5.795554957734411]))
     rv.CameraViewUp = [-0.35355339059327373, 0.8660254037844388, -0.35355339059327373]
     rv.CameraViewAngle = 30
-
-    def show_outline(src):
-        disp = Show(src, rv)
-        disp.SetRepresentationType("Outline")
-        disp.ColorArrayName = ["POINTS", ""]
-        disp.AmbientColor = disp.DiffuseColor = [1, 1, 1]
-
-    show_outline(r)
 
     slc = Slice(Input=r)
     slc.SliceType = "Plane"
     slc.SliceType.Origin = [0.0, 0.0, 0.0]
     slc.SliceType.Normal = [0, 0, 1]
     slc_disp = Show(slc, rv)
+    # Unlit, so the oblique slice shows the colormap's own colors.
+    slc_disp.Ambient, slc_disp.Diffuse = 1.0, 0.0
     ColorBy(slc_disp, ("POINTS", "S03"))
     c_lut = GetColorTransferFunction("S03")
     c_lut.AutomaticRescaleRangeMode = "Never"
-    c_lut.UseLogScale = 1
-    c_lut.RGBPoints = [1e-4, 1, 1, 1, 1.0, 0, 0.3333333333333333, 1]
-    c_lut.RescaleTransferFunction(1e-4, 1.0)
+    # Light where the liquid is saturated, dark in the depleted wake.
+    c_lut.UseLogScale = 0
+    c_lut.RGBPoints = [0.0, 0.031, 0.188, 0.42, 0.5, 0.42, 0.68, 0.84, 1.0, 0.97, 0.98, 1.0]
+    c_lut.RescaleTransferFunction(0.0, 1.0)
     slc_disp.SetScalarBarVisibility(rv, True)
     c_bar = GetScalarBar(c_lut, rv)
     c_bar.Title = "c"
@@ -297,7 +296,7 @@ def frames(run, first, last, label):
     ColorBy(glyph_disp, ("POINTS", "u_lab", "Magnitude"))
     u_lut = GetColorTransferFunction("u_lab")
     u_lut.AutomaticRescaleRangeMode = "Never"
-    u_lut.RGBPoints = [0, 1, 1, 1, 2, 1, 0, 0]
+    u_lut.RGBPoints = [0, 0.75, 0.75, 0.75, 2, 1, 0, 0]
     u_lut.RescaleTransferFunction(0.0, 2.0)
     glyph_disp.SetScalarBarVisibility(rv, True)
     u_bar = GetScalarBar(u_lut, rv)
@@ -307,12 +306,14 @@ def frames(run, first, last, label):
     for bar in (c_bar, u_bar):
         bar.TitleFontSize = 24
         bar.LabelFontSize = 22
+        bar.TitleColor = bar.LabelColor = dark
         bar.ScalarBarLength = 0.3
 
     label_text = Text()
     label_disp = Show(label_text, rv)
     label_disp.WindowLocation = "Upper Left Corner"
     label_disp.FontSize = 26
+    label_disp.Color = dark
 
     data_csv = CSVReader(FileName=[os.path.join(run, "data.csv")])
     ymax = {"vel": chart_max(os.path.join(run, "data.csv"), "rise_v", 1.5),
@@ -389,8 +390,6 @@ def frames(run, first, last, label):
             old, r = r, open_reader(nek)
             slc.Input = r
             bubble.Input = r
-            Hide(old, rv)
-            show_outline(r)
             Delete(old)
             current = nek
         set_marker(t)
