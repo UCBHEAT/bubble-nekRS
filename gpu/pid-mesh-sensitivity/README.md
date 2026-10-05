@@ -252,6 +252,26 @@ the small runs are latency-bound and gain little from more nodes. On the
 same node counts the coarse runs are 15-30% slower than on Polaris (Sc = 1
 production: 0.048, 0.074, 0.096 and 0.070 s per step from 2.25x to 0.667x).
 
+`submit-animate-frontier.sh` is the Slurm counterpart of submit-animate.sh
+(post.csv and animation.mp4, see Output), with ParaView 5.13.1 (OSMesa) from
+the Frontier software stack, numpy for its Python (`pip install --target
+~/answinter26/tools/pv-site 'numpy<2'` with cray-python/3.11.7) and a static
+ffmpeg build:
+
+```
+cd ~/answinter26/Sc4-pid-prod
+PROJ_ID=fus167 <dir>/submit-animate-frontier.sh 01:00 \
+    "2.25x:2:Sc = 4, 2.25x Kolmogorov (3887 elements)" ... \
+    "0.296x:4:Sc = 4, 0.296x Kolmogorov (441864 elements)"
+```
+
+Each run gets a CPU node, whose cores and memory its chunks share. The
+script selects VTK's STDThread backend, because that ParaView defaults to
+Sequential, which is about 10 times slower (a 0.444x frame of
+`../common/animate.py` took 7 min serially, 30 s on 56 cores). pvbatch runs
+without MPI, each chunk as a task of one srun step, since animate.py reads
+whole checkpoints.
+
 ## Output
 
 data.csv has one row every 0.1 time units and at each job's last step:
@@ -281,7 +301,8 @@ eddy has formed. `figures.py` draws the two figures above (doc/), and
 `submit-animate.sh` with `animate.py` (gpu/mesh-sensitivity's, adapted)
 makes each run's animation.mp4 and post.csv, the bubble's volume, centroid,
 velocities, interface area and extents at every checkpoint, on a Polaris GPU
-node (set FFMPEG to an ffmpeg binary with libx264; Polaris has none).
+node (set FFMPEG to an ffmpeg binary with libx264; Polaris has none), or on
+Frontier's CPU nodes with `submit-animate-frontier.sh`.
 
 ## Sc = 1 results (Polaris, October 2026)
 
