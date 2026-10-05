@@ -277,11 +277,19 @@ run_case() {
     echo "$nodelist" > nodes-$jobid
     {
         echo "Running on nodes $nodelist"
-        echo "$(date) precompilation"
-        NEKRS_JITC_NTHREADS=$jitc_nthreads srun -N 1 -n $gpu_per_node -w ${hosts[first]} \
-            -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest --export=$nek_env \
-            $bin --setup $casename --backend HIP --device-id 0 --build-only $ntasks
-        status=$?
+        # OCCA's kernel parser is not thread safe (a race on its table of
+        # builtin types, in dtype_t::getBuiltin, once segfaulted a rank), so
+        # a failed precompilation is tried once more; the kernels it built
+        # are cached.
+        for attempt in 1 2; do
+            echo "$(date) precompilation"
+            NEKRS_JITC_NTHREADS=$jitc_nthreads srun -N 1 -n $gpu_per_node -w ${hosts[first]} \
+                -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest --export=$nek_env \
+                $bin --setup $casename --backend HIP --device-id 0 --build-only $ntasks
+            status=$?
+            [ $status -ne 0 ] || break
+            rm -f core
+        done
         if [ $status -eq 0 ]; then
             echo "$(date) actual run"
             srun -N $n -n $ntasks -w $nodelist \
