@@ -505,6 +505,18 @@ Sh ~ Sc^0.5, as for a thin concentration boundary layer on a mobile interface
 still converging upwards (Richardson extrapolation: 17.39) while Sc = 4 has
 converged from above (33.15 on 0.296x): with those two, n = 0.465.
 
+### Shape and wake
+
+`wake.py` at t = 30 gives the Sc = 1 aspect ratios on the shared meshes
+(1.20, 1.65, 1.74, 1.93 and 1.88) and 1.85 on 0.296x: like Sh, the shape
+peaks at 0.667x and converges from above. On 0.296x the flow separates
+behind the bubble. Liquid on the axis moves up towards it, at up to 0.006
+times the inflow speed, up to 0.125 D below its rear: a small standing eddy,
+where on 0.444x the liquid still moved away at 0.005-0.008 times the inflow
+speed. The eddy's liquid renews by diffusion, so at Sc = 20 it may slow the
+settling of Sh on the finest mesh. Each run directory also has post.csv and
+animation.mp4 (`submit-animate-frontier.sh`, labelled "Sc = 4, ...").
+
 ### Concentration field and reproducibility
 
 The concentration over- and undershoots shrink with refinement (c in
