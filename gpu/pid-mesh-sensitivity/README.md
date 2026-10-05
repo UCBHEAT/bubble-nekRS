@@ -162,9 +162,9 @@ PYTHON=~/answinter26/tools/gmsh-venv/bin/python GMSH2NEK=~/answinter26/tools/gms
 ```
 
 makes the five run directories (name:Nk:dt:checkpointInterval specs select
-others; SC sets the Schmidt number), each with its mesh (`bubble.re2`,
-`mesh.log`, `bubble.plan.json`), and `common/pid.hpp` next to them for the
-udf. Meshing takes 5-40 s per run on a login node.
+others; SC sets the Schmidt number and END_TIME the end time), each with its
+mesh (`bubble.re2`, `mesh.log`, `bubble.plan.json`), and `common/pid.hpp`
+next to them for the udf. Meshing takes 5-40 s per run on a login node.
 
 Runs are submitted and restarted with the job scripts in `../common` (see
 `../mesh-sensitivity/README.md`), e.g.
@@ -496,3 +496,21 @@ the bringup, over the bringup's t = 0 to 1.3-7.9). On a different number of
 nodes, i.e. another partition of the mesh, Sh, the rise velocity, the gas
 volume and u_max differ by at most 2e-5 (0.296x, 56 against 46 nodes) and
 7e-4 (0.444x, 8 against 10 nodes).
+
+## Sc = 20 (Frontier, October 2026)
+
+The same six meshes at Sc = 20 (Pe = 4628), where the concentration boundary
+layer is thinner than at Sc = 4 by about 5^1/2 = 2.2, run to t = 15: on the
+finest meshes of the Sc = 1 and 4 studies, Sh averaged over t = 10-15 is
+within 0.03% of its t = 10-30 mean (see Run length). The runs come from
+
+```
+SC=20 END_TIME=15 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/bin/gmsh2nek \
+    ./setup-runs.sh ~/answinter26/Sc20-pid-prod 2.25x:12:1e-4:0.5 1.5x:18:1e-4:0.5 \
+    1x:27:1e-4:0.5 0.667x:40:5e-5:1 0.444x:60:2.5e-5:1 0.296x:90:1.25e-5:1
+```
+
+(the meshes are byte for byte those of Sc = 4) and run as Sc = 4 did:
+0.296x and 0.444x in a 24 h extended job on 56 and 8 nodes, with chains of
+2 h batch jobs on the same node counts queued for them, and the four coarser
+runs in a chain of 2 h batch jobs on 8 nodes.
