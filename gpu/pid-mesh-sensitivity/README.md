@@ -187,7 +187,137 @@ data.csv has one row every 0.1 time units and at each job's last step:
 
 `sherwood.py --tmin 10 --tmax 30 <runs>` averages Sh (with the standard error
 of 1 time unit batch means), Sh_sink, the rise velocity, the lateral speed
-and the rise Reynolds number over a window. `path.py <runs>` integrates the
-lab-frame lateral velocity into the bubble's sideways path, the counterpart
-of gpu/mesh-sensitivity's drift.py: when it exceeds 0.01, 0.05 and 0.25 D,
-and the growth rate of the lateral speed.
+and the rise Reynolds number over a window, and reports when Sh settled
+(every later 1 time unit batch mean within 0.5% of the window mean) and the
+gas volume lost. `path.py <runs>` integrates the lab-frame lateral velocity
+into the bubble's sideways path, the counterpart of gpu/mesh-sensitivity's
+drift.py: when it exceeds 0.01, 0.05 and 0.25 D, and the growth rate of the
+lateral speed. `wake.py <checkpoint> [<first checkpoint of its job>]` reads a
+checkpoint directly (no ParaView) and prints the bubble's aspect ratio and
+the liquid velocity on the axis behind it, which shows whether a standing
+eddy has formed.
+
+## Sc = 1 results (Polaris, October 2026)
+
+### Runs
+
+All five runs went from t = 0 to 30 in eight bundled jobs of 20-24 nodes on
+the small queue (October 1-4, 2026), 450 node-hours in all, 80% of them for
+0.444x. Measured seconds per step, and what a run to t = 30 takes at that
+size:
+
+| Run    | nodes | s/step | steps     | hours | node-hours |
+|--------|-------|--------|-----------|-------|------------|
+| 2.25x  | 1     | 0.048  | 300,000   | 4.0   | 4          |
+| 1.5x   | 1     | 0.074  | 300,000   | 6.2   | 6          |
+| 1x     | 2     | 0.096  | 300,000   | 8.0   | 16         |
+| 0.667x | 4     | 0.070  | 600,000   | 11.6  | 46         |
+| 0.444x | 16    | 0.0625 | 1,200,000 | 20.8  | 333        |
+
+0.444x ran its last four jobs on 20 nodes at 0.061 s per step, only 2.5%
+faster: 16 nodes is the economical size (4.2-4.3 time units per 3 hour job
+on either). answinter26/Sc1-pid/<run>/ keeps the inputs, the mesh and
+data.csv; `part<N>/` holds each job's checkpoints and logs (146 GB in all),
+and `finish-runs.sh` linked every checkpoint in time order (`bubble.nek5000`)
+so that each run opens as one time series.
+
+### Sherwood number
+
+Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
+`sherwood.py`; settled is when Sh reached its plateau (every later batch
+mean within 0.5% of the t = 10-30 mean, - if it still drifts at t = 30):
+
+| Run    | t = 5-10     | t = 10-20    | t = 20-30    | t = 10-30    | Sh_sink, t = 10-30 | settled |
+|--------|--------------|--------------|--------------|--------------|--------------------|---------|
+| 2.25x  | 10.15 ± 0.09 | 9.65 ± 0.07  | 9.57 ± 0.03  | 9.61 ± 0.04  | 6.63               | -       |
+| 1.5x   | 14.26 ± 0.01 | 14.36 ± 0.03 | 14.68 ± 0.01 | 14.52 ± 0.04 | 10.28              | -       |
+| 1x     | 15.91 ± 0.01 | 15.92 ± 0.01 | 15.97 ± 0.01 | 15.94 ± 0.01 | 11.17              | 5       |
+| 0.667x | 16.88 ± 0.04 | 16.94 ± 0.00 | 16.98 ± 0.01 | 16.96 ± 0.01 | 11.59              | 7       |
+| 0.444x | 17.15 ± 0.02 | 17.20 ± 0.00 | 17.20 ± 0.00 | 17.20 ± 0.00 | 11.61              | 6       |
+
+Sh dips to 11-12 at t = 1, while the bubble accelerates from rest, and is
+steady from t = 5-7 on every resolved mesh. Afterwards it only creeps up with
+the gas loss (below): from t = 10-15 to 25-30 by 2.7% on 1.5x, 0.5% on 1x and
+0.3% on 0.667x and 0.1% on 0.444x. Unlike in gpu/mesh-sensitivity,
+nothing changes later on: the bubble rises straight on every mesh (lateral
+speed at most 1.1e-4, `path.py`).
+
+Over t = 10-30, the three finest meshes converge at an observed order of 3.7,
+with GCI = 1.4% (p = 2, F_s = 1.25) between 0.667x and 0.444x, and Richardson
+extrapolation (p = 2) gives Sh = 17.39. With 1.5x, the observed order of the
+coarser triplet is 0.8, but it depends on the window (1.0 over t = 10-15),
+because the 1.5x Sh drifts with its gas loss. The figures and the GCI table
+are made by 2026-11-nek-cst/data/mesh_sensitivity_sc1_pid.py in
+UCBHEAT/papers.
+
+At the Reynolds number of the simulated rise (Re = 263, from the 0.444x rise
+speed and d_eq), the potential flow (Boussinesq) value is Sh = 18.3 and Feng
+and Michaelides (2001) give 19.0, so the extrapolated Sh is 5% and 9% below
+them; the rigid-sphere Frossling correlation gives 11.0.
+
+**Comparison with gpu/mesh-sensitivity.** Before its bubbles drifted
+(t = 5-10), gpu/mesh-sensitivity's Sh, which came from the hard-sink count,
+was 10.01, 11.02, 11.41 and 11.47 on 1.5x to 0.444x; Sh_sink here is 10.06,
+11.14, 11.54 and 11.58 over the same window, 0.5-1.1% higher. The budget Sh is
+1.41 (1.5x) to 1.48 (0.444x) times Sh_sink, approaching 1/g0 = 1.5, the BDF2
+undercount of the sink count (see `../pid-centering/README.md`). So the two
+setups agree where they can be compared, and gpu/mesh-sensitivity's Sh (and
+the figure and GCI table of mesh_sensitivity_sc1.py) read low by that factor.
+
+### Rise, shape and wake
+
+Averages over t = 10-30, with d_eq from the gas volume and Re = 231.4 x rise
+speed x d_eq; u_max is the largest velocity in the domain after t = 1, and
+the aspect ratio (equatorial radius over half height, where psi = 0.5,
+`wake.py`) is at t = 30:
+
+| Run    | rise velocity | d_eq  | Re  | area  | u_max / rise | aspect ratio |
+|--------|---------------|-------|-----|-------|--------------|--------------|
+| 2.25x  | 0.842         | 1.033 | 201 | 3.171 | 4.33         | 1.20         |
+| 1.5x   | 1.019         | 1.013 | 239 | 3.274 | 2.81         | 1.65         |
+| 1x     | 1.066         | 1.004 | 248 | 3.325 | 2.19         | 1.74         |
+| 0.667x | 1.123         | 1.001 | 260 | 3.397 | 1.78         | 1.93         |
+| 0.444x | 1.139         | 0.999 | 263 | 3.389 | 1.71         | 1.88         |
+
+The rise velocity settles more slowly than Sh: on 0.444x it is 1.121 at t = 8,
+1.131 at 10, 1.139 at 14 and 1.141 from t = 18 on. d_eq > 1 on the coarse
+meshes because the gas volume, the integral of 1 - psi, exceeds the sharp
+volume by (4/3) pi^3 R eps^2 for the CLS profile (0.105, 20%, on 2.25x at
+t = 0, and 0.4% on 0.444x).
+
+No standing eddy forms behind the bubble on the resolved meshes: on 1.5x to
+0.444x the liquid on the axis below it moves away from it everywhere (on
+2.25x, whose interface is 0.2 D thick, the gas circulation carries liquid
+up to 0.27 D below the rear). The liquid right behind the rear moves more
+slowly the finer the mesh, though: at less than 0.1 times the inflow speed
+up to 0.13, 0.28 and 0.38 D below the rear on 1x, 0.667x and 0.444x, so the
+converged flow may be close to separating.
+
+### Gas volume
+
+| Run    | gas volume change, t = 0.1-30 | removed by the psi snap | by the far-field reset |
+|--------|-------------------------------|-------------------------|------------------------|
+| 2.25x  | -12.3%                        | 9.4%                    | 1.8e-5                 |
+| 1.5x   | -6.5%                         | 4.3%                    | 1.3e-5                 |
+| 1x     | -3.6%                         | 2.0%                    | 1.2e-5                 |
+| 0.667x | -2.3%                         | 1.0%                    | 2.2e-5                 |
+| 0.444x | -1.5%                         | 0.5%                    | 1.6e-5                 |
+
+(the far-field column in volume, the others in percent of the gas volume at
+t = 0.1). The snap's share halves with each refinement, about as h^2; the
+rest, 2.9% on 2.25x down to 0.9% on 0.444x, is the conservative level set's
+own drift, and the far-field reset removes nothing that matters.
+
+### Run length
+
+A run to t = 15, averaged over t = 10-15, would have given the same result
+for half the cost: Sh over t = 10-15 is within 0.3% of the t = 10-30 mean on
+1x and finer (0.03% on 0.444x), and the convergence study barely moves (GCI
+1.51% instead of 1.38% between 0.667x and 0.444x, observed order 3.6 instead
+of 3.7, extrapolated Sh 17.40 instead of 17.39). The rise velocity over
+t = 10-15 is 0.35% lower than over t = 10-30 on 0.444x. Later studies (higher
+Sc) can likely stop at t = 15: c is passive, so the flow and its start-up do
+not depend on Sc, and the concentration boundary layer is renewed by the
+flow past the bubble, on the time it takes to pass it, not by diffusion;
+`settled` from `sherwood.py`, and `wake.py` for the nearly stagnant liquid
+behind the bubble, tell whether that still holds.
