@@ -225,10 +225,12 @@ size:
 
 0.444x ran its last four jobs on 20 nodes at 0.061 s per step, only 2.5%
 faster: 16 nodes is the economical size (4.2-4.3 time units per 3 hour job
-on either). answinter26/Sc1-pid/<run>/ keeps the inputs, the mesh and
-data.csv; `part<N>/` holds each job's checkpoints and logs (146 GB in all),
-and `finish-runs.sh` linked every checkpoint in time order (`bubble.nek5000`)
-so that each run opens as one time series.
+on either). After the animations (`submit-animate.sh`), the checkpoints were
+deleted except two self-contained ones per run, at t = 10 and 30
+(`bubble_t10.fld`, `bubble_t30.fld`, which can also seed runs on other
+meshes with `startFrom = <file>+int`). answinter26/Sc1-pid/<run>/ keeps the
+inputs, the mesh, data.csv, post.csv, animation.mp4, logs/ (the jobs' logs,
+gzipped) and those two checkpoints, 10 GB in all.
 
 ### Sherwood number
 

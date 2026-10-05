@@ -13,8 +13,9 @@ whole domain and around the bubble, with the interface and the bubble-frame
 streamlines.
 
 The slices are interpolated to z = 0 with each element's own GLL basis, from
-the last checkpoint of the run (with the coordinates of that job's first
-checkpoint). The meshes are tensor products of axis-aligned elements, so
+the run's self-contained bubble_t30.fld (or its last checkpoint, with the
+coordinates of that job's first one). The meshes are tensor products of
+axis-aligned elements, so
 z = 0 crosses one layer of elements (the bubble centre lies inside an
 element, see the README).
 """
@@ -59,8 +60,13 @@ def header(path):
 
 
 def last_checkpoint(run):
-    """The run's last checkpoint and the first checkpoint of its job (which
-    holds the coordinates), from the time-ordered links of finish-runs.sh."""
+    """The run's self-contained t = 30 checkpoint, which the run directories
+    keep, or else its last checkpoint and the first checkpoint of that job
+    (which holds the coordinates), from the time-ordered links of
+    finish-runs.sh."""
+    kept = os.path.join(run, "bubble_t30.fld")
+    if os.path.exists(kept):
+        return kept, kept
     last = os.path.realpath(sorted(glob.glob(os.path.join(run, "bubble0.f[0-9]*")))[-1])
     return last, os.path.join(os.path.dirname(last), "bubble0.f00000")
 
