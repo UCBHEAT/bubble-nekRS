@@ -53,6 +53,11 @@ by h/0.2, so the whole mesh is refined together:
 | 0.667x | 4/40       | 0.663       | 17^3, half-width 0.85  | 29x62x29 = 52142  | 17.9M | 128000 (43.9M) | 0.61 | 5.19 |
 | 0.444x | 4/60       | 0.442       | 25^3, half-width 0.833 | 41x92x41 = 154652 | 53.0M | 432000 (148M)  | 0.41 | 5.42 |
 
+![The z = 0 plane of the five meshes, and the 1x mesh around the bubble](doc/mesh.png)
+
+The z = 0 plane of the five meshes and, on the right, the 1x mesh around the
+bubble at t = 30 with its GLL points (`figures.py`).
+
 The fine cube has the generator's cell count (the smallest even number of
 cells that covers the interface zone r <= 0.76) plus one, so the bubble centre
 lies inside an element. With an even count the centre is an element vertex
@@ -195,7 +200,11 @@ drift.py: when it exceeds 0.01, 0.05 and 0.25 D, and the growth rate of the
 lateral speed. `wake.py <checkpoint> [<first checkpoint of its job>]` reads a
 checkpoint directly (no ParaView) and prints the bubble's aspect ratio and
 the liquid velocity on the axis behind it, which shows whether a standing
-eddy has formed.
+eddy has formed. `figures.py` draws the two figures above (doc/), and
+`submit-animate.sh` with `animate.py` (gpu/mesh-sensitivity's, adapted)
+makes each run's animation.mp4 and post.csv, the bubble's volume, centroid,
+velocities, interface area and extents at every checkpoint, on a Polaris GPU
+node.
 
 ## Sc = 1 results (Polaris, October 2026)
 
@@ -292,6 +301,13 @@ up to 0.27 D below the rear). The liquid right behind the rear moves more
 slowly the finer the mesh, though: at less than 0.1 times the inflow speed
 up to 0.13, 0.28 and 0.38 D below the rear on 1x, 0.667x and 0.444x, so the
 converged flow may be close to separating.
+
+![c on the z = 0 plane of the 0.444x run at t = 30](doc/wake.png)
+
+c on the z = 0 plane of the 0.444x run at t = 30 (`figures.py`): the thin
+boundary layer over the front of the bubble, and the depleted liquid that
+leaves its rear in a wake that still has c = 0.42 on the axis 2.5 D behind
+it and recovers slowly towards the outflow.
 
 ### Gas volume
 
