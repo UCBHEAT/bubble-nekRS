@@ -121,9 +121,12 @@ def main():
     wake = [(rear - yy, vv/u_in, pp, cc) for yy, vv, pp, cc in rows[::-1]]
     print(f"  axis profile (points up to {widest:.4f} from the axis)")
     print("  below rear   v/u_in     c")
+    shown = []
     for want in (0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5):
-        d, vv, pp, cc = min(wake, key=lambda row: abs(row[0] - want))
-        print(f"  {d:9.3f}  {vv:+8.4f}  {cc:6.3f}")
+        row = min(wake, key=lambda row: abs(row[0] - want))
+        if row not in shown:
+            shown.append(row)
+            print(f"  {row[0]:9.3f}  {row[1]:+8.4f}  {row[3]:6.3f}")
     liquid = [(d, vv) for d, vv, pp, cc in wake if pp > 0.9]
     reverse = [d for d, vv in liquid if vv > 0]
     if reverse:
