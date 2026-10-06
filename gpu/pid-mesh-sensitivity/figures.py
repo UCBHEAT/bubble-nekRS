@@ -3,6 +3,9 @@
 
 Usage: figures.py [--runs <dir with the run directories>] [--out doc]
 
+Run it in the directory that holds the run directories (2.25x, ..., 0.444x),
+or point --runs at it.
+
 doc/mesh.png: the z = 0 plane of the five meshes (element outlines, from
 each run's bubble.plan.json) with the initial bubble (red circle), and a
 zoom of the 1x mesh around the bubble at t = 30 with its GLL points and the
@@ -232,8 +235,8 @@ def wake_figure(runs_dir, out):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--runs", default="/lus/eagle/projects/nek-vf/benl/answinter26/Sc1-pid",
-                        help="directory holding the run directories")
+    parser.add_argument("--runs", default=".",
+                        help="directory holding the run directories (default: the current one)")
     parser.add_argument("--out", default=os.path.join(here, "doc"))
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)

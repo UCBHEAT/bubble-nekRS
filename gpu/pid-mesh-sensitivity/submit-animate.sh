@@ -12,7 +12,8 @@ set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
 : ${QUEUE:?QUEUE must be set}
-: ${FFMPEG:=/lus/eagle/projects/nek-vf/benl/answinter26/tools/ffmpeg}
+# Polaris has no ffmpeg: set FFMPEG to a static build with libx264.
+: ${FFMPEG:=ffmpeg}
 : ${PARAVIEW_MODULE:=visualization/paraview/paraview-5.13.1-EGL}
 
 if [ $# -lt 2 ]; then

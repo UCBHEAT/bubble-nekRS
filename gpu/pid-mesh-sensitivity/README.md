@@ -127,9 +127,8 @@ needed at the physical density ratio (it had only run at rho ratio 40):
 
 `[CASEDATA]` switches for tests: `traceVelocity` and `traceFarField` print
 where the largest velocity or the far-field deficit is while they exceed the
-given value; `psiSnap = 0`, `farFieldClean`, `scalarSVV`,
-`rhoSplittingFilter` and `pressureExtOrder` turn the corresponding features
-off or on.
+given value; `psiSnap = 0`, `farFieldClean`, `rhoSplittingFilter` and
+`pressureExtOrder` turn the corresponding features off or on.
 
 | Run    | dt      | TLSR/CLSR every | checkpoints |
 |--------|---------|-----------------|-------------|
@@ -204,7 +203,7 @@ eddy has formed. `figures.py` draws the two figures above (doc/), and
 `submit-animate.sh` with `animate.py` (gpu/mesh-sensitivity's, adapted)
 makes each run's animation.mp4 and post.csv, the bubble's volume, centroid,
 velocities, interface area and extents at every checkpoint, on a Polaris GPU
-node.
+node (set FFMPEG to an ffmpeg binary with libx264; Polaris has none).
 
 ## Sc = 1 results (Polaris, October 2026)
 
