@@ -1,0 +1,467 @@
+#ifdef __okl__
+
+#include "bubble.oudf"
+
+#endif
+
+#include <ctime>
+
+#include "lvlSet.hpp"
+#include "util.hpp"
+
+#include "case.hpp"
+// Shared by the gpu/ cases; found through the case directory, which nekRS
+// puts on the UDF include path (setup-runs.sh copies it next to the run
+// directories).
+#include "../common/pid.hpp"
+#include "customhooks.hpp"
+
+// data.csv is written every sampleInterval ([CASEDATA] sampleInterval in the
+// .par, default checkpointInterval) rather than at checkpoints, so the finer
+// meshes can checkpoint less often.
+static double sampleInterval = 0.0;
+static int sampleCount = 1;
+
+// submit-bundle.sh (gpu/common) sets BUBBLE_STOP_AT (seconds since the epoch)
+// a few minutes before the job's walltime runs out. Past it, the run ends
+// after the next step, which writes a checkpoint, by moving endTime the same
+// way nekrs.upd does, so a job doesn't lose the steps after its last regular
+// checkpoint.
+static double stopAt = -1;
+static double dtStep = 0.0;
+
+// [CASEDATA] traceVelocity: print the largest velocity and where it is on
+// every step on which it exceeds this, to see where a blow-up starts.
+static double traceVelocity = 0.0;
+// The only gas is the bubble, held at the PID setpoint, so farther than
+// farRadius from the setpoint the liquid is pure (psi = 1). The CLS
+// reinitialization amplifies the ~1e-9 deficits the CLS solve leaves there by
+// ~2x per call wherever its normals (from a TLS that is not a distance
+// function far from the bubble, or is bent by the zero-Neumann TLSR boundary
+// condition at the inflow) diverge, until spurious gas pockets form at element
+// vertices of the coarse far field and their buoyancy blows the run up
+// (t = 0.13-0.6 on the 1x and 2.25x meshes; the uniform periodic meshes of
+// gpu/mesh-sensitivity have neither the boundaries nor the coarse far field).
+// So after every level set step psi is reset to 1 beyond farRadius
+// ([CASEDATA] farFieldClean = false turns this off), and data.csv records the
+// largest deficit found there before the reset and the gas volume removed.
+// [CASEDATA] traceFarField prints where the deficit is, every 10 steps, while
+// it exceeds this value.
+static const double farRadius = 2.0;
+static bool farFieldClean = true;
+static double traceFarField = 0.0;
+static occa::memory o_nearPenalty; // 2 at r <= farRadius, 0 beyond
+static occa::memory o_farJw;       // Jw at r > farRadius, 0 within
+static double farVolume = 0.0;
+static double farRemoved = 0.0;    // gas volume reset to liquid in the sample interval
+static double farDeficitMax = 0.0; // largest 1 - psi beyond farRadius in the interval
+// [CASEDATA] psiSnap (default 0: off): after every level set step, also set
+// psi = 1 wherever 1 - psi is below this, and record the volume removed.
+static double psiSnap = 0.0;
+static double snapRemoved = 0.0;   // gas volume snapped to liquid in the sample interval
+
+void UDF_LoadKernels(deviceKernelProperties& kernelInfo)
+{
+    kernelInfo.define("p_PI") = M_PI;
+}
+
+void UDF_Setup0(MPI_Comm comm, setupAide &options)
+{
+    options.setArgs("FLUID PRESSURE RHO SPLITTING", "TRUE");
+    options.setArgs("FLUID PRESSURE ELLIPTIC COEFF FIELD", "TRUE");
+    // [CASEDATA] rhoSplittingFilter (true/false) and pressureExtOrder (1 or 2,
+    // the extrapolation order of the pressure in the splitting term).
+    std::string filter = "true";
+    platform->par->extract("casedata", "rhosplittingfilter", filter);
+    options.setArgs("FLUID PRESSURE RHO SPLITTING FILTER", upperCase(filter));
+    std::string extOrder;
+    if (platform->par->extract("casedata", "pressureextorder", extOrder)) {
+        options.setArgs("FLUID PRESSURE EXT ORDER", extOrder);
+    }
+    platform->par->extract("casedata", "tracevelocity", traceVelocity);
+    platform->par->extract("casedata", "tracefarfield", traceFarField);
+    platform->par->extract("casedata", "farfieldclean", farFieldClean);
+    platform->par->extract("casedata", "psisnap", psiSnap);
+    if (platform->comm.mpiRank() == 0) {
+        printf("rho splitting filter %s, pressure ext order %s, far-field clean %d, "
+                "traceVelocity %g, traceFarField %g\n", upperCase(filter).c_str(),
+                extOrder.empty() ? "default" : extOrder.c_str(), int(farFieldClean),
+                traceVelocity, traceFarField);
+    }
+}
+
+/**
+ * Smallest psi at r > farRadius and where it is: {psi, x, y, z}.
+ */
+static void farFieldPsiMin(double out[4], bool locate)
+{
+    mesh_t* mesh = nrs->meshV;
+    const auto comm = platform->comm.mpiComm();
+    auto o_tmp = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+    o_tmp.copyFrom(nrs->scalar->o_solution("cls"), mesh->Nlocal);
+    platform->linAlg->axpby(mesh->Nlocal, 1.0, o_nearPenalty, 1.0, o_tmp);
+    out[0] = platform->linAlg->min(mesh->Nlocal, o_tmp, comm);
+    out[1] = out[2] = out[3] = 0.0;
+    if (!locate) {
+        return;
+    }
+    std::vector<dfloat> v(mesh->Nlocal);
+    o_tmp.copyTo(v.data(), mesh->Nlocal);
+    auto [x, y, z] = mesh->xyzHost();
+    const dlong n = std::min_element(v.begin(), v.end()) - v.begin();
+    struct { double v; int rank; } in = {v[n], platform->comm.mpiRank()}, loc;
+    MPI_Allreduce(&in, &loc, 1, MPI_DOUBLE_INT, MPI_MINLOC, comm);
+    if (loc.rank == platform->comm.mpiRank()) {
+        const double w[4] = {v[n], x[n], y[n], z[n]};
+        std::copy(w, w + 4, out);
+    }
+    MPI_Bcast(out, 4, MPI_DOUBLE, loc.rank, comm);
+}
+
+/**
+ * Largest velocity magnitude and where it is: {|u|, x, y, z, psi}.
+ */
+static void largestVelocity(double out[5])
+{
+    mesh_t* mesh = nrs->meshV;
+    const auto comm = platform->comm.mpiComm();
+    const occa::memory o_U = nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset);
+    auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(nrs->fieldOffset);
+    platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, o_U, o_umag);
+    std::vector<dfloat> umag(mesh->Nlocal), psiHost(mesh->Nlocal);
+    o_umag.copyTo(umag.data(), mesh->Nlocal);
+    nrs->scalar->o_solution("cls").copyTo(psiHost, mesh->Nlocal);
+    auto [x, y, z] = mesh->xyzHost();
+    const dlong n = std::max_element(umag.begin(), umag.end()) - umag.begin();
+    struct { double v; int rank; } in = {umag[n], platform->comm.mpiRank()}, loc;
+    MPI_Allreduce(&in, &loc, 1, MPI_DOUBLE_INT, MPI_MAXLOC, comm);
+    if (loc.rank == platform->comm.mpiRank()) {
+        const double v[5] = {umag[n], x[n], y[n], z[n], psiHost[n]};
+        std::copy(v, v + 5, out);
+    }
+    MPI_Bcast(out, 5, MPI_DOUBLE, loc.rank, comm);
+}
+
+void UDF_Setup()
+{
+    mesh_t *mesh = nrs->meshV;
+
+    nrs->userProperties = &customProperties;
+    nrs->userSource = &customSource;
+
+    lvlSet::setup();
+
+    if (platform->options.getArgs("RESTART FILE NAME").empty()) {
+        // Apply initial conditions.
+        auto [x, y, z] = mesh->xyzHost();
+        std::vector<dfloat> phi(nrs->fieldOffset, 0.0);
+        for (int n = 0; n < mesh->Nlocal; n++) {
+            // Sphere of diameter 1 at the origin (the centre of the refined mesh).
+            dfloat r = sqrt(x[n]*x[n] + y[n]*y[n] + z[n]*z[n]);
+            phi[n] = r-0.5;
+        }
+
+        // Copy to device memory.
+        nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
+
+        // psi and c from phi. c = psi is smeared over the interface band, as in
+        // gpu/mesh-sensitivity (see ../pid-centering/README.md for why a
+        // saturated start is worse).
+        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
+        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
+    }
+
+    // These must be calculated and passed to device kernels as arguments, as the mesh
+    // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
+    // cannot set them as defines there.
+    printf("MPI rank %d: Nelements=%d Nlocal/Np=%d\n", platform->comm.mpiRank(), mesh->Nelements, mesh->Nlocal/(mesh->Np));
+    info.Nelements = mesh->Nlocal/(mesh->Np);
+    // mesh->Nelements is the minimum number of elements per node. This is not always
+    // the number of elements on this MPI rank when the number of elements is not exactly
+    // divisble by the MPI rank.
+    info.fieldOffset = nrs->fieldOffset;
+    info.liquid_volume = platform->linAlg->innerProd(mesh->Nlocal,
+            nrs->scalar->o_solution("cls"), mesh->o_Jw, platform->comm.mpiComm());
+    info.gas_volume = mesh->volume - info.liquid_volume;
+    // Buoyancy reference density: the liquid, since in the open (inflow/outflow)
+    // domain the far-field pressure gradient is the liquid's hydrostatic one.
+    // (In a fully periodic box it would be the domain-average density.)
+    info.rho_average = 1.0;
+    if (platform->comm.mpiRank() == 0) {
+        printf("Liquid/gas/total volumes %.4g %.4g %.4g\n", info.liquid_volume, info.gas_volume, mesh->volume);
+        printf("rho_average=%.4g\n", info.rho_average);
+    }
+
+    pidSetup();
+
+    {
+        auto [x, y, z] = mesh->xyzHost();
+        std::vector<dfloat> penalty(nrs->fieldOffset, 0.0), jw(nrs->fieldOffset, 0.0);
+        mesh->o_Jw.copyTo(jw.data(), mesh->Nlocal);
+        for (int n = 0; n < mesh->Nlocal; n++) {
+            const double dx = x[n] - pid.center[0], dy = y[n] - pid.center[1], dz = z[n] - pid.center[2];
+            const bool near = dx*dx + dy*dy + dz*dz <= farRadius*farRadius;
+            penalty[n] = near ? 2.0 : 0.0;
+            if (near) jw[n] = 0.0;
+        }
+        o_nearPenalty = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        o_nearPenalty.copyFrom(penalty.data(), nrs->fieldOffset);
+        o_farJw = platform->device.malloc<dfloat>(nrs->fieldOffset);
+        o_farJw.copyFrom(jw.data(), nrs->fieldOffset);
+        farVolume = platform->linAlg->sum(mesh->Nlocal, o_farJw, platform->comm.mpiComm());
+    }
+
+    // Same bookkeeping as nekRS's checkpointStep so restarts stay on the grid.
+    platform->options.getArgs("DT", dtStep);
+    platform->options.getArgs("CHECKPOINT INTERVAL", sampleInterval);
+    platform->par->extract("casedata", "sampleinterval", sampleInterval);
+    double startTime = 0.0;
+    platform->options.getArgs("START TIME", startTime);
+    if (startTime > 0) {
+        sampleCount = startTime/sampleInterval + 1;
+    }
+
+    if (const char* s = getenv("BUBBLE_STOP_AT")) {
+        stopAt = atof(s);
+    }
+}
+
+// Species budget since the last sample. The interface transfer rate is
+//   removed = integral(net boundary inflow of c) dt - change in integral(c dV),
+// which uses only the stored c and the boundary fluxes. Adding up the c the
+// hard sink zeroes (gpu/mesh-sensitivity's mdot, kept here as mdot_sink for
+// comparison) reads low and depends on the time integrator: with BDF2,
+// zeroing a gas node also zeroes its history, so the node holds only
+// 1/g0 = 2/3 of what flowed into it during the step.
+static double budget_inflow = 0.0;  // time integral of the net boundary inflow of c
+static double budget_C0 = 0.0;      // integral of c dV at the window start
+static double budget_t0 = 0.0;      // window start time
+static double budget_flux = 0.0;    // net boundary inflow rate at the last step
+static double sink_removed = 0.0;   // c zeroed by the hard sink in the window
+static double last_time = 0.0;
+// Gas centroid offset at the window start and the frame displacement
+// integral(U_frame dt) over the window, for the lab-frame bubble velocity.
+static dfloat window_e0[3] = {0, 0, 0};
+static double window_frame_shift[3] = {0, 0, 0};
+static double last_frame_velocity[3] = {0, 0, 0};
+// Species concentration of the inflowing liquid (the interface value is 0).
+static const dfloat c_inflow = 1.0;
+
+/**
+ * Net inflow rate of c through the open boundaries (IDs 1 and 2),
+ * -integral(c u.n dS) with n the outward normal.
+ */
+static dfloat speciesInflowRate(const occa::memory& o_c)
+{
+    mesh_t* mesh = nrs->meshV;
+    static deviceMemory<int> o_bIDs;
+    if (o_bIDs.size() == 0) {
+        const std::vector<int> ids = {1, 2};
+        o_bIDs.resize(ids.size());
+        o_bIDs.copyFrom(ids);
+    }
+    auto o_cu = platform->deviceMemoryPool.reserve<dfloat>(3*nrs->fieldOffset);
+    o_cu.copyFrom(nrs->fluid->o_solution(), 3*nrs->fieldOffset);
+    platform->linAlg->axmyMany(mesh->Nlocal, 3, nrs->fieldOffset, 0, 1.0, o_c, o_cu); // o_cu = c*u
+    return -mesh->surfaceAreaNormalMultiplyVectorIntegrate(nrs->fieldOffset, o_bIDs, o_cu);
+}
+
+void UDF_ExecuteStep(double time, int tstep)
+{
+    mesh_t* mesh = nrs->meshV;
+    scalar_t* scalar = nrs->scalar.get();
+    const occa::memory o_psi = scalar->o_solution("cls");
+    const occa::memory o_c = scalar->o_solution("c");
+    MPI_Comm comm = platform->comm.mpiComm();
+
+    lvlSet::solve(time);
+
+    if (stopAt > 0 && tstep % 20 == 0) {
+        int stop = platform->comm.mpiRank() == 0 && std::time(nullptr) >= stopAt;
+        MPI_Bcast(&stop, 1, MPI_INT, 0, comm);
+        double endTime = -1;
+        platform->options.getArgs("END TIME", endTime);
+        if (stop && time + dtStep < endTime) {
+            platform->options.setArgs("END TIME", to_string_f(time + dtStep));
+            if (platform->comm.mpiRank() == 0) {
+                printf("BUBBLE_STOP_AT reached: stopping at t = %.6f\n", time + dtStep);
+            }
+            stopAt = -1;
+        }
+    }
+
+    if (traceVelocity > 0) {
+        const occa::memory o_U = nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset);
+        auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(nrs->fieldOffset);
+        platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, o_U, o_umag);
+        if (platform->linAlg->max(mesh->Nlocal, o_umag, comm) > traceVelocity) {
+            double umax[5];
+            largestVelocity(umax);
+            if (platform->comm.mpiRank() == 0) {
+                printf("trace: step=%d t=%.7e u_max=%.4g at (%.5f, %.5f, %.5f) psi=%.4f\n",
+                        tstep, time, umax[0], umax[1], umax[2], umax[3], umax[4]);
+            }
+        }
+    }
+
+    // Far-field liquid (see farRadius).
+    {
+        double far[4];
+        farFieldPsiMin(far, false);
+        const double deficit = 1.0 - far[0];
+        if (traceFarField > 0 && tstep % 10 == 0 && deficit > traceFarField) {
+            farFieldPsiMin(far, true);
+            if (platform->comm.mpiRank() == 0) {
+                printf("trace: step=%d t=%.7e far-field psi_min=%.6g at (%.5f, %.5f, %.5f)\n",
+                        tstep, time, far[0], far[1], far[2], far[3]);
+            }
+        }
+        if (farFieldClean) {
+            farRemoved += farVolume - platform->linAlg->innerProd(mesh->Nlocal, o_psi, o_farJw, comm);
+            farDeficitMax = std::max(farDeficitMax, deficit);
+            setFarFieldLiquid(info, o_nearPenalty, o_psi);
+        } else {
+            farDeficitMax = std::max(farDeficitMax, deficit);
+        }
+        if (psiSnap > 0) {
+            auto o_removed = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+            snapLiquid(info, psiSnap, o_psi, o_removed);
+            snapRemoved += platform->linAlg->innerProd(mesh->Nlocal, o_removed, mesh->o_Jw, comm);
+        }
+    }
+
+    // Hard sink: remove the species that has reached the gas (psi < 0.5). At
+    // tstep 0 this only clears the smeared initial interface band (or nothing,
+    // on restart), which is not mass transfer (the budget starts after it).
+    {
+        auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        hardSink(info, o_c, o_psi, o_cSink);
+        const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
+        if (tstep > 0) {
+            sink_removed += removed;
+        }
+    }
+
+    // Update the PID bubble centering force from the (reinitialized) level set.
+    pidUpdate(time, tstep);
+
+    // Species budget (see above).
+    const dfloat C = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, comm);
+    const dfloat flux = speciesInflowRate(o_c);
+    if (tstep == 0) {
+        budget_C0 = C;
+        budget_t0 = time;
+        budget_inflow = 0.0;
+        sink_removed = 0.0;
+        for (int d = 0; d < 3; d++) {
+            window_e0[d] = pid.error[d];
+            window_frame_shift[d] = 0.0;
+        }
+    } else {
+        budget_inflow += 0.5*(budget_flux + flux)*(time - last_time);
+        for (int d = 0; d < 3; d++) {
+            window_frame_shift[d] += 0.5*(last_frame_velocity[d] + pid.frame_velocity[d])*(time - last_time);
+        }
+    }
+    budget_flux = flux;
+    last_time = time;
+    for (int d = 0; d < 3; d++) last_frame_velocity[d] = pid.frame_velocity[d];
+
+    // The last step (endTime or BUBBLE_STOP_AT) is sampled too, so the budget
+    // since the previous sample isn't lost and a restart from the last
+    // checkpoint finds the PID state in data.csv; sherwood.py weights each row
+    // by the length of its interval.
+    const bool regularSample = time > sampleCount*sampleInterval;
+    if (regularSample) {
+        sampleCount++;
+    }
+    if (tstep > 0 && (regularSample || nrs->lastStep)) {
+        const dfloat window = time - budget_t0;
+        // Interface transfer rate from the species budget, and what the hard
+        // sink counted.
+        const dfloat mdot = (budget_inflow - (C - budget_C0))/window;
+        const dfloat mdot_sink = sink_removed/window;
+        // Rise velocity: the lab-frame velocity of the level set centroid over
+        // the window, its displacement in the frame minus the frame's
+        // displacement (u_gas - U_frame would read ~2% low: u_gas misses the
+        // reinit shifts).
+        dfloat rise[3];
+        for (int d = 0; d < 3; d++) {
+            rise[d] = (pid.error[d] - window_e0[d] - window_frame_shift[d])/window;
+            window_e0[d] = pid.error[d];
+            window_frame_shift[d] = 0.0;
+        }
+        budget_C0 = C;
+        budget_t0 = time;
+        budget_inflow = 0.0;
+        sink_removed = 0.0;
+        const double far_deficit_max = farDeficitMax;
+        const double far_removed = farRemoved;
+        const double snap_removed = snapRemoved;
+        farDeficitMax = 0.0;
+        farRemoved = 0.0;
+        snapRemoved = 0.0;
+
+        // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
+        auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
+        const dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, comm) / info.liquid_volume;
+        const dfloat c_min = platform->linAlg->min(mesh->Nlocal, o_c, comm);
+        const dfloat c_max = platform->linAlg->max(mesh->Nlocal, o_c, comm);
+
+        // MTC and Sh, driven by the inflow concentration against c = 0 at the
+        // interface (hard sink).
+        const dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, comm);
+        const dfloat mtc = mdot / total_area / c_inflow;
+        const dfloat sherwood_no = mtc*Pe;
+        const dfloat sherwood_sink = mdot_sink / total_area / c_inflow * Pe;
+
+        // Health of the run: the far-field deficit and the largest velocity.
+        auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        platform->linAlg->magVector(mesh->Nlocal, nrs->fieldOffset, nrs->fluid->o_U.slice(0, 3*nrs->fieldOffset), o_umag);
+        const dfloat u_max = platform->linAlg->max(mesh->Nlocal, o_umag, comm);
+
+        if (platform->comm.mpiRank() == 0) {
+            printf("----------------------------------------\n");
+            printf("Interphase species transport statistics:\n");
+            printf("mdot=%.4g MTC=%.4g Sh=%.4g (hard sink count: Sh=%.4g)\n", mdot, mtc, sherwood_no, sherwood_sink);
+            printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f] gas_volume=%.6g rise=(%.4g, %.4g, %.4g)\n",
+                    total_area, c_bulk, c_min, c_max, pid.gas_volume, rise[0], rise[1], rise[2]);
+            printf("----------------------------------------\n");
+
+            // Write CSV file
+            const std::string filename = "data.csv";
+            std::ifstream check_file(filename);
+            bool newly_created = !check_file.good();
+            check_file.close();
+            std::ofstream f(filename, std::ios_base::app);
+            if (newly_created) {
+                f << "Time,tstep,mdot,MTC,Sh,mdot_sink,Sh_sink,total_area,c_bulk,c_min,c_max,gas_volume,far_deficit_max,far_removed,snap_removed,u_max,"
+                        << "bubble_dx,bubble_dy,bubble_dz,rise_u,rise_v,rise_w,"
+                        << "u_gas_x,u_gas_y,u_gas_z,u_liq_x,u_liq_y,u_liq_z,F_pid_x,F_pid_y,F_pid_z,"
+                        << "pid_int_x,pid_int_y,pid_int_z,frame_u,frame_v,frame_w" << std::endl;
+            }
+            // %.6f = fixed, precision 6; %.6g = defaultfloat, precision 6
+            f << std::fixed << std::setprecision(6) << time << ",";
+            f << tstep << ",";
+            f << std::defaultfloat << std::setprecision(6) << mdot << "," << mtc << "," << sherwood_no << ","
+                    << mdot_sink << "," << sherwood_sink << "," << total_area << ","
+                    << c_bulk << "," << c_min << "," << c_max << "," << pid.gas_volume << "," << far_deficit_max << "," << far_removed << "," << snap_removed << "," << u_max;
+            // PID bubble centering: gas centroid offset from the setpoint, bubble
+            // rise velocity (lab frame, see above), gas and liquid mean velocities
+            // (in the frame), the PID force per unit mass applied in the next
+            // step, and the controller state (integral and frame velocity, with
+            // more digits as they are read back on restart).
+            for (int d = 0; d < 3; d++) f << "," << pid.error[d];
+            for (int d = 0; d < 3; d++) f << "," << rise[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.u_gas[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.u_liquid[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.force[d];
+            f << std::setprecision(10);
+            for (int d = 0; d < 3; d++) f << "," << pid.integral[d];
+            for (int d = 0; d < 3; d++) f << "," << pid.frame_velocity[d];
+            f << std::endl;
+            f.close();
+        } // if (platform->comm.mpiRank() == 0)
+    } // if (tstep > 0 && (regularSample || nrs->lastStep))
+}

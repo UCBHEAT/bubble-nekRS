@@ -1,0 +1,110 @@
+userSections = tlsr, clsr, lvlset, pid, casedata
+
+[GENERAL]
+# Uncomment to resume from a checkpoint.
+#startFrom = restart.fld
+
+# Kolmogorov scale = 0.0671 mm. The mesh (setup-runs.sh, ../pid-centering-3D/
+# generate_mesh.py) sets the resolution.
+polynomialOrder = 7
+
+stopAt = endTime
+endTime = 30
+# Same dt as gpu/mesh-sensitivity on the same finest element size:
+# 1e-4 for 2.25x, 1.5x and 1x, then halved per level (setup-runs.sh sets it).
+dt = 1e-4
+timeStepper = tombo2
+checkpointControl = simulationTime
+checkpointInterval = 1.0
+
+scalars = tls, cls, c
+
+[PROBLEMTYPE]
+equation = navierStokes+variableViscosity
+
+[FLUID VELOCITY]
+# Boundary IDs (gmsh physical groups, see ../pid-centering-3D/
+# generate_mesh.py): 1 = top (inflow), 2 = bottom (outflow); x and z are
+# periodic. Both impose the PID frame velocity (see udfDirichlet).
+boundaryTypeMap = udfDirichlet, udfDirichlet
+regularization = svv+scalingCoeff=1.0+filterPower=4.0
+residualTol = 1e-8
+
+[FLUID PRESSURE]
+residualTol = 1e-4
+
+[SCALAR TLS]
+# TLS (traditional level set), domain: (-infty, infty)
+boundaryTypeMap = zeroNeumann, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR CLS]
+# CLS (conservative level set), domain: [0, 1]; psi = 1 (liquid) at the inflow
+boundaryTypeMap = udfDirichlet, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+[SCALAR C]
+# Species concentration (passive, CST off; hard sink in the gas); saturated
+# c = 1 liquid at the inflow
+boundaryTypeMap = udfDirichlet, zeroNeumann
+transportCoeff = 1.0
+diffusionCoeff = 1e-10
+residualTol = 1e-8
+regularization = svv+scalingCoeff=1.0+filterPower=2.0
+
+# TLSR and CLSR run at the same simulation-time intervals as in
+# gpu/mesh-sensitivity (every 100 and 10 steps at dt = 1e-4), with the level
+# set defaults otherwise, except maximumSteps. The default pseudo-step count
+# is proportional to the largest/smallest element size, 200/80 steps on a
+# uniform mesh; on these graded meshes it would hit the default caps of
+# 1000/500. maximumSteps keeps the uniform-mesh counts, so reinitialization
+# covers the same distance, in units of the finest element, as in
+# gpu/mesh-sensitivity, which is all the interface band needs.
+# boundaryTypeMap is inherited from SCALAR TLS and SCALAR CLS.
+[TLSR]
+solveFrequency = 0.01
+residualTol = 1e-8
+maximumSteps = 200
+
+[CLSR]
+solveFrequency = 0.001
+residualTol = 1e-8
+maximumSteps = 80
+
+[LVLSET]
+# eps = 1.5*h/N for the finest (interface) elements, as interfaceWidthFactor
+# = 1.5 gives on gpu/mesh-sensitivity's uniform meshes; setup-runs.sh sets it
+# (by default lvlSet would take h from the largest element of the graded
+# mesh). This value is for the 1x mesh (h = 4/27).
+interfaceWidthValue = 0.031746
+
+[PID]
+# Bubble centering controller (see ../common/pid.hpp): a uniform acceleration
+# F_pid = -(kp*e + ki*integral(e dt) + kd*u_gas) is applied to the whole domain,
+# where e is the gas centroid offset from the setpoint (x0, y0, z0) and u_gas is
+# the gas-phase mean velocity (used as de/dt). The characteristic polynomial
+# s^3 + kd s^2 + kp s + ki of the closed loop is (s + 2)^3 for the gains below:
+# an offset decays like e^(-2t), with a time constant of 0.5, without
+# oscillating (see ../pid-centering-3D/bubble.par).
+kp = 12
+ki = 8
+kd = 6
+# Setpoint: the initial bubble position (the default is the mesh centroid).
+x0 = 0
+y0 = 0
+z0 = 0
+
+[CASEDATA]
+# data.csv sampling interval, independent of checkpoints.
+sampleInterval = 0.1
+# Set psi = 1 wherever 1 - psi < 1e-6 after every level set step (see
+# bubble.udf and the README). Beyond ~5 finest elements from the interface
+# the TLS is not a distance function, and CLSR slowly amplifies the ~1e-7
+# solver noise in the liquid there into spurious gas.
+psiSnap = 1e-6

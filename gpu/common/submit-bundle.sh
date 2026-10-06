@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Submit several run directories of this study as one Polaris PBS job, each
-# case on its own set of nodes, e.g. from the directory holding the runs:
-#   PROJ_ID=nek-vf QUEUE=prod ./submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
+# Submit several run directories of a mesh study (gpu/mesh-sensitivity,
+# gpu/pid-mesh-sensitivity) as one Polaris PBS job, each case on its own set
+# of nodes, e.g. from the directory holding the runs:
+#   PROJ_ID=nek-vf QUEUE=prod <gpu/common>/submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
 # The prod queue needs at least 10 nodes, which is far more than any single
-# case of this study needs, so all meshes share one job.
+# case of these studies needs, so all meshes share one job. The case name is
+# that of the run directory's .par file (bubble3d.par: bubble3d).
 #
 # The job environment follows $NEKRS_HOME/bin/nrsqsub_polaris. The batch
 # script is written to bundle.batch, the PBS log to nekRS_bundle.e<jobid>,
 # and each case's nekRS output to <dir>/logfile-<jobid>. Each case stops
 # with a checkpoint 5 minutes before the walltime runs out (BUBBLE_STOP_AT,
-# see bubble3d.udf), so prepare-restart.sh continues from where it stopped.
+# see the case's .udf), so prepare-restart.sh continues from where it stopped.
 # Nodes that fail a CUDA context check (gpucheck.cu) at the start of the job
 # are left out, and the case with the most nodes runs on that many fewer.
 #
@@ -33,7 +35,6 @@ if [ $# -lt 2 ]; then
     exit 1
 fi
 
-casename=bubble3d
 time=$1
 shift
 IFS=: read -r hh mm <<< "$time"
@@ -43,29 +44,39 @@ gpu_per_node=4
 cores_per_numa=8
 
 dirs=()
+cases=()
 nodes=()
 total_nodes=0
 for spec in "$@"; do
     dir=$(cd "${spec%:*}" && pwd)
     n=${spec##*:}
-    for f in $casename.par $casename.udf $casename.re2; do
+    pars=("$dir"/*.par)
+    if [ ${#pars[@]} -ne 1 ] || [ ! -f "${pars[0]}" ]; then
+        echo "$dir must hold exactly one .par file"
+        exit 1
+    fi
+    casename=$(basename "${pars[0]}" .par)
+    for f in $casename.udf $casename.re2; do
         if [ ! -f "$dir/$f" ]; then
             echo "Cannot find $dir/$f"
             exit 1
         fi
     done
     dirs+=("$dir")
+    cases+=("$casename")
     nodes+=("$n")
     total_nodes=$((total_nodes + n))
 
-    # Same GPU binding helper as nrsqsub_polaris.
-    cat > "$dir/.lhelper" <<EOF
+    # Same GPU binding helper as nrsqsub_polaris. Written to a new file and
+    # renamed, as a running job of the same case may be executing it.
+    cat > "$dir/.lhelper.new" <<EOF
 #!/bin/bash
 gpu_id=\$(($gpu_per_node - 1 - \${PMI_LOCAL_RANK} % $gpu_per_node))
 export CUDA_VISIBLE_DEVICES=\$gpu_id
 \$*
 EOF
-    chmod 755 "$dir/.lhelper"
+    chmod 755 "$dir/.lhelper.new"
+    mv -f "$dir/.lhelper.new" "$dir/.lhelper"
 done
 
 striping_factor=$((total_nodes / 2))
@@ -121,13 +132,13 @@ export MPICH_GPU_SUPPORT_ENABLED=1
 export MPICH_OFI_NIC_POLICY=NUMA
 export MPIR_CVAR_CH4_OFI_ENABLE_RMA=0
 
-casename=$casename
 prepare_restart=$PREPARE_RESTART
 scripts=$(cd "$(dirname "$0")" && pwd)
 gpu_per_node=$gpu_per_node
 cores_per_numa=$cores_per_numa
 jitc_nthreads=$NEKRS_JITC_NTHREADS
 dirs=(${dirs[*]})
+cases=(${cases[*]})
 nodes=(${nodes[*]})
 EOF
 cat >> $SFILE <<'EOF'
@@ -160,9 +171,9 @@ if [ $missing -gt 0 ]; then
 fi
 
 if [ $prepare_restart = 1 ]; then
-    run_dirs=() run_nodes=()
+    run_dirs=() run_cases=() run_nodes=()
     for k in "${!dirs[@]}"; do
-        d=${dirs[k]}
+        d=${dirs[k]} casename=${cases[k]}
         end=$(awk -F= '/^endTime/ {print $2+0}' $d/$casename.par)
         last=$(tail -1 $d/data.csv 2>/dev/null | cut -d, -f1)
         if [ -n "$last" ] && awk -v a="$last" -v b="$end" 'BEGIN {exit !(a >= b - 1e-3)}'; then
@@ -172,18 +183,18 @@ if [ $prepare_restart = 1 ]; then
         if compgen -G "$d/${casename}0.f[0-9]*" > /dev/null && [ ! -L "$(ls $d/${casename}0.f[0-9]* | head -n 1)" ]; then
             $scripts/prepare-restart.sh $d || exit 1
         fi
-        run_dirs+=("$d") run_nodes+=("${nodes[k]}")
+        run_dirs+=("$d") run_cases+=("$casename") run_nodes+=("${nodes[k]}")
     done
     if [ ${#run_dirs[@]} -eq 0 ]; then
         echo "$(date) nothing left to run"
         exit 0
     fi
-    dirs=("${run_dirs[@]}") nodes=("${run_nodes[@]}")
+    dirs=("${run_dirs[@]}") cases=("${run_cases[@]}") nodes=("${run_nodes[@]}")
 fi
 
-# run_case <dir> <index of first node> <number of nodes>
+# run_case <dir> <case name> <index of first node> <number of nodes>
 run_case() {
-    local dir=$1 first=$2 n=$3
+    local dir=$1 casename=$2 first=$3 n=$4
     local ntasks=$((n * gpu_per_node))
     cd $dir
     printf "%s\n" "${hosts[@]:first:n}" > nodes-$jobid
@@ -208,7 +219,7 @@ run_case() {
 
 first=0
 for k in "${!dirs[@]}"; do
-    run_case ${dirs[k]} $first ${nodes[k]} &
+    run_case ${dirs[k]} ${cases[k]} $first ${nodes[k]} &
     first=$((first + nodes[k]))
 done
 wait
@@ -222,7 +233,8 @@ done
 exit $failed
 EOF
 
-nvcc -O2 -o .gpucheck "$(dirname "$0")/gpucheck.cu"
+nvcc -O2 -o .gpucheck.new "$(dirname "$0")/gpucheck.cu"
+mv -f .gpucheck.new .gpucheck
 if [ -n "$DEPEND" ]; then
     qsub -q $QUEUE -W depend=afterok:$DEPEND $SFILE
 else

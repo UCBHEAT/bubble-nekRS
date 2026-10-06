@@ -83,12 +83,15 @@ SC=4 GENBOX=~/answinter26/tools/genbox-maxnel1.5M ./setup-runs.sh ~/answinter26/
     1x:27:1e-4:0.1 0.667x:40:5e-5:0.5 0.444x:60:2.5e-5:0.5
 ```
 
-The first three meshes are small compared to the 10-node minimum of the prod
-queue, so they ran concurrently in one job, each on its own nodes:
+The job scripts (submit-bundle.sh, prepare-restart.sh, finish-runs.sh and
+gpucheck.cu) are shared with gpu/pid-mesh-sensitivity in gpu/common, written
+as `<common>/` below. The first three meshes are small compared to the
+10-node minimum of the prod queue, so they ran concurrently in one job, each
+on its own nodes:
 
 ```
 cd ~/answinter26/Sc1
-PROJ_ID=nek-vf QUEUE=prod <this dir>/submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
+PROJ_ID=nek-vf QUEUE=prod <common>/submit-bundle.sh 03:00 1x:7 1.5x:2 2.25x:1
 ```
 
 submit-bundle.sh exports BUBBLE_STOP_AT, 5 minutes before the walltime runs
@@ -97,8 +100,8 @@ checkpoint. If a job ends before endTime = 30, prepare the unfinished runs for
 a restart and resubmit them:
 
 ```
-<this dir>/prepare-restart.sh 1x
-PROJ_ID=nek-vf QUEUE=prod <this dir>/submit-bundle.sh 03:00 1x:10
+<common>/prepare-restart.sh 1x
+PROJ_ID=nek-vf QUEUE=prod <common>/submit-bundle.sh 03:00 1x:10
 ```
 
 prepare-restart.sh moves the finished part's field files and logs to part<N>/
@@ -112,8 +115,8 @@ skips those that have reached endTime), and DEPEND=<jobid> holds a job until
 the previous one ends successfully, e.g.
 
 ```
-A=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 <this dir>/submit-bundle.sh 03:50 0.444x:25)
-B=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 DEPEND=$A <this dir>/submit-bundle.sh 03:50 0.444x:25)
+A=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 <common>/submit-bundle.sh 03:50 0.444x:25)
+B=$(PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 DEPEND=$A <common>/submit-bundle.sh 03:50 0.444x:25)
 ```
 
 A job whose case fails exits non-zero, so the rest of the chain is not run.

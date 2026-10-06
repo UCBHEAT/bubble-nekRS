@@ -34,6 +34,8 @@ gmsh2nek error or periodic mismatch.
 - `PYTHON` must have gmsh and numpy (tested with gmsh 4.15).
 - `GMSH2NEK` defaults to `gmsh2nek` on `PATH`; build it with
   `cd Nek5000/tools && ./maketools gmsh2nek`.
+- `MESH_DIR` writes the outputs to another directory instead of this one
+  (`gpu/pid-mesh-sensitivity/setup-runs.sh` uses it for its run directories).
 - A run takes 5-8 s for the Cartesian presets and ~40 s for the O-grid ones
   (layout search), with a peak memory of 0.3 GB or less.
 - Safety limits: `generate_mesh.py` refuses layouts above `max_elements`
