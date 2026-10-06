@@ -1,6 +1,3 @@
-// [CASEDATA] scalarSVV = false skips scalar->mueSVV() below (for tests).
-static bool scalarSVV = true;
-
 void customProperties(double t)
 {
     mesh_t* mesh = nrs->meshV;
@@ -25,9 +22,7 @@ void customProperties(double t)
     // unset (nrs_t::evaluateProperties), so compute it here or the [SCALAR *]
     // svv regularization has no effect (gpu/mesh-sensitivity does not, so its
     // scalars ran without SVV).
-    if (scalarSVV) {
-        scalar->mueSVV();
-    }
+    scalar->mueSVV();
 }
 
 void customSource(double t)

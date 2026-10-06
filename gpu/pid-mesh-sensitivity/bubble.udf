@@ -82,11 +82,10 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
     platform->par->extract("casedata", "tracefarfield", traceFarField);
     platform->par->extract("casedata", "farfieldclean", farFieldClean);
     platform->par->extract("casedata", "psisnap", psiSnap);
-    platform->par->extract("casedata", "scalarsvv", scalarSVV);
     if (platform->comm.mpiRank() == 0) {
-        printf("rho splitting filter %s, pressure ext order %s, scalar SVV %d, far-field clean %d, "
+        printf("rho splitting filter %s, pressure ext order %s, far-field clean %d, "
                 "traceVelocity %g, traceFarField %g\n", upperCase(filter).c_str(),
-                extOrder.empty() ? "default" : extOrder.c_str(), int(scalarSVV), int(farFieldClean),
+                extOrder.empty() ? "default" : extOrder.c_str(), int(farFieldClean),
                 traceVelocity, traceFarField);
     }
 }
