@@ -17,7 +17,8 @@
 # breaks up).
 # The interface width is eps = 1.5 h/N (N = 7), as interfaceWidthFactor = 1.5
 # gives on the uniform meshes.
-# SC sets the Schmidt number in each run's case.hpp (default 1).
+# SC sets the Schmidt number in each run's case.hpp (default 1), END_TIME the
+# endTime in bubble.par (default 30).
 #
 # Resolutions are multiples of the Kolmogorov scale lambda_k = 0.0671 mm
 # (lambda_k/d = 0.021536), using the mean unique GLL spacing h/N of the finest
@@ -27,11 +28,12 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    echo "Usage: [SC=1] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval ...]"
+    echo "Usage: [SC=1] [END_TIME=30] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval ...]"
     exit 1
 fi
 
 : ${SC:=1}
+: ${END_TIME:=30}
 src=$(cd "$(dirname "$0")" && pwd)
 dest=$1
 shift
@@ -68,9 +70,10 @@ for spec in "${specs[@]}"; do
     sed -e "s/^static double Sc = .*/static double Sc = $SC;/" -e "s/(Sc=[0-9.]*)/(Sc=$SC)/" \
         "$src/case.hpp" > "$dir/case.hpp"
     sed -e "s/^dt = .*/dt = $dt/" -e "s/^checkpointInterval = .*/checkpointInterval = $ckpt/" \
+        -e "s/^endTime = .*/endTime = $END_TIME/" \
         -e "s/^interfaceWidthValue = .*/interfaceWidthValue = $eps/" \
         -e "s|This value is for the 1x mesh (h = 4/27).|This value is for the $name mesh (h = 4/$nk).|" \
         "$src/bubble.par" > "$dir/bubble.par"
     nel=$("${PYTHON:-python3}" -c "import json, sys; print(json.load(open(sys.argv[1]))['n_elements'])" "$dir/bubble.plan.json")
-    echo "$dir: h = 4/$nk, $nel elements, eps = $eps, dt = $dt, checkpointInterval = $ckpt, Sc = $SC"
+    echo "$dir: h = 4/$nk, $nel elements, eps = $eps, dt = $dt, checkpointInterval = $ckpt, Sc = $SC, endTime = $END_TIME"
 done
