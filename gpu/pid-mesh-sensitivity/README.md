@@ -254,13 +254,15 @@ production: 0.048, 0.074, 0.096 and 0.070 s per step from 2.25x to 0.667x).
 
 `submit-animate-frontier.sh` is the Slurm counterpart of submit-animate.sh
 (post.csv and animation.mp4, see Output), with ParaView 5.13.1 (OSMesa) from
-the Frontier software stack, numpy for its Python (`pip install --target
-~/answinter26/tools/pv-site 'numpy<2'` with cray-python/3.11.7) and a static
-ffmpeg build:
+the Frontier software stack. Its Python has no numpy, so PV_SITE names a
+directory with one (`pip install --target ~/answinter26/tools/pv-site
+'numpy<2'` with cray-python/3.11.7), and Frontier has no ffmpeg, so FFMPEG
+names a static build:
 
 ```
 cd ~/answinter26/Sc4-pid-prod
-PROJ_ID=fus167 <dir>/submit-animate-frontier.sh 01:00 \
+PROJ_ID=fus167 FFMPEG=~/answinter26/tools/ffmpeg PV_SITE=~/answinter26/tools/pv-site \
+    <dir>/submit-animate-frontier.sh 01:00 \
     "2.25x:2:Sc = 4, 2.25x Kolmogorov (3887 elements)" ... \
     "0.296x:4:Sc = 4, 0.296x Kolmogorov (441864 elements)"
 ```

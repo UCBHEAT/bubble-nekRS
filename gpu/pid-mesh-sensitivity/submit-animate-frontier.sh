@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Frontier counterpart of submit-animate.sh: postprocess and animate finished
 # runs, each on its own CPU node, e.g. from the directory holding them:
-#   PROJ_ID=fus167 ./submit-animate-frontier.sh 01:00 \
+#   PROJ_ID=fus167 FFMPEG=<ffmpeg> PV_SITE=<dir> ./submit-animate-frontier.sh 01:00 \
 #       "1x:2:Sc = 4, 1x Kolmogorov (23805 elements)" \
 #       "0.296x:3:Sc = 4, 0.296x Kolmogorov (441864 elements)" ...
 # As there, each <run dir>:<chunks>:<label> splits the run's checkpoints
@@ -16,18 +16,20 @@
 #   PARTITION, QOS  as for ../common/submit-bundle-frontier.sh
 #   PARAVIEW_BIN    ParaView's bin directory (default: ParaView 5.13.1 with
 #                   OSMesa from the Frontier software stack)
-#   FFMPEG          ffmpeg executable (default: answinter26/tools/ffmpeg)
+#   FFMPEG          ffmpeg executable with libx264 (default: ffmpeg from PATH;
+#                   Frontier has none, so set it to a static build)
 #   PV_SITE         directory with numpy for ParaView's Python 3.11, which has
 #                   none (pip install --target <dir> 'numpy<2' with
-#                   cray-python/3.11.7; default: answinter26/tools/pv-site)
+#                   cray-python/3.11.7); required
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
 : ${PARTITION:=batch}
 : ${QOS:=}
 : ${PARAVIEW_BIN:=/sw/frontier/spack-envs/cpe24.11-cpu/opt/gcc-13.2/paraview-5.13.1-5tu7m74h2ny7rd24x5utrgqkseltz32r/bin}
-: ${FFMPEG:=/lustre/orion/fus167/scratch/benl/answinter26/tools/ffmpeg}
-: ${PV_SITE:=/lustre/orion/fus167/scratch/benl/answinter26/tools/pv-site}
+# Frontier has no ffmpeg: set FFMPEG to a static build with libx264.
+: ${FFMPEG:=ffmpeg}
+: ${PV_SITE:?PV_SITE must be set: a directory with numpy for the ParaView Python}
 
 if [ $# -lt 2 ]; then
     echo "Usage: PROJ_ID=<project> $0 <hh:mm> <run dir>:<chunks>:<label> ..."
@@ -37,7 +39,7 @@ time=$1
 shift
 script=$(cd "$(dirname "$0")" && pwd -P)/animate.py
 [ -x "$PARAVIEW_BIN/pvbatch" ] || { echo "Cannot find $PARAVIEW_BIN/pvbatch"; exit 1; }
-[ -x "$FFMPEG" ] || { echo "Cannot find $FFMPEG"; exit 1; }
+command -v "$FFMPEG" > /dev/null || { echo "Cannot find $FFMPEG"; exit 1; }
 [ -d "$PV_SITE/numpy" ] || { echo "Cannot find numpy in $PV_SITE"; exit 1; }
 
 SFILE=animate.sbatch
