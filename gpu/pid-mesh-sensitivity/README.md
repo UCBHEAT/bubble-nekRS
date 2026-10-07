@@ -451,7 +451,9 @@ nekRS from the nodes' NVMe). They restarted from their last checkpoints
 before the outage (t = 13 and 9) in a 12 h extended job and 2 h batch jobs
 and finished on October 4. The study used about 2,740 node-hours of fus167:
 about 300 in the extended job the outage left idle, and 106 in the bringup
-and tests. The run directories keep the same files as for Sc = 1.
+and tests. The run directories keep every job's checkpoints (`part<N>/`,
+330 GB in all), linked in time order by `finish-runs.sh`, as the Sc = 1 runs
+did before their animations.
 
 ### Sherwood number
 
