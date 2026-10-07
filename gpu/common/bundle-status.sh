@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Progress of the cases of submit-bundle-frontier.sh jobs (Slurm), e.g. from
-# the directory holding the runs:
+# Progress of the cases of submit-bundle.sh (PBS, Polaris) or
+# submit-bundle-frontier.sh (Slurm, Frontier) jobs, e.g. from the directory
+# holding the runs:
 #   <gpu/common>/bundle-status.sh . 5580267 5580268
 # prints each job's state and, for every run directory with a log from one of
-# them (<dir>/logfile-<jobid>), its last step, time and CFL, the seconds per
-# step over its last 1000 steps, its last Sh and any error lines.
+# them (<dir>/logfile-<jobid>, which both scripts write), its last step, time
+# and CFL, the seconds per step over its last 1000 steps, its last Sh and any
+# error lines. Job states come from squeue/sacct, or from qstat -x where there
+# is no Slurm, in Slurm's words.
 #
 # With --wait <seconds> (first argument) it first blocks until one of the jobs
 # changes state, a case log shows a new error or exit status line, or the
@@ -24,12 +27,28 @@ fi
 study=$1
 shift
 jobs=("$@")
-errpat='ERROR|Abort|exit status|Segmentation fault|hipError|out of memory|srun: error|Unreasonable|[^a-z]nan[^a-z]|NaN'
+errpat='ERROR|Abort|exit status|Segmentation fault|hipError|cudaError|out of memory|srun: error|Unreasonable|[^a-z]nan[^a-z]|NaN'
 
 jobstate() {
-    local s
-    s=$(squeue -h -j "$1" -o %T 2>/dev/null || true)
-    [ -n "$s" ] || s=$(sacct -X -n -j "$1" -o State%20 2>/dev/null | head -1 | awk '{print $1}')
+    local s=""
+    if command -v squeue > /dev/null; then
+        s=$(squeue -h -j "$1" -o %T 2>/dev/null || true)
+        [ -n "$s" ] || s=$(sacct -X -n -j "$1" -o State%20 2>/dev/null | head -1 | awk '{print $1}')
+    elif command -v qstat > /dev/null; then
+        # PBS: queued (Q, or W waiting for its start time), held, running,
+        # exiting, or finished with an exit status (qstat -x keeps finished jobs).
+        s=$(qstat -x -f "$1" 2>/dev/null | awk '
+            $1 == "job_state" {s = $3}
+            $1 == "Exit_status" {e = $3}
+            END {
+                if (s == "Q" || s == "W") print "PENDING"
+                else if (s == "H") print "HELD"
+                else if (s == "R" || s == "B") print "RUNNING"
+                else if (s == "E") print "EXITING"
+                else if (s == "F" || s == "X") print (e == "0" ? "COMPLETED" : "FAILED(" e ")")
+                else print s
+            }' || true)
+    fi
     echo "${s:-UNKNOWN}"
 }
 nerrors() {
