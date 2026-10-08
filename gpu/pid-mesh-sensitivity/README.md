@@ -551,3 +551,74 @@ SC=20 END_TIME=15 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/
 0.296x and 0.444x in a 24 h extended job on 56 and 8 nodes, with chains of
 2 h batch jobs on the same node counts queued for them, and the four coarser
 runs in a chain of 2 h batch jobs on 8 nodes.
+
+### Runs
+
+All six runs reached t = 15 (answinter26/Sc20-pid-prod on Orion), between
+October 5 and 8, mostly waiting in Frontier's queue. After the first 2 h jobs,
+a backlog from projects ahead of fus167 (association priority 502 against
+500, worth about 3 days of queue age) held each later job for 10-32 h, until
+the 24 h extended job ran 0.444x and 0.296x from t = 6.3 and 5.3 to the end in
+10.5 h. Their batch chains were held while it was due, since a batch job
+running one of them when it started would have made it skip that run. One
+precompilation segfaulted in OCCA, which cost 0.667x one 2 h job (a race
+between the kernel-compile threads; submit-bundle-frontier.sh now retries a
+failed precompilation). The study used 1,094 node-hours of fus167. The run
+directories keep every job's checkpoints (`part<N>/`), linked in time order
+by `finish-runs.sh`.
+
+### Sherwood number
+
+Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
+`sherwood.py`; settled as for Sc = 1:
+
+| Run    | t = 5-10      | t = 10-15     | Sh_sink, t = 10-15 | settled |
+|--------|---------------|---------------|--------------------|---------|
+| 2.25x  | 73.36 ± 0.95  | 63.64 ± 1.39  | 40.97              | -       |
+| 1.5x   | 89.52 ± 0.44  | 90.10 ± 0.62  | 65.22              | -       |
+| 1x     | 101.35 ± 0.27 | 100.42 ± 0.22 | 70.35              | -       |
+| 0.667x | 98.14 ± 0.98  | 99.82 ± 0.13  | 68.24              | 9       |
+| 0.444x | 85.59 ± 0.51  | 86.80 ± 0.08  | 58.65              | 9       |
+| 0.296x | 77.76 ± 0.19  | 78.21 ± 0.03  | 52.51              | 7       |
+
+Unlike at Sc = 1 and 4, Sh has not converged on the finest mesh. It rises up
+to 1x and 0.667x (100.4 and 99.8) and then falls by 13% on 0.444x and by a
+further 10% on 0.296x: the GCI between 0.444x and 0.296x is 11% (p = 2,
+F_s = 1.25; observed orders 7.1, 7.4 and 1.0, so none of the triplets is in
+the asymptotic range). The concentration boundary layer, about Pe^-1/2 =
+0.015 D thick, spans only 2.3 GLL spacings on 0.296x and less than one on 1x
+and coarser, where the scheme overestimates the transfer. Bounding Sh would
+take a finer mesh, e.g. 0.198x (Nk = 135, about 1.5M elements). The figures
+and the GCI table are made by 2026-11-nek-cst/data/mesh_sensitivity_sc20_pid.py
+in UCBHEAT/papers. On the finest meshes Sh is steady from t = 7-9: its
+t = 5-10 and 10-15 averages differ by 0.6% on 0.296x and 1.4-1.7% on 0.444x
+and 0.667x. At the Reynolds number of the simulated rise (Re = 264, from the
+0.296x rise speed and d_eq over t = 10-15), the 0.296x value is 0.7% above
+Feng and Michaelides (2001, 77.7) and 4.6% below potential flow (82.0).
+
+### Against Sc = 4 and Sc = 1
+
+c is passive, so each run's bubble moves as in the Sc = 4 run on the same
+mesh: over t = 10-15 their mean rise speeds agree within 0.04% and their gas
+volumes within 1.2e-5. The ratio of the studies' Sh on each mesh (t = 10-15,
+printed by mesh_sensitivity_sc20_pid.py) gives the apparent exponent n of
+Sh ~ Sc^n:
+
+| Run    | Sh, Sc = 4 | Sh, Sc = 20 | n, Sc = 4-20 | n, Sc = 1-20 |
+|--------|------------|-------------|--------------|--------------|
+| 1.5x   | 28.24      | 90.09       | 0.721        | 0.615        |
+| 1x     | 31.89      | 100.43      | 0.713        | 0.615        |
+| 0.667x | 33.69      | 99.84       | 0.675        | 0.592        |
+| 0.444x | 33.26      | 86.80       | 0.596        | 0.540        |
+| 0.296x | 33.15      | 78.21       | 0.533        | -            |
+
+Between Sc = 1 and 4 the exponent is 0.48-0.50 on every mesh; between 4 and
+20 it falls with refinement towards it, from 0.72 on 1.5x to 0.53 on 0.296x,
+so the excess on the coarser meshes is numerical.
+
+### Concentration field
+
+c over t = 10-15 lies in [-0.18, 1.15] on 2.25x, [-0.04, 1.30] on 1x (the
+largest overshoot) and [-0.06, 1.08] on 0.296x. The far-field deficit stays
+below 1.1e-6, and no bubble drifts sideways (`path.py`: lateral path below
+0.001 D).
