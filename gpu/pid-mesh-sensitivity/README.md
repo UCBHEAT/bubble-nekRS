@@ -621,4 +621,6 @@ so the excess on the coarser meshes is numerical.
 c over t = 10-15 lies in [-0.18, 1.15] on 2.25x, [-0.04, 1.30] on 1x (the
 largest overshoot) and [-0.06, 1.08] on 0.296x. The far-field deficit stays
 below 1.1e-6, and no bubble drifts sideways (`path.py`: lateral path below
-0.001 D).
+0.001 D). Each run directory also has post.csv and animation.mp4
+(`submit-animate-frontier.sh`, labelled "Sc = 20, ..."), whose charts span
+Sh up to 120 and MTC up to 0.03 and end at t = 15.
