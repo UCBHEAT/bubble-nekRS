@@ -221,6 +221,21 @@ void UDF_Setup()
         sampleCount = startTime/sampleInterval + 1;
     }
 
+    // [CASEDATA] speciesStart: a run restarted from t = speciesStart starts c
+    // afresh there, as at t = 0 (c = psi from the restart's level set), so
+    // another Schmidt number or a finer mesh (startFrom = <file>+int) can
+    // start from a developed flow (setup-runs.sh FROM). Later restarts read c
+    // from their checkpoints as usual.
+    double speciesStart = -1.0;
+    platform->par->extract("casedata", "speciesstart", speciesStart);
+    if (speciesStart >= 0 && !platform->options.getArgs("RESTART FILE NAME").empty() &&
+        std::abs(startTime - speciesStart) < 0.5*dtStep) {
+        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
+        if (platform->comm.mpiRank() == 0) {
+            printf("speciesStart: c starts afresh (c = psi) at t = %g\n", startTime);
+        }
+    }
+
     if (const char* s = getenv("BUBBLE_STOP_AT")) {
         stopAt = atof(s);
     }
