@@ -18,7 +18,9 @@
 # The interface width is eps = 1.5 h/N (N = 7), as interfaceWidthFactor = 1.5
 # gives on the uniform meshes.
 # SC sets the Schmidt number in each run's case.hpp (default 1), END_TIME the
-# endTime in bubble.par (default 30).
+# endTime in bubble.par (default 30). MAX_ELEMENTS (default 1000000) and
+# MAX_MEMORY_GB (default 8) are generate_mesh.py's caps on the element count
+# and its memory; 0.198x (1.37M elements) needs both raised.
 #
 # Resolutions are multiples of the Kolmogorov scale lambda_k = 0.0671 mm
 # (lambda_k/d = 0.021536), using the mean unique GLL spacing h/N of the finest
@@ -28,12 +30,14 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    echo "Usage: [SC=1] [END_TIME=30] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval ...]"
+    echo "Usage: [SC=1] [END_TIME=30] [MAX_ELEMENTS=1000000] [MAX_MEMORY_GB=8] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval ...]"
     exit 1
 fi
 
 : ${SC:=1}
 : ${END_TIME:=30}
+: ${MAX_ELEMENTS:=1000000}
+: ${MAX_MEMORY_GB:=8}
 src=$(cd "$(dirname "$0")" && pwd)
 dest=$1
 shift
@@ -63,7 +67,7 @@ for spec in "${specs[@]}"; do
         printf "%.17g %.17g %.17g %.17g %.17g %.8g %.17g\n", h, 0.3*s, 0.25*s, 0.5*s, 1.25*s, 1.5*h/7, n*h/2 }')"
     MESH_DIR=$dir "$src/../pid-centering-3D/mesh" --name bubble --h_iface "$h" \
         --h_wake_cross "$h_wake_cross" --h_wake_near "$h_wake_near" --h_wake_far "$h_wake_far" \
-        --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements 1000000 \
+        --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements "$MAX_ELEMENTS" --max_memory_gb "$MAX_MEMORY_GB" \
         > "$dir/mesh.log" 2>&1 \
         || { tail -20 "$dir/mesh.log"; echo "$dir: meshing failed (see $dir/mesh.log)"; exit 1; }
     cp "$src"/{bubble.udf,bubble.oudf,bubble.usr,customhooks.hpp,util.hpp} "$dir"/
