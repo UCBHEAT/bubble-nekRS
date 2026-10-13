@@ -115,6 +115,24 @@
 }
 
 /**
+ * Whether a boundary condition is for a species: "scalar c" or "scalar c<Sc>",
+ * the further species at the Schmidt number in their name (see
+ * customhooks.hpp).
+ */
+inline int isSpeciesField(const char *name)
+{
+    const char prefix[] = "scalar c";
+    int i = 0;
+    for (; prefix[i] != '\0'; i++) {
+        if (_toLower(name[i]) != prefix[i]) return 0;
+    }
+    for (; name[i] != '\0'; i++) {
+        if ((name[i] < '0' || name[i] > '9') && name[i] != '.') return 0;
+    }
+    return 1;
+}
+
+/**
  * Boundary conditions. x and z are periodic; the top face (boundary ID 1) is
  * the inflow and the bottom face (boundary ID 2) the outflow.
  */
@@ -133,9 +151,9 @@ void udfDirichlet(bcData *bc)
         bc->uxFluid = bc->usrwrk[0];
         bc->uyFluid = bc->usrwrk[1];
         bc->uzFluid = bc->usrwrk[2];
-    } else if (isField("scalar cls") || isField("clsr") || isField("scalar c")) {
-        // Pure liquid (psi = 1) saturated with species (c = 1). "clsr" is the
-        // CLS reinitialization, which otherwise imposes psi = 0 (gas) here.
+    } else if (isField("scalar cls") || isField("clsr") || isSpeciesField(bc->fieldName)) {
+        // Pure liquid (psi = 1) saturated with every species (c = 1). "clsr" is
+        // the CLS reinitialization, which otherwise imposes psi = 0 (gas) here.
         bc->sScalar = 1.0;
     }
 }

@@ -4,9 +4,10 @@
 # The case name is that of the run directory's .par file.
 #
 # nekRS restarts checkpoint numbering at 0, so the finished part's field
-# files and logs move to part<N>/ first. data.csv keeps accumulating in
-# place; rows written after the restart checkpoint are dropped so the
-# restarted run doesn't duplicate them.
+# files and logs move to part<N>/ first. data.csv (and data-*.csv, e.g. the
+# further species of gpu/pid-mesh-sensitivity) keeps accumulating in place;
+# rows written after the restart checkpoint are dropped so the restarted run
+# doesn't duplicate them.
 set -euo pipefail
 
 for dir in "$@"; do
@@ -44,11 +45,12 @@ for dir in "$@"; do
     ln -sfn part$part/$last restart.fld
     sed -i 's/^#\?startFrom *=.*/startFrom = restart.fld/' $casename.par
 
-    if [ -e data.csv ]; then
-        # data.csv times are rounded to 4 decimals.
-        awk -F, -v t="$t_restart" 'NR == 1 || $1 <= t + 6e-5' data.csv > data.csv.tmp
-        mv data.csv.tmp data.csv
-    fi
+    for f in data.csv data-*.csv; do
+        [ -e "$f" ] || continue
+        # Times are rounded to 4 decimals.
+        awk -F, -v t="$t_restart" 'NR == 1 || $1 <= t + 6e-5' "$f" > "$f.tmp"
+        mv "$f.tmp" "$f"
+    done
     echo "$dir: restarting from part$part/$last (t = $t_restart)"
     )
 done

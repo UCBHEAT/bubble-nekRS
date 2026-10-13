@@ -25,6 +25,9 @@
 # endTime in bubble.par (default 30). MAX_ELEMENTS (default 1000000) and
 # MAX_MEMORY_GB (default 8) are generate_mesh.py's caps on the element count
 # and its memory; 0.198x (1.37M elements) needs both raised.
+# SPECIES="20 1150" adds species at these Schmidt numbers to every run, as
+# scalars c20 and c1150 next to c, on the same flow (see bubble.udf; output
+# in data-c20.csv and data-c1150.csv).
 # FROM=<run dir> and START=<time> start every run at t = START from FROM's
 # checkpoint at that time instead of from rest: the flow and level set
 # (interpolated onto the new mesh, startFrom = <file>+int, unless it is
@@ -40,7 +43,7 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-    echo "Usage: [SC=1] [END_TIME=30] [MAX_ELEMENTS=1000000] [MAX_MEMORY_GB=8] [FROM=<run dir> START=<time>] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval[:Nk_outer] ...]"
+    echo "Usage: [SC=1] [SPECIES=\"<Sc> ...\"] [END_TIME=30] [MAX_ELEMENTS=1000000] [MAX_MEMORY_GB=8] [FROM=<run dir> START=<time>] [PYTHON=python3] [GMSH2NEK=gmsh2nek] $0 <dest> [name:Nk:dt:checkpointInterval[:Nk_outer] ...]"
     exit 1
 fi
 
@@ -48,6 +51,7 @@ fi
 : ${END_TIME:=30}
 : ${MAX_ELEMENTS:=1000000}
 : ${MAX_MEMORY_GB:=8}
+: ${SPECIES:=}
 : ${FROM:=}
 if [ -n "$FROM" ]; then
     : ${START:?START must be set with FROM}
@@ -63,6 +67,27 @@ fi
 
 mkdir -p "$dest/common"
 cp "$src/../common/pid.hpp" "$dest/common/"
+
+# add_species <par file>: the SPECIES scalars, with sections like [SCALAR C].
+add_species() {
+    awk -v species="$SPECIES" '
+        /^scalars = / { n = split(species, sc, " "); for (i = 1; i <= n; i++) $0 = $0 ", c" sc[i] }
+        /^\[SCALAR C\]$/ { insec = 1 }
+        insec && /^$/ {
+            insec = 0
+            print
+            for (i = 1; i <= n; i++) {
+                print "[SCALAR C" sc[i] "]"
+                print "# As c, at Sc = " sc[i] " (the udf takes it from the name)"
+                for (j = 1; j <= nk; j++) print keys[j]
+                print ""
+            }
+            next
+        }
+        insec && !/^#/ && !/^\[/ { keys[++nk] = $0 }
+        { print }' "$1" > "$1.tmp"
+    mv "$1.tmp" "$1"
+}
 
 # start_from <run dir>: start the run at t = START from FROM (see above).
 start_from() {
@@ -129,10 +154,13 @@ for spec in "${specs[@]}"; do
         -e "s/^interfaceWidthValue = .*/interfaceWidthValue = $eps/" \
         -e "s|This value is for the 1x mesh (h = 4/27).|This value is for the $name mesh (h = 4/$nk).|" \
         "$src/bubble.par" > "$dir/bubble.par"
+    if [ -n "$SPECIES" ]; then
+        add_species "$dir/bubble.par"
+    fi
     if [ -n "$FROM" ]; then
         start_from "$dir"
     fi
     nel=$("${PYTHON:-python3}" -c "import json, sys; print(json.load(open(sys.argv[1]))['n_elements'])" "$dir/bubble.plan.json")
     rest=""; [ "$outer" = "$nk" ] || rest=" (rest of the mesh as for Nk = $outer)"
-    echo "$dir: h = 4/$nk$rest, $nel elements, eps = $eps, dt = $dt, checkpointInterval = $ckpt, Sc = $SC, endTime = $END_TIME"
+    echo "$dir: h = 4/$nk$rest, $nel elements, eps = $eps, dt = $dt, checkpointInterval = $ckpt, Sc = $SC${SPECIES:+ (and $SPECIES)}, endTime = $END_TIME"
 done

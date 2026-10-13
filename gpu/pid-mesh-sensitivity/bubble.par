@@ -17,6 +17,9 @@ timeStepper = tombo2
 checkpointControl = simulationTime
 checkpointInterval = 1.0
 
+# c is the species at the Schmidt number of case.hpp. Further species at
+# other Schmidt numbers are scalars named c<Sc> (e.g. c20), each with a
+# [SCALAR C<Sc>] section like [SCALAR C] (setup-runs.sh SPECIES adds them).
 scalars = tls, cls, c
 
 [PROBLEMTYPE]
