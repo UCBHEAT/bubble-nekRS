@@ -252,19 +252,43 @@ void UDF_Setup()
     }
 
     // [CASEDATA] speciesStart: a run restarted from t = speciesStart starts
-    // every species afresh there, as at t = 0 (c = psi from the restart's level
-    // set), so other Schmidt numbers or a finer mesh (startFrom = <file>+int)
-    // can start from a developed flow (setup-runs.sh FROM). Later restarts read
-    // the species from their checkpoints as usual.
-    double speciesStart = -1.0;
+    // its species afresh there, in the restart's flow, so other Schmidt numbers
+    // or a finer mesh (startFrom = <file>+int) can start from a developed flow
+    // (setup-runs.sh FROM). Later restarts read the species from their
+    // checkpoints as usual. Each species starts
+    // - with [CASEDATA] speciesStartSc, the Schmidt number of the restart's c,
+    //   from that c with its deficit 1 - c scaled by (speciesStartSc/Sc)^1/2,
+    //   the ratio of the transfer coefficients of a thin boundary layer, so
+    //   that the depleted liquid behind the bubble, which renews slowly, starts
+    //   close to its developed state (a species at speciesStartSc continues
+    //   the restart's c);
+    // - otherwise as at t = 0 (c = psi), which leaves Sh too high for several
+    //   time units while that liquid is depleted again (1% after 2 time units
+    //   at Sc = 20 on 0.444x).
+    double speciesStart = -1.0, speciesStartSc = 0.0;
     platform->par->extract("casedata", "speciesstart", speciesStart);
+    platform->par->extract("casedata", "speciesstartsc", speciesStartSc);
     if (speciesStart >= 0 && !platform->options.getArgs("RESTART FILE NAME").empty() &&
         std::abs(startTime - speciesStart) < 0.5*dtStep) {
+        auto o_c0 = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        o_c0.copyFrom(nrs->scalar->o_solution("c"), mesh->Nlocal);
         for (const auto& s : species) {
-            lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution(s.name));
-        }
-        if (platform->comm.mpiRank() == 0) {
-            printf("speciesStart: the species start afresh (c = psi) at t = %g\n", startTime);
+            occa::memory o_s = nrs->scalar->o_solution(s.name);
+            if (speciesStartSc > 0) {
+                // c = 1 - f (1 - c0) = (1 - f) + f c0
+                const double f = sqrt(speciesStartSc*Re/s.Pe);
+                platform->linAlg->fill(mesh->Nlocal, 1.0 - f, o_s);
+                platform->linAlg->axpby(mesh->Nlocal, f, o_c0, 1.0, o_s);
+                if (platform->comm.mpiRank() == 0) {
+                    printf("speciesStart: %s starts at t = %g from the restart's c (Sc = %g), deficit times %.4f\n",
+                            s.name.c_str(), startTime, speciesStartSc, f);
+                }
+            } else {
+                lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), o_s);
+                if (platform->comm.mpiRank() == 0) {
+                    printf("speciesStart: %s starts afresh (c = psi) at t = %g\n", s.name.c_str(), startTime);
+                }
+            }
         }
     }
 

@@ -33,9 +33,15 @@
 # FROM=<run dir> and START=<time> start every run at t = START from FROM's
 # checkpoint at that time instead of from rest: the flow and level set
 # (interpolated onto the new mesh, startFrom = <file>+int, unless it is
-# FROM's), the PID state (FROM's data.csv row at START) and c afresh
-# ([CASEDATA] speciesStart), e.g. to run another Schmidt number or a finer
-# mesh from a developed flow.
+# FROM's) and the PID state (FROM's data.csv row at START), e.g. to run a
+# finer mesh or another Schmidt number from a developed flow. Runs with FROM's
+# species (same SC and SPECIES) continue them. Otherwise the species start
+# afresh from FROM's c, their deficits scaled from FROM's Schmidt number to
+# theirs ([CASEDATA] speciesStart and speciesStartSc, see bubble.udf), and
+# Sh then reads high for a long time while the slowly renewed liquid behind
+# the bubble adjusts (Sc = 20 from Sc = 4 on 0.444x: 1.2% after 1-1.5 time
+# units, 0.6% after 2-2.5), so it is better to carry every species from
+# t = 0 on the coarsest mesh and start the finer ones from it.
 #
 # Resolutions are multiples of the Kolmogorov scale lambda_k = 0.0671 mm
 # (lambda_k/d = 0.021536), using the mean unique GLL spacing h/N of the finest
@@ -118,12 +124,19 @@ start_from() {
     ln -sfn "../$fld" "$dir/start.fld"
     cmp -s "$FROM/bubble.re2" "$dir/bubble.re2" || opt=+int
     # +u+p+s: read the fields but not the (single precision) coordinates.
-    sed -i -e "s/^#\?startFrom *=.*/startFrom = start.fld$opt+u+p+s/" \
-        -e "s/^#\?speciesStart *=.*/speciesStart = $START/" "$dir/bubble.par"
+    fromsc=$(sed -n 's/^static double Sc = \(.*\);/\1/p' "$FROM/case.hpp")
+    sed -i "s/^#\?startFrom *=.*/startFrom = start.fld$opt+u+p+s/" "$dir/bubble.par"
+    if [ "$fromsc" = "$SC" ] && [ "$(grep '^scalars' "$FROM/bubble.par")" = "$(grep '^scalars' "$dir/bubble.par")" ]; then
+        species="its species continue"
+    else
+        species="species afresh from its c at Sc = $fromsc"
+        sed -i -e "s/^#\?speciesStart *=.*/speciesStart = $START/" \
+            -e "s/^#\?speciesStartSc *=.*/speciesStartSc = $fromsc/" "$dir/bubble.par"
+    fi
     # data.csv times are rounded to 4 decimals.
     awk -F, -v t="$START" 'NR == 1 || ($1 > t - 6e-5 && $1 < t + 6e-5)' "$FROM/data.csv" > "$dir/data.csv"
     [ $(wc -l < "$dir/data.csv") -eq 2 ] || { echo "$FROM/data.csv has no row at t = $START"; exit 1; }
-    echo "$dir: starts at t = $START from $ckpt${opt:+ (interpolated)}"
+    echo "$dir: starts at t = $START from $ckpt${opt:+ (interpolated)}, $species"
 }
 
 for spec in "${specs[@]}"; do
