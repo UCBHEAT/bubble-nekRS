@@ -624,3 +624,78 @@ below 1.1e-6, and no bubble drifts sideways (`path.py`: lateral path below
 0.001 D). Each run directory also has post.csv and animation.mp4
 (`submit-animate-frontier.sh`, labelled "Sc = 20, ..."), whose charts span
 Sh up to 120 and MTC up to 0.03 and end at t = 15.
+
+## Sc = 100, with Sc = 20 and 1150 (Frontier, October 2026, in progress)
+
+At Sc = 100 (Pe = 23,140) the concentration boundary layer, about
+Pe^-1/2 = 0.0066 D thick, is thinner than at Sc = 20 by 5^1/2 = 2.24, almost
+exactly two refinement levels (1.5^2 = 2.25). So each mesh resolves it at
+Sc = 100 as the mesh two levels coarser does at Sc = 20:
+
+| Sc = 100 mesh | GLL spacings across Pe^-1/2 | Sc = 20 mesh with the same | Sh there at Sc = 20 |
+|---------------|-----------------------------|----------------------------|---------------------|
+| 0.296x        | 1.03                        | 0.667x                     | 99.82               |
+| 0.198x        | 1.55                        | 0.444x                     | 86.80               |
+| 0.132x        | 2.32                        | 0.296x                     | 78.21               |
+| 0.088x        | 3.50                        | 0.198x                     | (running)           |
+
+The study skips 0.296x and coarser, where the Sc = 20 meshes of the same
+resolution overestimate Sh by 28% and more, and uses 0.198x (Nk = 135),
+0.132x (Nk = 202) and 0.088x (Nk = 304). Run from rest to t = 15 with the
+whole mesh refined, as before, these would take about 100k node-hours
+(0.132x: 4.2M elements at dt = 3.125e-6; 0.088x: 13.9M at 1.5625e-6).
+Instead:
+- c is passive, so further species ride on the same flow at little cost
+  (`SPECIES`, scalars named c<Sc>, output in `data-c<Sc>.csv`, read by
+  `sherwood.py --species c<Sc>`; 12% more per step for two). The 0.198x run
+  of the Sc = 20 study carries Sc = 100 and Sc = 1150 (FLiBe's) from t = 0,
+  so its three species develop exactly as in the earlier studies.
+- 0.132x and 0.088x start at t = 10 from that run (`FROM`, `START`),
+  interpolated onto their meshes with all three species continuing, and run
+  about 3 time units.
+- They refine only the fine cube around the bubble and size the rest of the
+  mesh as 0.198x (`Nk_outer` = 135): 2,696,987 and 5,905,466 elements
+  (0.088x takes 54 min and 51 GB to mesh, `MESH_ONLY`).
+
+Sc = 20 thereby also gets 0.132x and 0.088x. Sc = 1150 (boundary layer
+0.0019 D, 1.0 GLL spacing on 0.088x, like Sc = 20 on 0.667x) cannot converge
+on these meshes; its trend shows how far the study's compute is from it.
+
+```
+SC=20 SPECIES="100 1150" END_TIME=13 FROM=~/answinter26/Sc20-pid-prod/0.198x START=10 \
+    MAX_ELEMENTS=7000000 MAX_MEMORY_GB=96 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Sc100-pid-prod 0.132x:202:3.125e-6:1:135 0.088x:304:1.5625e-6:1:135
+```
+
+Estimated cost (the step-cost model of Running on Frontier, +12% for the two
+species): 0.198x about 3,500 node-hours (54 h on 64 nodes, to t = 15), and
+for 3 time units on 64 nodes 0.132x 33 h, 2,100 node-hours, and 0.088x
+121 h, 7,800 node-hours.
+
+### Starting from a developed flow
+
+Tests on the Sc = 20 meshes (answinter26/restart-tests, debug QOS) chose
+how the finer runs start, against the continuous Sc = 20 runs:
+- A species started afresh at t = 10 reads high for several time units, while
+  the slowly renewed liquid behind the bubble adjusts. With c = psi, as at
+  t = 0 ([CASEDATA] speciesStart), Sh on 0.444x was 2.7, 1.7 and 1.2% high
+  over the half units from t = 10.5 (and still 2.3% at t = 11-11.5 on 0.296x
+  started from 0.444x). Started from another species with its deficit
+  scaled by (Sc_from/Sc)^1/2 ([CASEDATA] speciesStartSc; Sc = 20 from the
+  Sc = 4 run, the same factor of 5 as 20 to 100), it was 2.4, 1.2, 0.8 and
+  0.6% high. A species continued from its own run matched it within 0.01%.
+- A species continued across an interpolation onto a finer mesh (0.444x
+  onto 0.296x) matched the continuous run's Sh within 0.6% from the first
+  quarter time unit on (within 0.3% after it). The flow takes longer: the
+  rise velocity starts 0.66% low and swings to +0.34% and -0.20% over the
+  first 1.5 time units, and the bubble keeps the coarser mesh's gas volume
+  (+0.24%, its interface profile is wider).
+- nekRS interpolates a restart with Nek5000's gfldr, which reads passive
+  scalars only into the ldimt - 1 slots after a temperature slot, and nekRS
+  sizes its Nek5000 interface with ldimt = the number of scalars: the last
+  scalar of these files (no temperature) came out as 0. submit-bundle-
+  frontier.sh therefore raises ldimt by one in the case's
+  .cache/nek5000/SIZE for a run whose startFrom has +int (nekRS keeps a SIZE
+  with a larger ldimt).
+- With two further species, the run's own species c matched a run without
+  them within 1.4e-5 in Sh over 1.8 time units (round-off).
