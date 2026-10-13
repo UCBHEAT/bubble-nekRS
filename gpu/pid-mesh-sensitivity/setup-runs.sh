@@ -28,6 +28,8 @@
 # SPECIES="20 1150" adds species at these Schmidt numbers to every run, as
 # scalars c20 and c1150 next to c, on the same flow (see bubble.udf; output
 # in data-c20.csv and data-c1150.csv).
+# MESH_ONLY=1 only makes the meshes (e.g. while FROM's checkpoint is still to
+# come): a later run of the script reuses a run directory's mesh.
 # FROM=<run dir> and START=<time> start every run at t = START from FROM's
 # checkpoint at that time instead of from rest: the flow and level set
 # (interpolated onto the new mesh, startFrom = <file>+int, unless it is
@@ -141,11 +143,19 @@ for spec in "${specs[@]}"; do
         h = 4/nk; s = (4/outer)/0.2
         c = 0.76/h - 1e-9; n = int(c); if (c > n) n++; n = 2*n + 1
         printf "%.17g %.17g %.17g %.17g %.17g %.8g %.17g\n", h, 0.3*s, 0.25*s, 0.5*s, 1.25*s, 1.5*h/7, n*h/2 }')"
-    MESH_DIR=$dir "$src/../pid-centering-3D/mesh" --name bubble --h_iface "$h" \
-        --h_wake_cross "$h_wake_cross" --h_wake_near "$h_wake_near" --h_wake_far "$h_wake_far" \
-        --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements "$MAX_ELEMENTS" --max_memory_gb "$MAX_MEMORY_GB" \
-        > "$dir/mesh.log" 2>&1 \
-        || { tail -20 "$dir/mesh.log"; echo "$dir: meshing failed (see $dir/mesh.log)"; exit 1; }
+    if [ -e "$dir/bubble.re2" ] && [ -e "$dir/bubble.plan.json" ]; then
+        echo "$dir: reusing its mesh"
+    else
+        MESH_DIR=$dir "$src/../pid-centering-3D/mesh" --name bubble --h_iface "$h" \
+            --h_wake_cross "$h_wake_cross" --h_wake_near "$h_wake_near" --h_wake_far "$h_wake_far" \
+            --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements "$MAX_ELEMENTS" --max_memory_gb "$MAX_MEMORY_GB" \
+            > "$dir/mesh.log" 2>&1 \
+            || { tail -20 "$dir/mesh.log"; echo "$dir: meshing failed (see $dir/mesh.log)"; exit 1; }
+    fi
+    if [ "${MESH_ONLY:-0}" = 1 ]; then
+        echo "$dir: mesh only, $("${PYTHON:-python3}" -c "import json, sys; print(json.load(open(sys.argv[1]))['n_elements'])" "$dir/bubble.plan.json") elements"
+        continue
+    fi
     cp "$src"/{bubble.udf,bubble.oudf,bubble.usr,customhooks.hpp,util.hpp} "$dir"/
     sed -e "s/^static double Sc = .*/static double Sc = $SC;/" -e "s/(Sc=[0-9.]*)/(Sc=$SC)/" \
         "$src/case.hpp" > "$dir/case.hpp"
