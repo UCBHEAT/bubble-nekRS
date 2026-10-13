@@ -290,6 +290,27 @@ run_case() {
             [ $status -ne 0 ] || break
             rm -f core
         done
+        # An interpolated restart (startFrom = <file>+int) goes through
+        # Nek5000's gfldr, which keeps scalar slot 1 for a temperature and
+        # reads passive scalars into the ldimt - 1 slots after it. nekRS sizes
+        # its Nek5000 interface with ldimt = the number of scalars, so the last
+        # scalar of a file without a temperature (all of these cases' scalars
+        # are passive) is lost, and nekRS fills it from past the end of the
+        # array (c came out as 0). nekRS keeps a SIZE whose ldimt is larger
+        # than it needs, so raise it by one and build again.
+        local size=.cache/nek5000/SIZE nscalar ldimt
+        if [ $status -eq 0 ] && grep -q '^startFrom *=.*+int' $casename.par && [ -f $size ]; then
+            nscalar=$(awk -F= '/^scalars *=/ {print split($2, a, ",")}' $casename.par)
+            ldimt=$(sed -n 's/.*parameter (ldimt=\([0-9]*\)).*/\1/p' $size)
+            if [ -n "$nscalar" ] && [ -n "$ldimt" ] && [ "$ldimt" -le "$nscalar" ]; then
+                sed -i "s/parameter (ldimt=$ldimt)/parameter (ldimt=$((nscalar + 1)))/" $size
+                echo "$(date) ldimt $ldimt -> $((nscalar + 1)) for the interpolated restart, precompilation"
+                NEKRS_JITC_NTHREADS=$jitc_nthreads srun -N 1 -n $gpu_per_node -w ${hosts[first]} \
+                    -c $cores_per_task --gpus-per-task=1 --gpu-bind=closest --export=$nek_env \
+                    $bin --setup $casename --backend HIP --device-id 0 --build-only $ntasks
+                status=$?
+            fi
+        fi
         if [ $status -eq 0 ]; then
             echo "$(date) actual run"
             srun -N $n -n $ntasks -w $nodelist \
