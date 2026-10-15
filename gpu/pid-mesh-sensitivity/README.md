@@ -550,7 +550,18 @@ SC=20 END_TIME=15 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/
 (the meshes are byte for byte those of Sc = 4) and run as Sc = 4 did:
 0.296x and 0.444x in a 24 h extended job on 56 and 8 nodes, with chains of
 2 h batch jobs on the same node counts queued for them, and the four coarser
-runs in a chain of 2 h batch jobs on 8 nodes.
+runs in a chain of 2 h batch jobs on 8 nodes. As Sh had not converged on
+0.296x, a seventh mesh followed, 0.198x (Nk = 135: 53^3 fine cells of
+half-width 0.785, 83x199x83 = 1,370,911 elements, 470M GLL points,
+eps = 0.0063492, dt = 6.25e-6; the mesh takes 6 min and 11.5 GB):
+
+```
+SC=20 SPECIES="100 1150" END_TIME=15 MAX_ELEMENTS=2000000 MAX_MEMORY_GB=48 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Sc20-pid-prod 0.198x:135:6.25e-6:1
+```
+
+It carries the Sc = 100 and 1150 species of the Sc = 100 study from t = 0
+(see there; its Sc = 20 species c is unaffected by them to round-off).
 
 ### Runs
 
@@ -567,6 +578,13 @@ failed precompilation). The study used 1,094 node-hours of fus167. The run
 directories keep every job's checkpoints (`part<N>/`), linked in time order
 by `finish-runs.sh`.
 
+0.198x ran October 13-15 in three 24 h extended jobs on 64 nodes (t = 0 to
+6.57, 6.57 to 13.13 and 13.13 to 15, each next one starting within minutes
+or hours of the last), at 0.081 s per step with its two further species
+(the model of Running on Frontier predicts 0.072 without them, and they add
+12%), 3,503 node-hours in all. Its directory keeps all 17 checkpoints,
+383 GB.
+
 ### Sherwood number
 
 Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
@@ -580,21 +598,25 @@ Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
 | 0.667x | 98.14 ± 0.98  | 99.82 ± 0.13  | 68.24              | 9       |
 | 0.444x | 85.59 ± 0.51  | 86.80 ± 0.08  | 58.65              | 9       |
 | 0.296x | 77.76 ± 0.19  | 78.21 ± 0.03  | 52.51              | 7       |
+| 0.198x | 74.82 ± 0.09  | 75.01 ± 0.03  | 50.20              | 6       |
 
-Unlike at Sc = 1 and 4, Sh has not converged on the finest mesh. It rises up
-to 1x and 0.667x (100.4 and 99.8) and then falls by 13% on 0.444x and by a
-further 10% on 0.296x: the GCI between 0.444x and 0.296x is 11% (p = 2,
-F_s = 1.25; observed orders 7.1, 7.4 and 1.0, so none of the triplets is in
-the asymptotic range). The concentration boundary layer, about Pe^-1/2 =
-0.015 D thick, spans only 2.3 GLL spacings on 0.296x and less than one on 1x
-and coarser, where the scheme overestimates the transfer. Bounding Sh would
-take a finer mesh, e.g. 0.198x (Nk = 135, about 1.5M elements). The figures
-and the GCI table are made by 2026-11-nek-cst/data/mesh_sensitivity_sc20_pid.py
-in UCBHEAT/papers. On the finest meshes Sh is steady from t = 7-9: its
-t = 5-10 and 10-15 averages differ by 0.6% on 0.296x and 1.4-1.7% on 0.444x
-and 0.667x. At the Reynolds number of the simulated rise (Re = 264, from the
-0.296x rise speed and d_eq over t = 10-15), the 0.296x value is 0.7% above
-Feng and Michaelides (2001, 77.7) and 4.6% below potential flow (82.0).
+Sh rises up to 1x and 0.667x (100.4 and 99.8) and then falls, by 13% on
+0.444x, 10% on 0.296x and 4.1% on 0.198x. The concentration boundary layer,
+about Pe^-1/2 = 0.015 D thick, spans 3.5 GLL spacings on 0.198x, 2.3 on
+0.296x and less than one on 1x and coarser, where the scheme overestimates
+the transfer. The three finest meshes converge at an observed order of 2.4,
+close to the assumed p = 2 (the coarser triplets give 7.1, 7.4 and 1.0,
+outside the asymptotic range): the GCI between 0.296x and 0.198x is 4.3%
+(p = 2, F_s = 1.25; 3.2% with the observed order), down from 11% between
+0.444x and 0.296x, and Richardson extrapolation gives Sh = 72.5 (p = 2) or
+73.1 (p = 2.4). The figures and the GCI table are made by
+2026-11-nek-cst/data/mesh_sensitivity_sc20_pid.py in UCBHEAT/papers. On the
+finest meshes Sh is steady from t = 6-9: its t = 5-10 and 10-15 averages
+differ by 0.3% on 0.198x, 0.6% on 0.296x and 1.4-1.7% on 0.444x and 0.667x.
+At the Reynolds number of the simulated rise (Re = 264, from the 0.198x rise
+speed and d_eq over t = 10-15, as on 0.296x), the 0.198x value is 3.5%
+below Feng and Michaelides (2001, 77.7) and 8.5% below potential flow
+(82.0).
 
 ### Against Sc = 4 and Sc = 1
 
@@ -614,14 +636,17 @@ Sh ~ Sc^n:
 
 Between Sc = 1 and 4 the exponent is 0.48-0.50 on every mesh; between 4 and
 20 it falls with refinement towards it, from 0.72 on 1.5x to 0.53 on 0.296x,
-so the excess on the coarser meshes is numerical.
+so the excess on the coarser meshes is numerical. Against the converged
+Sc = 4 value (33.15 on 0.296x), Sh = 75.01 on 0.198x gives n = 0.507, and
+the extrapolated Sc = 20 values n = 0.486-0.492: Sh ~ Sc^0.5 from Sc = 1 to
+20.
 
 ### Concentration field
 
 c over t = 10-15 lies in [-0.18, 1.15] on 2.25x, [-0.04, 1.30] on 1x (the
-largest overshoot) and [-0.06, 1.08] on 0.296x. The far-field deficit stays
-below 1.1e-6, and no bubble drifts sideways (`path.py`: lateral path below
-0.001 D). Each run directory also has post.csv and animation.mp4
+largest overshoot), [-0.06, 1.08] on 0.296x and [-0.03, 1.02] on 0.198x.
+The far-field deficit stays below 4e-6, and no bubble drifts sideways
+(`path.py`: lateral path below 0.001 D). Each run directory also has post.csv and animation.mp4
 (`submit-animate-frontier.sh`, labelled "Sc = 20, ..."), whose charts span
 Sh up to 120 and MTC up to 0.03 and end at t = 15.
 
@@ -649,7 +674,10 @@ Instead:
   (`SPECIES`, scalars named c<Sc>, output in `data-c<Sc>.csv`, read by
   `sherwood.py --species c<Sc>`; 12% more per step for two). The 0.198x run
   of the Sc = 20 study carries Sc = 100 and Sc = 1150 (FLiBe's) from t = 0,
-  so its three species develop exactly as in the earlier studies.
+  so its three species develop exactly as in the earlier studies: over
+  t = 10-15 it gives Sh = 213.13 ± 0.31 at Sc = 100 and 1899 ± 5 at
+  Sc = 1150 (settled from t = 11; apparent exponents 0.65 and 0.80 against
+  its Sc = 20 Sh, both unconverged).
 - 0.132x and 0.088x start at t = 10 from that run (`FROM`, `START`),
   interpolated onto their meshes with all three species continuing, and run
   about 3 time units.
