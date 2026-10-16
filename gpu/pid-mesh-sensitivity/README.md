@@ -700,6 +700,29 @@ species): 0.198x about 3,500 node-hours (54 h on 64 nodes, to t = 15), and
 for 3 time units on 64 nodes 0.132x 33 h, 2,100 node-hours, and 0.088x
 121 h, 7,800 node-hours.
 
+### Results so far
+
+| Species  | 0.198x, t = 10-15 (from t = 0) | 0.198x, t = 11-13 | 0.132x, t = 11-13 | change |
+|----------|--------------------------------|-------------------|-------------------|--------|
+| Sc = 20  | 75.01 ± 0.03                   | 75.02             | 73.99 ± 0.01      | -1.4%  |
+| Sc = 100 | 213.13 ± 0.31                  | 213.22            | 188.72 ± 0.06     | -11.5% |
+| Sc = 1150| 1899 ± 5                       | 1901              | 1466 ± 2          | -22.9% |
+
+0.132x (October 15-16, five 6 h batch jobs on 92 nodes, 0.0996 s per step,
+2,489 node-hours) settled within half a time unit of its start from 0.198x:
+every half-unit mean of Sh from t = 10.5 to 13 is within 0.1% of the t = 11-13
+mean for all three species, and its rise speed is within 0.07% of 0.198x's.
+For Sc = 20 the change from 0.198x to 0.132x continues the convergence of the
+uniformly refined meshes (-9.9% and -4.1% before it): the observed order of
+the triplet 0.296x, 0.198x, 0.132x is 2.8, the GCI between 0.198x and 0.132x
+1.4% (p = 2; 0.85% with the observed order) and Richardson extrapolation
+73.2-73.5 (0.132x refines only the fine cube, and its window is t = 11-13,
+over which 0.198x's mean is within 0.02% of its t = 10-15 one). Sc = 100 falls
+by 11.5%, as much as Sc = 20 did between the meshes with the same boundary
+layer resolution (0.444x to 0.296x, -9.9%), and Sc = 1150 is far from
+converged. The apparent exponents on 0.132x are 0.58 (Sc = 20 to 100) and
+0.74 (20 to 1150).
+
 ### Starting from a developed flow
 
 Tests on the Sc = 20 meshes (answinter26/restart-tests, debug QOS) chose
