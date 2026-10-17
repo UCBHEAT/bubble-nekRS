@@ -215,9 +215,9 @@ and the rest in chains of 2 h batch jobs, e.g.:
 
 ```
 cd ~/answinter26/Sc4-pid-prod
-PROJ_ID=fus167 PARTITION=extended PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 24:00 0.296x:56 0.444x:8
-A=$(PROJ_ID=fus167 PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
-B=$(PROJ_ID=fus167 PREPARE_RESTART=1 DEPEND=$A <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+PROJ_ID=nfu106 PARTITION=extended PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 24:00 0.296x:56 0.444x:8
+A=$(PROJ_ID=nfu106 PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+B=$(PROJ_ID=nfu106 PREPARE_RESTART=1 DEPEND=$A <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
 ```
 
 `../common/bundle-status.sh <study dir> <jobid>...` shows the jobs' states
@@ -261,7 +261,7 @@ names a static build:
 
 ```
 cd ~/answinter26/Sc4-pid-prod
-PROJ_ID=fus167 FFMPEG=~/answinter26/tools/ffmpeg PV_SITE=~/answinter26/tools/pv-site \
+PROJ_ID=nfu106 FFMPEG=~/answinter26/tools/ffmpeg PV_SITE=~/answinter26/tools/pv-site \
     <dir>/submit-animate-frontier.sh 01:00 \
     "2.25x:2:Sc = 4, 2.25x Kolmogorov (3887 elements)" ... \
     "0.296x:4:Sc = 4, 0.296x Kolmogorov (441864 elements)"

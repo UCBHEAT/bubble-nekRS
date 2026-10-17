@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Frontier counterpart of submit-animate.sh: postprocess and animate finished
 # runs, each on its own CPU node, e.g. from the directory holding them:
-#   PROJ_ID=fus167 FFMPEG=<ffmpeg> PV_SITE=<dir> ./submit-animate-frontier.sh 01:00 \
+#   PROJ_ID=nfu106 FFMPEG=<ffmpeg> PV_SITE=<dir> ./submit-animate-frontier.sh 01:00 \
 #       "1x:2:Sc = 4, 1x Kolmogorov (23805 elements)" \
 #       "0.296x:3:Sc = 4, 0.296x Kolmogorov (441864 elements)" ...
 # As there, each <run dir>:<chunks>:<label> splits the run's checkpoints

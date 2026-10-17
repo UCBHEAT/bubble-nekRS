@@ -2,7 +2,7 @@
 # Frontier (Slurm) counterpart of submit-bundle.sh: submit several run
 # directories of a mesh study as one job, each case on its own set of nodes,
 # e.g. from the directory holding the runs:
-#   PROJ_ID=fus167 <gpu/common>/submit-bundle-frontier.sh 02:00 0.444x:8 0.667x:3 1x:1 1.5x:1 2.25x:1
+#   PROJ_ID=nfu106 <gpu/common>/submit-bundle-frontier.sh 02:00 0.444x:8 0.667x:3 1x:1 1.5x:1 2.25x:1
 # The case name is that of the run directory's .par file (bubble.par: bubble).
 # Batch jobs of 1-91 nodes may run for at most 2 hours (92-183 nodes: 6 h);
 # PARTITION=extended allows up to 24 h on at most 64 nodes, with one running
