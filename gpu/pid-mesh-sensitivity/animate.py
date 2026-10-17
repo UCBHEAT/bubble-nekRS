@@ -30,7 +30,7 @@ import sys
 
 import numpy as np
 
-T_END = 30.0
+T_END = 30.0  # chart time axis when the run's .par has no endTime
 
 POST_COLUMNS = [
     "Time", "gas_volume", "d_eq", "x_c", "y_c", "z_c",
@@ -74,17 +74,34 @@ def checkpoints(run):
     return sorted(out, key=lambda c: c[1])
 
 
-def chart_max(path, column, default, tmin=1.0):
-    """Chart axis maximum: the default, shared by this study's runs, unless the
-    data after the initial transient peak at more than 2.5 times it or less
-    than a tenth of it (other cases); then a round number just above them."""
-    with open(path) as f:
-        values = [float(r[column]) for r in csv.DictReader(f) if float(r["Time"]) > tmin]
-    top = builtins.max(values) if values else default
-    if 0.1*default <= top <= 2.5*default:
+def end_time(run):
+    """The run's endTime from its .par (T_END if it has none), the end of the
+    chart time axes."""
+    with open(os.path.join(run, case_name(run) + ".par")) as f:
+        for line in f:
+            key, _, value = line.partition("=")
+            if key.strip() == "endTime":
+                return float(value.split("#")[0])
+    return T_END
+
+
+def chart_max(run, column, default, tmin=1.0):
+    """Chart axis maximum, shared by the runs of a study (the run directories
+    next to this one): the default, unless their data after the initial
+    transient exceed it, which it would clip, or stay below a fifth of it
+    (another Schmidt number or case); then the round number (1, 1.2, 1.5, 2,
+    2.5, 3, 4, 5, 6 or 8 times a power of 10) just above 1.1 times their
+    largest value."""
+    top = None
+    for path in glob.glob(os.path.join(os.path.dirname(os.path.abspath(run)), "*", "data.csv")):
+        with open(path) as f:
+            values = [float(r[column]) for r in csv.DictReader(f) if float(r["Time"]) > tmin]
+        if values:
+            top = builtins.max(values) if top is None else builtins.max([top] + values)
+    if top is None or top <= 0 or 0.2*default <= top <= default:
         return default
-    step = 10.0**math.floor(math.log10(top))
-    return math.ceil(1.1*top/step)*step
+    scale = 10.0**math.floor(math.log10(1.1*top))
+    return builtins.min(m*scale for m in (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10) if m*scale >= 1.1*top)
 
 
 def frame_velocities(run):
@@ -316,9 +333,9 @@ def frames(run, first, last, label):
     label_disp.Color = dark
 
     data_csv = CSVReader(FileName=[os.path.join(run, "data.csv")])
-    ymax = {"vel": chart_max(os.path.join(run, "data.csv"), "rise_v", 1.5),
-            "mtc": chart_max(os.path.join(run, "data.csv"), "MTC", 0.2),
-            "sh": chart_max(os.path.join(run, "data.csv"), "Sh", 40.0)}
+    ymax = {"vel": chart_max(run, "rise_v", 1.5),
+            "mtc": chart_max(run, "MTC", 0.2),
+            "sh": chart_max(run, "Sh", 40.0)}
     marker = ProgrammableSource(OutputDataSetType="vtkTable")
 
     def set_marker(t):
@@ -333,7 +350,7 @@ def frames(run, first, last, label):
     set_marker(0.0)
     marker.UpdatePipeline()
 
-    t_end = builtins.max(T_END, math.ceil(cps[-1][1]))
+    t_end = builtins.max(end_time(run), math.ceil(cps[-1][1]))
 
     def chart(title, src, series, color, ymax, marker_series, bottom_title=""):
         ch = CreateView("XYChartView")

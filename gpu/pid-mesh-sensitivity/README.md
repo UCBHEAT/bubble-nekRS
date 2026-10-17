@@ -52,6 +52,9 @@ by h/0.2, so the whole mesh is refined together:
 | 1x     | 4/27       | 0.98        | 13^3, half-width 0.963 | 23x45x23 = 23805  | 8.17M | 39366 (13.5M)  | 0.77 | 3.87 |
 | 0.667x | 4/40       | 0.663       | 17^3, half-width 0.85  | 29x62x29 = 52142  | 17.9M | 128000 (43.9M) | 0.61 | 5.19 |
 | 0.444x | 4/60       | 0.442       | 25^3, half-width 0.833 | 41x92x41 = 154652 | 53.0M | 432000 (148M)  | 0.41 | 5.42 |
+| 0.296x | 4/90       | 0.295       | 37^3, half-width 0.822 | 57x136x57 = 441864 | 151.6M | 1458000 (500M) | 0.27 | 6.11 |
+
+0.296x was added for the Sc = 4 study (see Running on Frontier).
 
 ![The z = 0 plane of the five meshes, and the 1x mesh around the bubble](doc/mesh.png)
 
@@ -137,6 +140,7 @@ given value; `psiSnap = 0`, `farFieldClean`, `rhoSplittingFilter` and
 | 1x     | 1e-4    | 100/10 steps    | 0.5         |
 | 0.667x | 5e-5    | 200/20 steps    | 1           |
 | 0.444x | 2.5e-5  | 400/40 steps    | 1           |
+| 0.296x | 1.25e-5 | 800/80 steps    | 1           |
 
 ## Running on Polaris
 
@@ -158,9 +162,9 @@ PYTHON=~/answinter26/tools/gmsh-venv/bin/python GMSH2NEK=~/answinter26/tools/gms
 ```
 
 makes the five run directories (name:Nk:dt:checkpointInterval specs select
-others; SC sets the Schmidt number), each with its mesh (`bubble.re2`,
-`mesh.log`, `bubble.plan.json`), and `common/pid.hpp` next to them for the
-udf. Meshing takes 5-40 s per run on a login node.
+others; SC sets the Schmidt number and END_TIME the end time), each with its
+mesh (`bubble.re2`, `mesh.log`, `bubble.plan.json`), and `common/pid.hpp`
+next to them for the udf. Meshing takes 5-40 s per run on a login node.
 
 Runs are submitted and restarted with the job scripts in `../common` (see
 `../mesh-sensitivity/README.md`), e.g.
@@ -173,6 +177,102 @@ PROJ_ID=nek-vf QUEUE=prod PREPARE_RESTART=1 <common>/submit-bundle.sh 03:00 \
 
 A restart takes the PID integral and frame velocity from the data.csv row at
 the restart time, which the clean stop always writes.
+
+## Running on Frontier
+
+The Sc = 4 study ran on Frontier, with a sixth mesh, 0.296x (Nk = 90: 37^3
+fine cells of half-width 0.822, 441,864 elements, 151.6M GLL points,
+eps = 0.0095238, dt = 1.25e-5), because the species boundary layer is
+thinner than at Sc = 1 by about Sc^-1/2. It used nekRS-LS a48ee9fc5, the
+commit of the Sc = 1 runs on Polaris, built with PrgEnv-gnu and
+gcc-native/13.2 as in nekRS_HPCsupport/Frontier/install.md, with
+`-DENABLE_HYPRE_GPU=off`. (That does not change the pressure solve: nekRS
+runs the BoomerAMG coarse solve on the CPU whenever the multigrid coarse grid
+is not SEMFEM, on Polaris too.) The PyPI gmsh wheel works on the Frontier
+login nodes:
+
+```
+module load cray-python/3.11.7
+python3 -m venv ~/answinter26/tools/venv
+~/answinter26/tools/venv/bin/pip install "gmsh==4.15.*" numpy
+SC=4 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/bin/gmsh2nek \
+    ./setup-runs.sh ~/answinter26/Sc4-pid-prod 2.25x:12:1e-4:0.5 1.5x:18:1e-4:0.5 \
+    1x:27:1e-4:0.5 0.667x:40:5e-5:1 0.444x:60:2.5e-5:1 0.296x:90:1.25e-5:1
+```
+
+The five shared meshes come out with the element counts above; 0.296x takes
+1.5 min.
+
+Jobs are submitted with `../common/submit-bundle-frontier.sh`, the Slurm
+counterpart of submit-bundle.sh (same BUBBLE_STOP_AT clean stop,
+PREPARE_RESTART and DEPEND chaining, and prepare-restart.sh; a case runs in
+one job at a time, so jobs in different partitions can be queued for the
+same run and whichever starts first runs it). Frontier
+limits batch jobs below 92 nodes to 2 h, so long runs fit best in the
+`extended` partition (at most 64 nodes and 24 h, one running job per user;
+a second extended job waits for the first and accrues priority meanwhile)
+and the rest in chains of 2 h batch jobs, e.g.:
+
+```
+cd ~/answinter26/Sc4-pid-prod
+PROJ_ID=nfu106 PARTITION=extended PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 24:00 0.296x:56 0.444x:8
+A=$(PROJ_ID=nfu106 PREPARE_RESTART=1 <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+B=$(PROJ_ID=nfu106 PREPARE_RESTART=1 DEPEND=$A <common>/submit-bundle-frontier.sh 02:00 0.667x:4 1x:2 1.5x:1 2.25x:1)
+```
+
+`../common/bundle-status.sh <study dir> <jobid>...` shows the jobs' states
+and each case's step, time, CFL, recent s/step and Sh (with `--wait <s>` it
+first blocks until a job starts or ends or a log shows an error), and
+`../common/step-costs.sh <log>` splits a run's mean s/step into ordinary,
+CLSR and TLSR steps.
+
+The `debug` QOS (2 h, one job per user) is for tests only: OLCF does not
+allow production work or job chaining there. The bringup (all six meshes,
+t = 0 to 1.3-7.9) ran in debug in its own directory, and production started
+again from t = 0. GPU-aware MPI (`NEKRS_GPU_MPI=1`, which the Polaris script
+uses) aborts the multi-node runs at startup on Frontier ("Memory access fault
+by GPU"), so submit-bundle-frontier.sh keeps nrsqsub's default of 0.
+
+Seconds per step on Frontier nodes (8 GCDs each), over the bringup's steps 500
+to the end (t up to 1.3-7.9; `ordinary` is a step without reinitialization),
+and in production (the coarse runs' second job, t = 4-14; 0.444x and 0.296x
+over the 12 h job from t = 13 and 9; 0.296x ran at 0.047 on 64 nodes):
+
+| Run    | Nodes | GLL points/GCD | ordinary | CLSR step | TLSR step | mean (bringup) | mean (production) |
+|--------|-------|----------------|----------|-----------|-----------|----------------|-------------------|
+| 2.25x  | 1     | 0.17M          | 0.024    | 0.27      | 1.08      | 0.057          | 0.064             |
+| 1.5x   | 1     | 0.38M          | 0.032    | 0.36      | 1.47      | 0.076          | 0.091             |
+| 1x     | 2     | 0.51M          | 0.042    | 0.43      | 1.80      | 0.095          | 0.113             |
+| 0.667x | 4     | 0.56M          | 0.044    | 0.41      | 1.82      | 0.069          | 0.080             |
+| 0.444x | 8     | 0.83M          | 0.056    | 0.47      | 2.14      | 0.070          | 0.079             |
+| 0.296x | 56    | 0.34M          | 0.037    | 0.30      | 1.35      | 0.041          | 0.048             |
+
+An ordinary step costs about 0.016 s plus 48 ns per GLL point per GCD, so
+the small runs are latency-bound and gain little from more nodes. On the
+same node counts the coarse runs are 15-30% slower than on Polaris (Sc = 1
+production: 0.048, 0.074, 0.096 and 0.070 s per step from 2.25x to 0.667x).
+
+`submit-animate-frontier.sh` is the Slurm counterpart of submit-animate.sh
+(post.csv and animation.mp4, see Output), with ParaView 5.13.1 (OSMesa) from
+the Frontier software stack. Its Python has no numpy, so PV_SITE names a
+directory with one (`pip install --target ~/answinter26/tools/pv-site
+'numpy<2'` with cray-python/3.11.7), and Frontier has no ffmpeg, so FFMPEG
+names a static build:
+
+```
+cd ~/answinter26/Sc4-pid-prod
+PROJ_ID=nfu106 FFMPEG=~/answinter26/tools/ffmpeg PV_SITE=~/answinter26/tools/pv-site \
+    <dir>/submit-animate-frontier.sh 01:00 \
+    "2.25x:2:Sc = 4, 2.25x Kolmogorov (3887 elements)" ... \
+    "0.296x:4:Sc = 4, 0.296x Kolmogorov (441864 elements)"
+```
+
+Each run gets a CPU node, whose cores and memory its chunks share. The
+script selects VTK's STDThread backend, because that ParaView defaults to
+Sequential, which is about 10 times slower (a 0.444x frame of
+`../common/animate.py` took 7 min serially, 30 s on 56 cores). pvbatch runs
+without MPI, each chunk as a task of one srun step, since animate.py reads
+whole checkpoints.
 
 ## Output
 
@@ -203,7 +303,8 @@ eddy has formed. `figures.py` draws the two figures above (doc/), and
 `submit-animate.sh` with `animate.py` (gpu/mesh-sensitivity's, adapted)
 makes each run's animation.mp4 and post.csv, the bubble's volume, centroid,
 velocities, interface area and extents at every checkpoint, on a Polaris GPU
-node (set FFMPEG to an ffmpeg binary with libx264; Polaris has none).
+node (set FFMPEG to an ffmpeg binary with libx264; Polaris has none), or on
+Frontier's CPU nodes with `submit-animate-frontier.sh`.
 
 ## Sc = 1 results (Polaris, October 2026)
 
@@ -338,3 +439,314 @@ not depend on Sc, and the concentration boundary layer is renewed by the
 flow past the bubble, on the time it takes to pass it, not by diffusion;
 `settled` from `sherwood.py`, and `wake.py` for the nearly stagnant liquid
 behind the bubble, tell whether that still holds.
+
+## Sc = 4 results (Frontier, October 2026)
+
+### Runs
+
+All six runs reached t = 30 (answinter26/Sc4-pid-prod on Orion). The four
+coarser runs took two 2 h batch jobs and part of a 24 h extended job on
+October 1. 0.444x and 0.296x started in that extended job, until an Orion
+outage on the night of October 1-2 killed both (0.296x with a bus error,
+while its code was mapped from Lustre; submit-bundle-frontier.sh now runs
+nekRS from the nodes' NVMe). They restarted from their last checkpoints
+before the outage (t = 13 and 9) in a 12 h extended job and 2 h batch jobs
+and finished on October 4. The study used about 2,740 node-hours of fus167:
+about 300 in the extended job the outage left idle, and 106 in the bringup
+and tests. The run directories keep every job's checkpoints (`part<N>/`,
+330 GB in all), linked in time order by `finish-runs.sh`, as the Sc = 1 runs
+did before their animations.
+
+### Sherwood number
+
+Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
+`sherwood.py`; settled as for Sc = 1:
+
+| Run    | t = 5-10     | t = 10-15    | t = 10-30     | Sh_sink, t = 10-30 | settled |
+|--------|--------------|--------------|---------------|--------------------|---------|
+| 2.25x  | 20.87 ± 0.16 | 19.48 ± 0.22 | 18.85 ± 0.15  | 12.44              | -       |
+| 1.5x   | 28.11 ± 0.07 | 28.24 ± 0.10 | 29.01 ± 0.15  | 20.97              | -       |
+| 1x     | 32.07 ± 0.05 | 31.89 ± 0.04 | 32.07 ± 0.03  | 22.47              | 19      |
+| 0.667x | 33.46 ± 0.15 | 33.69 ± 0.02 | 33.77 ± 0.02  | 23.08              | 24      |
+| 0.444x | 33.12 ± 0.07 | 33.26 ± 0.02 | 33.25 ± 0.01  | 22.46              | 6       |
+| 0.296x | 33.10 ± 0.04 | 33.15 ± 0.01 | 33.15 ± 0.003 | 22.25              | 6       |
+
+Sh rises steeply up to 0.667x, which overshoots the finest value by 1.8%, and
+converges from above. Over t = 10-30, without the unresolved 2.25x mesh as
+for Sc = 1, the GCI (p = 2, F_s = 1.25) is 0.30% between 0.444x and 0.296x,
+with observed orders of 1.4, 3.0 and 4.0 for the three triplets. The figures
+and the GCI table are made by 2026-11-nek-cst/data/mesh_sensitivity_sc4_pid.py
+in UCBHEAT/papers. Sh is steady from t = 6 on the two finest meshes, while on
+1x and 0.667x it creeps up with the gas loss as at Sc = 1. The t = 10-15
+averages are within 0.01% of the t = 10-30 means on 0.444x and 0.296x (0.2%
+on 0.667x, 0.6% on 1x), so the Sc = 1 finding that a run to t = 15 would do
+holds at Sc = 4 too. No bubble drifts sideways (lateral speed below 4e-5,
+`path.py`). At the Reynolds number of the simulated rise (Re = 265, from the
+0.296x rise speed and d_eq), Feng and Michaelides (2001) give 36.0 and the
+potential flow value is 36.7, 8% and 10% above the converged Sh; Frossling
+gives 16.3.
+
+### Against Sc = 1
+
+c is passive, so each run's bubble moves as in the Sc = 1 run on the same
+mesh: the rise Reynolds number (202, 239, 248, 260, 263 and, on 0.296x, 265)
+and the gas loss (-12.3, -6.5, -3.6, -2.3, -1.5 and -0.9%, of which the psi
+snap removed 9.4, 4.3, 2.0, 1.0, 0.5 and 0.3%) agree with Sc = 1: the rise
+speeds differ by at most 0.2% (on 2.25x and 1.5x, where the round-off of
+another machine and partition grows the most). The ratio of the two studies' Sh on each
+mesh therefore isolates the Sc dependence (over t = 10-30, printed by
+mesh_sensitivity_sc4_pid.py):
+
+| Run    | Sh, Sc = 1 | Sh, Sc = 4 | ratio | exponent n in Sh ~ Sc^n |
+|--------|------------|------------|-------|-------------------------|
+| 1.5x   | 14.52      | 29.00      | 1.998 | 0.499                   |
+| 1x     | 15.94      | 32.07      | 2.012 | 0.504                   |
+| 0.667x | 16.96      | 33.77      | 1.991 | 0.497                   |
+| 0.444x | 17.20      | 33.25      | 1.933 | 0.476                   |
+
+Sh ~ Sc^0.5, as for a thin concentration boundary layer on a mobile interface
+(potential flow). On 0.444x the exponent is lower because there Sc = 1 is
+still converging upwards (Richardson extrapolation: 17.39) while Sc = 4 has
+converged from above (33.15 on 0.296x): with those two, n = 0.465.
+
+### Shape and wake
+
+`wake.py` at t = 30 gives the Sc = 1 aspect ratios on the shared meshes
+(1.20, 1.65, 1.74, 1.93 and 1.88) and 1.85 on 0.296x: like Sh, the shape
+peaks at 0.667x and converges from above. On 0.296x the flow separates
+behind the bubble. Liquid on the axis moves up towards it, at up to 0.006
+times the inflow speed, up to 0.125 D below its rear: a small standing eddy,
+where on 0.444x the liquid still moved away at 0.005-0.008 times the inflow
+speed. The eddy's liquid renews by diffusion, so at Sc = 20 it may slow the
+settling of Sh on the finest mesh. Each run directory also has post.csv and
+animation.mp4 (`submit-animate-frontier.sh`, labelled "Sc = 4, ...").
+
+### Concentration field and reproducibility
+
+The concentration over- and undershoots shrink with refinement (c in
+[-0.10, 1.11] on 2.25x, in [-0.03, 1.00] on 0.296x). The far-field deficit
+stays bounded (at most 5e-6, on 0.296x), and the far-field reset removes
+less than 4e-5 of the bubble.
+
+Runs on the same number of nodes reproduce bit for bit (production against
+the bringup, over the bringup's t = 0 to 1.3-7.9). On a different number of
+nodes, i.e. another partition of the mesh, Sh, the rise velocity, the gas
+volume and u_max differ by at most 2e-5 (0.296x, 56 against 46 nodes) and
+7e-4 (0.444x, 8 against 10 nodes).
+
+## Sc = 20 (Frontier, October 2026)
+
+The same six meshes at Sc = 20 (Pe = 4628), where the concentration boundary
+layer is thinner than at Sc = 4 by about 5^1/2 = 2.2, run to t = 15: on the
+finest meshes of the Sc = 1 and 4 studies, Sh averaged over t = 10-15 is
+within 0.03% of its t = 10-30 mean (see Run length). The runs come from
+
+```
+SC=20 END_TIME=15 PYTHON=~/answinter26/tools/venv/bin/python GMSH2NEK=~/Nek5000/bin/gmsh2nek \
+    ./setup-runs.sh ~/answinter26/Sc20-pid-prod 2.25x:12:1e-4:0.5 1.5x:18:1e-4:0.5 \
+    1x:27:1e-4:0.5 0.667x:40:5e-5:1 0.444x:60:2.5e-5:1 0.296x:90:1.25e-5:1
+```
+
+(the meshes are byte for byte those of Sc = 4) and run as Sc = 4 did:
+0.296x and 0.444x in a 24 h extended job on 56 and 8 nodes, with chains of
+2 h batch jobs on the same node counts queued for them, and the four coarser
+runs in a chain of 2 h batch jobs on 8 nodes. As Sh had not converged on
+0.296x, a seventh mesh followed, 0.198x (Nk = 135: 53^3 fine cells of
+half-width 0.785, 83x199x83 = 1,370,911 elements, 470M GLL points,
+eps = 0.0063492, dt = 6.25e-6; the mesh takes 6 min and 11.5 GB):
+
+```
+SC=20 SPECIES="100 1150" END_TIME=15 MAX_ELEMENTS=2000000 MAX_MEMORY_GB=48 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Sc20-pid-prod 0.198x:135:6.25e-6:1
+```
+
+It carries the Sc = 100 and 1150 species of the Sc = 100 study from t = 0
+(see there; its Sc = 20 species c is unaffected by them to round-off).
+
+### Runs
+
+All six runs reached t = 15 (answinter26/Sc20-pid-prod on Orion), between
+October 5 and 8, mostly waiting in Frontier's queue. After the first 2 h jobs,
+a backlog from projects ahead of fus167 (association priority 502 against
+500, worth about 3 days of queue age) held each later job for 10-32 h, until
+the 24 h extended job ran 0.444x and 0.296x from t = 6.3 and 5.3 to the end in
+10.5 h. Their batch chains were held while it was due, since a batch job
+running one of them when it started would have made it skip that run. One
+precompilation segfaulted in OCCA, which cost 0.667x one 2 h job (a race
+between the kernel-compile threads; submit-bundle-frontier.sh now retries a
+failed precompilation). The study used 1,094 node-hours of fus167. The run
+directories keep every job's checkpoints (`part<N>/`), linked in time order
+by `finish-runs.sh`.
+
+0.198x ran October 13-15 in three 24 h extended jobs on 64 nodes (t = 0 to
+6.57, 6.57 to 13.13 and 13.13 to 15, each next one starting within minutes
+or hours of the last), at 0.081 s per step with its two further species
+(the model of Running on Frontier predicts 0.072 without them, and they add
+12%), 3,503 node-hours in all. Its directory keeps all 17 checkpoints,
+383 GB.
+
+### Sherwood number
+
+Sh (± the standard error of 1 time unit batch means) and Sh_sink, with
+`sherwood.py`; settled as for Sc = 1:
+
+| Run    | t = 5-10      | t = 10-15     | Sh_sink, t = 10-15 | settled |
+|--------|---------------|---------------|--------------------|---------|
+| 2.25x  | 73.36 ± 0.95  | 63.64 ± 1.39  | 40.97              | -       |
+| 1.5x   | 89.52 ± 0.44  | 90.10 ± 0.62  | 65.22              | -       |
+| 1x     | 101.35 ± 0.27 | 100.42 ± 0.22 | 70.35              | -       |
+| 0.667x | 98.14 ± 0.98  | 99.82 ± 0.13  | 68.24              | 9       |
+| 0.444x | 85.59 ± 0.51  | 86.80 ± 0.08  | 58.65              | 9       |
+| 0.296x | 77.76 ± 0.19  | 78.21 ± 0.03  | 52.51              | 7       |
+| 0.198x | 74.82 ± 0.09  | 75.01 ± 0.03  | 50.20              | 6       |
+
+Sh rises up to 1x and 0.667x (100.4 and 99.8) and then falls, by 13% on
+0.444x, 10% on 0.296x and 4.1% on 0.198x. The concentration boundary layer,
+about Pe^-1/2 = 0.015 D thick, spans 3.5 GLL spacings on 0.198x, 2.3 on
+0.296x and less than one on 1x and coarser, where the scheme overestimates
+the transfer. The three finest meshes converge at an observed order of 2.4,
+close to the assumed p = 2 (the coarser triplets give 7.1, 7.4 and 1.0,
+outside the asymptotic range): the GCI between 0.296x and 0.198x is 4.3%
+(p = 2, F_s = 1.25; 3.2% with the observed order), down from 11% between
+0.444x and 0.296x, and Richardson extrapolation gives Sh = 72.5 (p = 2) or
+73.1 (p = 2.4). The figures and the GCI table are made by
+2026-11-nek-cst/data/mesh_sensitivity_sc20_pid.py in UCBHEAT/papers. On the
+finest meshes Sh is steady from t = 6-9: its t = 5-10 and 10-15 averages
+differ by 0.3% on 0.198x, 0.6% on 0.296x and 1.4-1.7% on 0.444x and 0.667x.
+At the Reynolds number of the simulated rise (Re = 264, from the 0.198x rise
+speed and d_eq over t = 10-15, as on 0.296x), the 0.198x value is 3.5%
+below Feng and Michaelides (2001, 77.7) and 8.5% below potential flow
+(82.0).
+
+### Against Sc = 4 and Sc = 1
+
+c is passive, so each run's bubble moves as in the Sc = 4 run on the same
+mesh: over t = 10-15 their mean rise speeds agree within 0.04% and their gas
+volumes within 1.2e-5. The ratio of the studies' Sh on each mesh (t = 10-15,
+printed by mesh_sensitivity_sc20_pid.py) gives the apparent exponent n of
+Sh ~ Sc^n:
+
+| Run    | Sh, Sc = 4 | Sh, Sc = 20 | n, Sc = 4-20 | n, Sc = 1-20 |
+|--------|------------|-------------|--------------|--------------|
+| 1.5x   | 28.24      | 90.09       | 0.721        | 0.615        |
+| 1x     | 31.89      | 100.43      | 0.713        | 0.615        |
+| 0.667x | 33.69      | 99.84       | 0.675        | 0.592        |
+| 0.444x | 33.26      | 86.80       | 0.596        | 0.540        |
+| 0.296x | 33.15      | 78.21       | 0.533        | -            |
+
+Between Sc = 1 and 4 the exponent is 0.48-0.50 on every mesh; between 4 and
+20 it falls with refinement towards it, from 0.72 on 1.5x to 0.53 on 0.296x,
+so the excess on the coarser meshes is numerical. Against the converged
+Sc = 4 value (33.15 on 0.296x), Sh = 75.01 on 0.198x gives n = 0.507, and
+the extrapolated Sc = 20 values n = 0.486-0.492: Sh ~ Sc^0.5 from Sc = 1 to
+20.
+
+### Concentration field
+
+c over t = 10-15 lies in [-0.18, 1.15] on 2.25x, [-0.04, 1.30] on 1x (the
+largest overshoot), [-0.06, 1.08] on 0.296x and [-0.03, 1.02] on 0.198x.
+The far-field deficit stays below 4e-6, and no bubble drifts sideways
+(`path.py`: lateral path below 0.001 D). Each run directory also has post.csv and animation.mp4
+(`submit-animate-frontier.sh`, labelled "Sc = 20, ..."), whose charts span
+Sh up to 120 and MTC up to 0.03 and end at t = 15.
+
+## Sc = 100, with Sc = 20 and 1150 (Frontier, October 2026, in progress)
+
+At Sc = 100 (Pe = 23,140) the concentration boundary layer, about
+Pe^-1/2 = 0.0066 D thick, is thinner than at Sc = 20 by 5^1/2 = 2.24, almost
+exactly two refinement levels (1.5^2 = 2.25). So each mesh resolves it at
+Sc = 100 as the mesh two levels coarser does at Sc = 20:
+
+| Sc = 100 mesh | GLL spacings across Pe^-1/2 | Sc = 20 mesh with the same | Sh there at Sc = 20 |
+|---------------|-----------------------------|----------------------------|---------------------|
+| 0.296x        | 1.03                        | 0.667x                     | 99.82               |
+| 0.198x        | 1.55                        | 0.444x                     | 86.80               |
+| 0.132x        | 2.32                        | 0.296x                     | 78.21               |
+| 0.088x        | 3.50                        | 0.198x                     | (running)           |
+
+The study skips 0.296x and coarser, where the Sc = 20 meshes of the same
+resolution overestimate Sh by 28% and more, and uses 0.198x (Nk = 135),
+0.132x (Nk = 202) and 0.088x (Nk = 304). Run from rest to t = 15 with the
+whole mesh refined, as before, these would take about 100k node-hours
+(0.132x: 4.2M elements at dt = 3.125e-6; 0.088x: 13.9M at 1.5625e-6).
+Instead:
+- c is passive, so further species ride on the same flow at little cost
+  (`SPECIES`, scalars named c<Sc>, output in `data-c<Sc>.csv`, read by
+  `sherwood.py --species c<Sc>`; 12% more per step for two). The 0.198x run
+  of the Sc = 20 study carries Sc = 100 and Sc = 1150 (FLiBe's) from t = 0,
+  so its three species develop exactly as in the earlier studies: over
+  t = 10-15 it gives Sh = 213.13 ± 0.31 at Sc = 100 and 1899 ± 5 at
+  Sc = 1150 (settled from t = 11; apparent exponents 0.65 and 0.80 against
+  its Sc = 20 Sh, both unconverged).
+- 0.132x and 0.088x start at t = 10 from that run (`FROM`, `START`),
+  interpolated onto their meshes with all three species continuing, and run
+  about 3 time units.
+- They refine only the fine cube around the bubble and size the rest of the
+  mesh as 0.198x (`Nk_outer` = 135): 2,696,987 and 5,905,466 elements
+  (0.088x takes 54 min and 51 GB to mesh, `MESH_ONLY`).
+
+Sc = 20 thereby also gets 0.132x and 0.088x. Sc = 1150 (boundary layer
+0.0019 D, 1.0 GLL spacing on 0.088x, like Sc = 20 on 0.667x) cannot converge
+on these meshes; its trend shows how far the study's compute is from it.
+
+```
+SC=20 SPECIES="100 1150" END_TIME=13 FROM=~/answinter26/Sc20-pid-prod/0.198x START=10 \
+    MAX_ELEMENTS=7000000 MAX_MEMORY_GB=96 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Sc100-pid-prod 0.132x:202:3.125e-6:1:135 0.088x:304:1.5625e-6:1:135
+```
+
+Estimated cost (the step-cost model of Running on Frontier, +12% for the two
+species): 0.198x about 3,500 node-hours (54 h on 64 nodes, to t = 15), and
+for 3 time units on 64 nodes 0.132x 33 h, 2,100 node-hours, and 0.088x
+121 h, 7,800 node-hours.
+
+### Results so far
+
+| Species  | 0.198x, t = 10-15 (from t = 0) | 0.198x, t = 11-13 | 0.132x, t = 11-13 | change |
+|----------|--------------------------------|-------------------|-------------------|--------|
+| Sc = 20  | 75.01 ± 0.03                   | 75.02             | 73.99 ± 0.01      | -1.4%  |
+| Sc = 100 | 213.13 ± 0.31                  | 213.22            | 188.72 ± 0.06     | -11.5% |
+| Sc = 1150| 1899 ± 5                       | 1901              | 1466 ± 2          | -22.9% |
+
+0.132x (October 15-16, five 6 h batch jobs on 92 nodes, 0.0996 s per step,
+2,489 node-hours) settled within half a time unit of its start from 0.198x:
+every half-unit mean of Sh from t = 10.5 to 13 is within 0.1% of the t = 11-13
+mean for all three species, and its rise speed is within 0.07% of 0.198x's.
+For Sc = 20 the change from 0.198x to 0.132x continues the convergence of the
+uniformly refined meshes (-9.9% and -4.1% before it): the observed order of
+the triplet 0.296x, 0.198x, 0.132x is 2.8, the GCI between 0.198x and 0.132x
+1.4% (p = 2; 0.85% with the observed order) and Richardson extrapolation
+73.2-73.5 (0.132x refines only the fine cube, and its window is t = 11-13,
+over which 0.198x's mean is within 0.02% of its t = 10-15 one). Sc = 100 falls
+by 11.5%, as much as Sc = 20 did between the meshes with the same boundary
+layer resolution (0.444x to 0.296x, -9.9%), and Sc = 1150 is far from
+converged. The apparent exponents on 0.132x are 0.58 (Sc = 20 to 100) and
+0.74 (20 to 1150).
+
+### Starting from a developed flow
+
+Tests on the Sc = 20 meshes (answinter26/restart-tests, debug QOS) chose
+how the finer runs start, against the continuous Sc = 20 runs:
+- A species started afresh at t = 10 reads high for several time units, while
+  the slowly renewed liquid behind the bubble adjusts. With c = psi, as at
+  t = 0 ([CASEDATA] speciesStart), Sh on 0.444x was 2.7, 1.7 and 1.2% high
+  over the half units from t = 10.5 (and still 2.3% at t = 11-11.5 on 0.296x
+  started from 0.444x). Started from another species with its deficit
+  scaled by (Sc_from/Sc)^1/2 ([CASEDATA] speciesStartSc; Sc = 20 from the
+  Sc = 4 run, the same factor of 5 as 20 to 100), it was 2.4, 1.2, 0.8 and
+  0.6% high. A species continued from its own run matched it within 0.01%.
+- A species continued across an interpolation onto a finer mesh (0.444x
+  onto 0.296x) matched the continuous run's Sh within 0.6% from the first
+  quarter time unit on (within 0.3% after it). The flow takes longer: the
+  rise velocity starts 0.66% low and swings to +0.34% and -0.20% over the
+  first 1.5 time units, and the bubble keeps the coarser mesh's gas volume
+  (+0.24%, its interface profile is wider).
+- nekRS interpolates a restart with Nek5000's gfldr, which reads passive
+  scalars only into the ldimt - 1 slots after a temperature slot, and nekRS
+  sizes its Nek5000 interface with ldimt = the number of scalars: the last
+  scalar of these files (no temperature) came out as 0. submit-bundle-
+  frontier.sh therefore raises ldimt by one in the case's
+  .cache/nek5000/SIZE for a run whose startFrom has +int (nekRS keeps a SIZE
+  with a larger ldimt).
+- With two further species, the run's own species c matched a run without
+  them within 1.4e-5 in Sh over 1.8 time units (round-off).
