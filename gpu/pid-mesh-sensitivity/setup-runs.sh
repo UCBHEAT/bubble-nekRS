@@ -28,6 +28,13 @@
 # SPECIES="20 1150" adds species at these Schmidt numbers to every run, as
 # scalars c20 and c1150 next to c, on the same flow (see bubble.udf; output
 # in data-c20.csv and data-c1150.csv).
+# RE and WE replace case.hpp's Reynolds and Weber numbers (default: the
+# 3.12 mm bubble's, one capillary length, Eo = 1), e.g. RE=654.6 WE=10.67 for
+# a 6.23 mm bubble (two capillary lengths, Eo = 4; Fr stays 1.633 with the
+# velocity scale of cpu/common/calc_dimensionless_numbers.py). R_IFACE
+# (default 0.75) is the radius of the interface zone the fine cube covers
+# and R_WAKE (default 0.75) that of the wake column, for a more deformed
+# bubble.
 # MESH_ONLY=1 only makes the meshes (e.g. while FROM's checkpoint is still to
 # come): a later run of the script reuses a run directory's mesh.
 # FROM=<run dir> and START=<time> start every run at t = START from FROM's
@@ -57,6 +64,10 @@ fi
 
 : ${SC:=1}
 : ${END_TIME:=30}
+: ${RE:=}
+: ${WE:=}
+: ${R_IFACE:=0.75}
+: ${R_WAKE:=0.75}
 : ${MAX_ELEMENTS:=1000000}
 : ${MAX_MEMORY_GB:=8}
 : ${SPECIES:=}
@@ -150,18 +161,18 @@ for spec in "${specs[@]}"; do
     mkdir -p "$dir"
     # h = 4/Nk, the mesh size targets (generate_mesh.py defaults times h/0.2,
     # or (4/Nk_outer)/0.2 outside the fine cube) and eps = 1.5 h/N.
-    # The fine cube has n = 2 ceil(0.76/h) + 1 cells (0.76 = the generator's
-    # r_iface_out + iface_margin), half-width n h/2.
-    read -r h h_wake_cross h_wake_near h_wake_far h_far eps fine_half <<< "$(awk -v nk="$nk" -v outer="$outer" 'BEGIN {
+    # The fine cube has n = 2 ceil((R_IFACE + 0.01)/h) + 1 cells (the
+    # generator's r_iface_out + iface_margin), half-width n h/2.
+    read -r h h_wake_cross h_wake_near h_wake_far h_far eps fine_half <<< "$(awk -v nk="$nk" -v outer="$outer" -v cover="$R_IFACE" 'BEGIN {
         h = 4/nk; s = (4/outer)/0.2
-        c = 0.76/h - 1e-9; n = int(c); if (c > n) n++; n = 2*n + 1
+        c = (cover + 0.01)/h - 1e-9; n = int(c); if (c > n) n++; n = 2*n + 1
         printf "%.17g %.17g %.17g %.17g %.17g %.8g %.17g\n", h, 0.3*s, 0.25*s, 0.5*s, 1.25*s, 1.5*h/7, n*h/2 }')"
     if [ -e "$dir/bubble.re2" ] && [ -e "$dir/bubble.plan.json" ]; then
         echo "$dir: reusing its mesh"
     else
         MESH_DIR=$dir "$src/../pid-centering-3D/mesh" --name bubble --h_iface "$h" \
             --h_wake_cross "$h_wake_cross" --h_wake_near "$h_wake_near" --h_wake_far "$h_wake_far" \
-            --h_far "$h_far" --fine_half "$fine_half" --rho_ratio 3691.4 --max_elements "$MAX_ELEMENTS" --max_memory_gb "$MAX_MEMORY_GB" \
+            --h_far "$h_far" --fine_half "$fine_half" --r_iface_out "$R_IFACE" --r_wake "$R_WAKE" --rho_ratio 3691.4 --max_elements "$MAX_ELEMENTS" --max_memory_gb "$MAX_MEMORY_GB" \
             > "$dir/mesh.log" 2>&1 \
             || { tail -20 "$dir/mesh.log"; echo "$dir: meshing failed (see $dir/mesh.log)"; exit 1; }
     fi
@@ -171,6 +182,9 @@ for spec in "${specs[@]}"; do
     fi
     cp "$src"/{bubble.udf,bubble.oudf,bubble.usr,customhooks.hpp,util.hpp} "$dir"/
     sed -e "s/^static double Sc = .*/static double Sc = $SC;/" -e "s/(Sc=[0-9.]*)/(Sc=$SC)/" \
+        ${RE:+-e "s/^static double Re = .*/static double Re = $RE; \/\/ setup-runs.sh RE/"} \
+        ${WE:+-e "s/^static double We = .*/static double We = $WE; \/\/ setup-runs.sh WE/"} \
+        ${RE:+-e "s|/3.12mm/0.29 m/s|, Re and We set by setup-runs.sh|"} ${WE:+-e "s|/3.12mm/0.29 m/s|, Re and We set by setup-runs.sh|"} \
         "$src/case.hpp" > "$dir/case.hpp"
     sed -e "s/^dt = .*/dt = $dt/" -e "s/^checkpointInterval = .*/checkpointInterval = $ckpt/" \
         -e "s/^endTime = .*/endTime = $END_TIME/" \
