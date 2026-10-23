@@ -787,15 +787,19 @@ and on the gas side of the interface band, while the liquid stays below
 (Sc = 1 study, 1x), each in its own units (D and 1.633 (g D)^1/2, i.e.
 10.9 and 15.4 ms per time unit):
 
-| t = 5-15                       | Eo = 1, 3.12 mm   | Eo = 4, 6.23 mm |
-|--------------------------------|-------------------|-----------------|
-| Re (rise speed, d_eq)          | 247               | 448             |
-| Sh                             | 15.90             | 19.63 ± 0.45    |
-| Sh, rms of the 0.1 samples     | 0.04              | 1.86            |
-| Interface area (sphere: pi)    | 3.345             | 3.807           |
-| Area, rms                      | 0.17%             | 3.2%            |
-| Rise speed, rms                | 1.2% (slow drift) | 5.3%            |
-| Lateral speed, largest         | 8e-5              | 0.019           |
+| t = 5-15                    | Eo = 1, 3.12 mm   | Eo = 4, 6.23 mm  |
+|-----------------------------|-------------------|------------------|
+| Re (rise speed, d_eq)       | 247               | 448              |
+| Sh                          | 15.90             | 19.63 ± 0.45     |
+| Sh, rms of the 0.1 samples  | 0.04              | 1.86             |
+| Interface area (sphere: pi) | 3.345             | 3.807            |
+| Area, rms                   | 0.17%             | 3.2%             |
+| Aspect ratio (range)*       | 1.76 (1.70-1.78)  | 2.80 (2.32-3.15) |
+| Rise speed, rms             | 1.2% (slow drift) | 5.3%             |
+| Lateral speed, largest      | 8e-5              | 0.019            |
+
+\* From `post.csv` (every 0.5); for Eo = 1 that of the Sc = 4 run on 1x,
+whose bubble moves as the Sc = 1 run's.
 
 - The Eo = 4 bubble oscillates in shape: its area swings from -6% to +5%
   about a mean 21% above a sphere's, with maxima 2.6-3.3 time units apart
