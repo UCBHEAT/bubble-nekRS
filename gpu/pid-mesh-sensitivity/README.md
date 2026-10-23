@@ -750,3 +750,65 @@ how the finer runs start, against the continuous Sc = 20 runs:
   with a larger ldimt).
 - With two further species, the run's own species c matched a run without
   them within 1.4e-5 in Sh over 1.8 time units (round-off).
+
+## Bo = 4 pilot: a 6.23 mm bubble (Frontier, October 2026)
+
+The bubble of the studies above, one capillary length (3.12 mm, Eo = 1),
+rises with an almost constant shape. To see whether a larger bubble
+oscillates, a pilot ran a bubble of two capillary lengths (6.23 mm, Eo = 4:
+Re = 654.6, We = 10.67, Fr = 1.633 with the same velocity scale; Sc = 1)
+from rest to t = 15 at the 1x resolution, with a larger fine cube and wake
+column for the more deformed bubble (28,750 elements):
+
+```
+RE=654.6 WE=10.67 R_IFACE=1.0 R_WAKE=1.0 END_TIME=15 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Bo4-pid-pilot Nk27:27:1e-4:0.5
+```
+
+It ran in two debug jobs on 16 nodes (0.07 s per step), plus two failed
+restarts: 55 node-hours in all.
+
+**Stability.** Restarted from t = 9.524, the run blew up at t = 9.88 (dt =
+1e-4) and again at t = 9.90 (dt = 5e-5): |u| at a face of the central
+element, in the gas core, grew from ~3 to 10, then about doubled every two
+steps, alternating from step to step, until the CFL check stopped the run.
+That points at the explicitly extrapolated pressure of the rho splitting
+(rho0 = the gas density, second-order extrapolation by default). With
+first-order extrapolation (`[CASEDATA] pressureExtOrder = 1`) from the same
+checkpoint, at dt = 1e-4, the run went on to t = 15 with |u| at most 4.1.
+Over t = 9.5-9.8, before the blow-up, its Sh, rise speed and interface area
+were within 0.5%, 0.5% and 0.05% of the second-order run's at dt = 5e-5. A
+Bo = 4 run should use first-order extrapolation from the start. Its largest
+velocities, 2-4 throughout (3-6 times the rise speed), are in the gas core
+and on the gas side of the interface band, while the liquid stays below
+0.95.
+
+**Results**, t = 5-15, against the Eo = 1 bubble at the same resolution
+(Sc = 1 study, 1x), each in its own units (D and 1.633 (g D)^1/2, i.e.
+10.9 and 15.4 ms per time unit):
+
+| t = 5-15                       | Eo = 1, 3.12 mm   | Eo = 4, 6.23 mm |
+|--------------------------------|-------------------|-----------------|
+| Re (rise speed, d_eq)          | 247               | 448             |
+| Sh                             | 15.90             | 19.63 ± 0.45    |
+| Sh, rms of the 0.1 samples     | 0.04              | 1.86            |
+| Interface area (sphere: pi)    | 3.345             | 3.807           |
+| Area, rms                      | 0.17%             | 3.2%            |
+| Rise speed, rms                | 1.2% (slow drift) | 5.3%            |
+| Lateral speed, largest         | 8e-5              | 0.019           |
+
+- The Eo = 4 bubble oscillates in shape: its area swings from -6% to +5%
+  about a mean 21% above a sphere's, with maxima 2.6-3.3 time units apart
+  (mean 2.9, i.e. 45 ms; the l = 2 period of a spherical bubble of this
+  size, after Lamb, is 2.1). It rises slower when flatter (correlation of
+  rise speed and area -0.77).
+- Its path becomes unstable: the lab-frame lateral speed grows from noise
+  at 1.3-1.5 per time unit from t = 5 and from t = 10 fluctuates about 1% of
+  the rise speed (at most 2.7%). The lateral offset stays below 0.01 D up to
+  t = 15, so no zigzag has developed yet. The PID controller would not
+  prevent one: it moves the frame with the bubble, and `path.py` reads the
+  bubble's lab-frame velocity.
+- At this resolution the Eo = 1 Sh is about 8% below its Richardson
+  extrapolation (17.39), and the Eo = 4 boundary layer is thinner (Pe = 448
+  against 247), so 19.6 is a coarse-mesh value. A Bo = 4 study would need the
+  finer meshes and, for the path, longer runs.
