@@ -296,10 +296,13 @@ and the rise Reynolds number over a window, and reports when Sh settled
 gas volume lost. `path.py <runs>` integrates the lab-frame lateral velocity
 into the bubble's sideways path, the counterpart of gpu/mesh-sensitivity's
 drift.py: when it exceeds 0.01, 0.05 and 0.25 D, and the growth rate of the
-lateral speed. `wake.py <checkpoint> [<first checkpoint of its job>]` reads a
-checkpoint directly (no ParaView) and prints the bubble's aspect ratio and
-the liquid velocity on the axis behind it, which shows whether a standing
-eddy has formed. `figures.py` draws the two figures above (doc/), and
+lateral speed. `sc_exponent.py --species c<Sc> <runs>` gives the apparent
+exponent n in Sh ~ Sc^n from the ratio of a run's c and further species,
+which see the same flow. `wake.py <checkpoint> [<first checkpoint of its
+job>]` reads a checkpoint directly (no ParaView) and prints the bubble's
+aspect ratio and the liquid velocity on the axis behind it, which shows
+whether a standing eddy has formed. `figures.py` draws the two figures above
+(doc/), and
 `submit-animate.sh` with `animate.py` (gpu/mesh-sensitivity's, adapted)
 makes each run's animation.mp4 and post.csv, the bubble's volume, centroid,
 velocities, interface area and extents at every checkpoint, on a Polaris GPU
@@ -394,7 +397,7 @@ The rise velocity settles more slowly than Sh: on 0.444x it is 1.121 at t = 8,
 1.131 at 10, 1.139 at 14 and 1.141 from t = 18 on. d_eq > 1 on the coarse
 meshes because the gas volume, the integral of 1 - psi, exceeds the sharp
 volume by (4/3) pi^3 R eps^2 for the CLS profile (0.105, 20%, on 2.25x at
-t = 0, and 0.4% on 0.444x).
+t = 0, and 0.8% on 0.444x).
 
 No standing eddy forms behind the bubble on the resolved meshes: on 1.5x to
 0.444x the liquid on the axis below it moves away from it everywhere (on
@@ -741,6 +744,24 @@ how the finer runs start, against the continuous Sc = 20 runs:
   rise velocity starts 0.66% low and swings to +0.34% and -0.20% over the
   first 1.5 time units, and the bubble keeps the coarser mesh's gas volume
   (+0.24%, its interface profile is wider).
+- An interpolated start also brings the coarser mesh's psi profile, wider
+  than the new mesh's interface width eps, while lvlSet builds the delta
+  function with the new eps. On Nk40 and Nk60 started from Nk27 (the Bo = 4,
+  Sc = 4 pilot below), the interface area read 16% high and the gas core
+  blew up within 100 steps, with the surface tension spread into the gas.
+  `[CASEDATA] clsFromTls = <start time>`, which setup-runs.sh now sets for
+  an interpolated start, rebuilds psi from the TLS at the new width, as at
+  t = 0, and both runs then went on stably. Their gas volume reads 2.4 and
+  3.6% lower after the rebuild without any gas lost: the integral of 1 - psi
+  exceeds the sharp volume by pi^2 eps^2/3 times the integral of the mean
+  curvature over the interface ((4/3) pi^3 R eps^2 for a sphere), which for
+  spheroids of the bubble's aspect ratios, 2.3-2.8, predicts drops of
+  0.0125-0.0131 and 0.0183-0.0192 against the 0.0126 and 0.0190 observed.
+  Likewise the interface area exceeds the sharp area by (4/3) pi^3 eps^2,
+  for any closed interface (Gauss-Bonnet); both match every Sc = 4 run's
+  first sample (t = 0.1) within 0.06%. Sh divides by this area, so it reads
+  low by that excess, at Eo = 1 2.9% on 1.5x, 1.3% on 1x, 0.6% on 0.667x and
+  0.25% on 0.444x: a part of its rise with refinement.
 - nekRS interpolates a restart with Nek5000's gfldr, which reads passive
   scalars only into the ldimt - 1 slots after a temperature slot, and nekRS
   sizes its Nek5000 interface with ldimt = the number of scalars: the last
@@ -816,3 +837,77 @@ whose bubble moves as the Sc = 1 run's.
   extrapolation (17.39), and the Eo = 4 boundary layer is thinner (Pe = 448
   against 247), so 19.6 is a coarse-mesh value. A Bo = 4 study would need the
   finer meshes and, for the path, longer runs.
+
+### Sc = 4: the Schmidt number exponent
+
+To see how Sh scales with Sc for this bubble, the pilot's flow at t = 15 ran
+on with c (Sc = 1) continuing and a second species at Sc = 4, c4, started
+afresh from c with its deficit halved (`speciesStart`). It ran on the pilot's
+mesh (Nk27) and on two finer ones, Nk40 and Nk60 (80,850 and 212,064
+elements, the fine cube as 0.667x and 0.444x), which start from it
+interpolated with psi rebuilt (`clsFromTls`, see Starting from a developed
+flow):
+
+```
+SC=1 SPECIES="4" RE=654.6 WE=10.67 R_IFACE=1.0 R_WAKE=1.0 END_TIME=25 \
+    FROM=~/answinter26/Bo4-pid-pilot/Nk27 START=15 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Bo4-sc4-pilot Nk27:27:1e-4:0.5 \
+    Nk40:40:5e-5:0.5 Nk60:60:2.5e-5:0.5
+```
+
+with `pressureExtOrder = 1` and `traceVelocity = 8` added to each
+[CASEDATA]. One 2 h debug job ran the three side by side on 16, 32 and 64
+nodes (0.074, 0.057 and 0.049 s per step), Nk27 from t = 16, where a first
+try without clsFromTls had left it: about 230 node-hours of cfd205 in all,
+as nfu106 no longer takes jobs. Nk40 reached t = 20.8 and Nk60 t = 18.4.
+Nk27 blew up at t = 21.66 (below), so its data end at t = 21.5.
+
+c and c4 see the same flow, so the ratio of their Sh cancels most of the
+shape oscillation, which moves each by about 10%. `sc_exponent.py` gives n in
+Sh ~ Sc^n from the window means, ± the standard error of its 1 time unit
+batch values:
+
+| Run  | t         | Sh, Sc = 1   | Sh, Sc = 4   | n             | c4 (c) above 1 | area | Re  |
+|------|-----------|--------------|--------------|---------------|----------------|------|-----|
+| Nk27 | 16.5-21.5 | 21.32 ± 0.44 | 54.43 ± 2.08 | 0.676 ± 0.015 | 23% (6.5%)     | 3.71 | 436 |
+| Nk40 | 16.5-20.5 | 21.47 ± 0.20 | 50.42 ± 0.26 | 0.616 ± 0.003 | 16% (1.1%)     | 4.09 | 443 |
+| Nk60 | 17-18.4   | 21.52        | 47.00        | 0.564*        | 8% (0%)        | 4.21 | 436 |
+
+The overshoot column is the mean c_max - 1 of c4 (of c in brackets); area
+and Re (rise speed, d_eq) come from `sherwood.py`. \* Still rising: 0.551,
+0.556 and 0.565 over the half units from t = 16.5, and 0.574 over t =
+18.2-18.4.
+
+- c4's Sh reads about 300 over the first step and twice its later value
+  over the first 0.1 time units. It then falls below that value over
+  t = 15.5-16 and recovers. n settles from about t = 16.5 on Nk27 and
+  t = 17.5 on Nk40, where it read 0.570, 0.586, 0.605 and 0.607 over the
+  half units from t = 15.5, then 0.61-0.63. On Nk60 n was still rising at
+  t = 18.4, and its bubble, flatter than Nk27's, was still adjusting from
+  the interpolated start (area 3.85 at t = 15, 4.25 at t = 17.5-18).
+- n falls with refinement because Sh(c4) does (54.4, 50.4 and 47.0), while
+  Sh(c) changes by less than 1%. The c4 boundary layer, about Pe^-1/2 =
+  0.024 D thick (Pe = Re Sc = 1760), spans 1.1, 1.7 and 2.5 GLL spacings on
+  the three meshes, and on Nk27 the interface band (eps = 0.032) is wider
+  than the layer. The Eo = 1 bubble's Sc = 20 boundary layer spans about as
+  many on 0.667x, 0.444x and 0.296x (1.0, 1.6 and 2.3). There the apparent
+  exponent between Sc = 4 and 20 was 0.675, 0.596 and 0.533, and 0.507 on
+  0.198x (3.5) against the converged Sc = 4 value, while Sc = 1 to 4 gave
+  0.48-0.50 on every mesh (see Against Sc = 4 and Sc = 1). The excess here
+  is most likely numerical too. These meshes bound n from above at about
+  0.57-0.58 (Nk60, not yet settled), and Sh ~ Sc^0.5, as for Eo = 1, is the
+  likely limit. A mesh with the c4 layer across 3.5 GLL spacings (Nk85-90,
+  about 0.3x) could confirm it.
+- The lateral speed grows on every mesh, and the two finer meshes agree: at
+  t = 18.4 it is 0.085 on Nk40 and 0.083 on Nk60, both bubbles having moved
+  0.15 D sideways since t = 15 in the same direction. On Nk40 it reached
+  0.17 by t = 20.5 (0.44 D sideways), growing more slowly after t = 19
+  (e-folding time about 2 before, 4 after). On Nk27 it grew faster, to 0.22
+  at t = 18.4 and 0.38 at t = 20.2, up to 70% of the rise speed: an oblique
+  path, 1.2 D sideways by t = 21.5.
+- Nk27's gas core then blew up. From t = 21.66, |u| exceeded 8 at psi =
+  0.004, 0.29 D from the centre, and grew smoothly, 1.3-1.8 times per 0.1
+  time units (not alternating as at t = 9.9). The area went from 3.54 to 5.6
+  by t = 22.1. Nk27's gas core had run as fast as Nk40's (mean u_max 4.4
+  and 4.6; Nk60 2.7). Its t = 22 checkpoint and the later rows are in
+  Nk27/failed-5779014/.

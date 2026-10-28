@@ -7,11 +7,12 @@ The PID controller keeps the bubble at the centre of the mesh by moving the
 frame, so a sideways drift of the bubble shows up in the lab-frame velocity
 rise_u, rise_w of data.csv (each row the mean over its interval) rather than
 in its position. The lab-frame lateral displacement is their integral from
-t = 0, in bubble diameters; like drift.py in gpu/mesh-sensitivity, this
-reports when it first exceeds 0.01, 0.05 and 0.25, the exponential growth
-rate of the lateral speed fitted over 1e-4 < speed < 1e-2 (where it grows
-from noise), the speed at t = 0 that fit extrapolates to, and the drift
-direction at the end of the fit.
+the run's first row (t = 0.1 from rest, or START for a run setup-runs.sh
+started FROM another), in bubble diameters; like drift.py in
+gpu/mesh-sensitivity, this reports when it first exceeds 0.01, 0.05 and
+0.25, the exponential growth rate of the lateral speed fitted over
+1e-4 < speed < 1e-2 (where it grows from noise), the speed at t = 0 that fit
+extrapolates to, and the drift direction at the end of the fit.
 """
 import argparse
 import csv
@@ -34,7 +35,7 @@ def lateral_path(run_dir):
     """Time, lab-frame lateral displacement (x, z) and lateral speed."""
     d = load(os.path.join(run_dir, "data.csv"))
     t = d["Time"]
-    dt = np.diff(t, prepend=0.0)
+    dt = np.diff(t, prepend=t[0])
     x = np.cumsum(d["rise_u"]*dt)
     z = np.cumsum(d["rise_w"]*dt)
     return t, x, z, np.hypot(d["rise_u"], d["rise_w"])
@@ -50,8 +51,8 @@ def summarize(run_dir):
         out["t_r>{:g}".format(thr)] = t[above[0]] if len(above) else float("nan")
 
     # First contiguous stretch of samples inside the fit range, after the
-    # start-up transient (t > 1).
-    inside = (speed > FIT_RANGE[0]) & (speed < FIT_RANGE[1]) & (t > 1.0)
+    # start-up transient (the first time unit).
+    inside = (speed > FIT_RANGE[0]) & (speed < FIT_RANGE[1]) & (t > t[0] + 1.0)
     idx = np.nonzero(inside)[0]
     if len(idx) > 2:
         stop = idx[0] + np.argmax(~inside[idx[0]:]) if (~inside[idx[0]:]).any() else len(t)
