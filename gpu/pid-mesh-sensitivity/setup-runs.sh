@@ -40,7 +40,8 @@
 # FROM=<run dir> and START=<time> start every run at t = START from FROM's
 # checkpoint at that time instead of from rest: the flow and level set
 # (interpolated onto the new mesh, startFrom = <file>+int, unless it is
-# FROM's) and the PID state (FROM's data.csv row at START), e.g. to run a
+# FROM's; psi is then rebuilt at the new mesh's interface width, [CASEDATA]
+# clsFromTls) and the PID state (FROM's data.csv row at START), e.g. to run a
 # finer mesh or another Schmidt number from a developed flow. Runs with FROM's
 # species (same SC and SPECIES) continue them. Otherwise the species start
 # afresh from FROM's c, their deficits scaled from FROM's Schmidt number to
@@ -137,6 +138,8 @@ start_from() {
     # +u+p+s: read the fields but not the (single precision) coordinates.
     fromsc=$(sed -n 's/^static double Sc = \(.*\);/\1/p' "$FROM/case.hpp")
     sed -i "s/^#\?startFrom *=.*/startFrom = start.fld$opt+u+p+s/" "$dir/bubble.par"
+    # FROM's psi profile has FROM's interface width (see bubble.udf).
+    [ -z "$opt" ] || sed -i "s/^#\?clsFromTls *=.*/clsFromTls = $START/" "$dir/bubble.par"
     if [ "$fromsc" = "$SC" ] && [ "$(grep '^scalars' "$FROM/bubble.par")" = "$(grep '^scalars' "$dir/bubble.par")" ]; then
         species="its species continue"
     else

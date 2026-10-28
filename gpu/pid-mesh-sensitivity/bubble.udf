@@ -201,6 +201,27 @@ void UDF_Setup()
         }
     }
 
+    // [CASEDATA] clsFromTls: a run restarted from t = clsFromTls rebuilds psi
+    // from the TLS at this mesh's interface width, as at t = 0 (setup-runs.sh
+    // sets it for an interpolated start). An interpolated restart (startFrom =
+    // <file>+int) from a coarser mesh brings that mesh's wider psi profile,
+    // which inflates the delta function (the interface area read 16% high on
+    // Nk40 from Nk27) until CLSR has sharpened it; at Bo = 4 the gas core of
+    // the finer meshes blew up within 100 steps of that.
+    {
+        double clsFromTls = -1.0, t0 = 0.0, dt0 = 0.0;
+        platform->par->extract("casedata", "clsfromtls", clsFromTls);
+        platform->options.getArgs("START TIME", t0);
+        platform->options.getArgs("DT", dt0);
+        if (clsFromTls >= 0 && !platform->options.getArgs("RESTART FILE NAME").empty() &&
+            std::abs(t0 - clsFromTls) < 0.5*dt0) {
+            lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
+            if (platform->comm.mpiRank() == 0) {
+                printf("clsFromTls: psi rebuilt from the TLS at t = %g\n", t0);
+            }
+        }
+    }
+
     // These must be calculated and passed to device kernels as arguments, as the mesh
     // is not loaded yet (nrs->meshV is still a null pointer) in UDF_LoadKernels so we
     // cannot set them as defines there.
