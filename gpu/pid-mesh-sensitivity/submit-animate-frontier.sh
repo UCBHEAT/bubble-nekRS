@@ -21,6 +21,8 @@
 #   PV_SITE         directory with numpy for ParaView's Python 3.11, which has
 #                   none (pip install --target <dir> 'numpy<2' with
 #                   cray-python/3.11.7); required
+#   ANIMATE_SPECIES c<Sc> shows a further species of the runs instead of c
+#                   (see animate.py)
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
@@ -30,6 +32,7 @@ set -euo pipefail
 # Frontier has no ffmpeg: set FFMPEG to a static build with libx264.
 : ${FFMPEG:=ffmpeg}
 : ${PV_SITE:?PV_SITE must be set: a directory with numpy for the ParaView Python}
+: ${ANIMATE_SPECIES:=c}
 
 if [ $# -lt 2 ]; then
     echo "Usage: PROJ_ID=<project> $0 <hh:mm> <run dir>:<chunks>:<label> ..."
@@ -62,6 +65,7 @@ module load PrgEnv-gnu gcc-native/13.2 cray-mpich/8.1.31
 export LD_LIBRARY_PATH=$(dirname $PARAVIEW_BIN)/lib64:\$LD_LIBRARY_PATH
 export PYTHONPATH=$PV_SITE
 export VTK_SMP_BACKEND_IN_USE=STDThread
+export ANIMATE_SPECIES=$ANIMATE_SPECIES
 pvbin=$PARAVIEW_BIN
 script=$script
 ffmpeg=$FFMPEG

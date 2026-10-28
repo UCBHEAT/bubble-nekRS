@@ -272,7 +272,24 @@ script selects VTK's STDThread backend, because that ParaView defaults to
 Sequential, which is about 10 times slower (a 0.444x frame of
 `../common/animate.py` took 7 min serially, 30 s on 56 cores). pvbatch runs
 without MPI, each chunk as a task of one srun step, since animate.py reads
-whole checkpoints.
+whole checkpoints. With `ANIMATE_SPECIES=c<Sc>` (either submit script) the
+animations show a further species of the runs instead of c: its field on
+the slice and its MTC and Sh (data-c<Sc>.csv) in the charts, whose time axes
+start where the run started, at START for a run set up FROM another.
+
+The ParaView 5.13 Nek5000 reader sizes its arrays with 32-bit integers and
+aborts (std::bad_array_new_length) above 1,398,101 elements at N = 7, so it
+cannot read 0.132x (2,696,987 elements) or 0.088x whole (0.198x, 1,370,911,
+just fits). `subset-checkpoints.py <run dir> <out dir>` writes such a run's
+checkpoints with only the elements animate.py draws, those the z = 0 slice
+crosses and those around the gas, and computes the two whole-domain
+quantities of post.csv, the liquid mean velocity and the largest liquid
+speed, from the full files into `<out dir>/full-domain.csv`, which
+`animate.py merge` puts into post.csv. `<out dir>`, next to the run, then
+animates like a run directory. The script reads every checkpoint whole, so
+it runs on a compute node (0.132x's are 66 GB). On the Bo = 4 pilot's Nk27,
+which ParaView reads whole, the post.csv of its cut matched the whole mesh's
+to all 6 digits but for 1e-7 in the centroid and gas means.
 
 ## Output
 
@@ -651,7 +668,10 @@ largest overshoot), [-0.06, 1.08] on 0.296x and [-0.03, 1.02] on 0.198x.
 The far-field deficit stays below 4e-6, and no bubble drifts sideways
 (`path.py`: lateral path below 0.001 D). Each run directory also has post.csv and animation.mp4
 (`submit-animate-frontier.sh`, labelled "Sc = 20, ..."), whose charts span
-Sh up to 120 and MTC up to 0.03 and end at t = 15.
+Sh up to 120 and MTC up to 0.03 and end at t = 15. The study directory's
+montage/animation-Sc20-meshes.mp4 sets the seven runs' slices side by side,
+one frame per time unit (crops of each run's frames, by montage_sc20.py
+there).
 
 ## Sc = 100, with Sc = 20 and 1150 (Frontier, October 2026, in progress)
 
@@ -725,6 +745,12 @@ by 11.5%, as much as Sc = 20 did between the meshes with the same boundary
 layer resolution (0.444x to 0.296x, -9.9%), and Sc = 1150 is far from
 converged. The apparent exponents on 0.132x are 0.58 (Sc = 20 to 100) and
 0.74 (20 to 1150).
+
+0.132x's post.csv and animation.mp4 (labelled "Sc = 20, 0.132x ...", one
+frame per checkpoint) come from its checkpoints cut down by
+`subset-checkpoints.py` (see Running on Frontier). Its bubble's aspect
+ratio, 1.832, 1.836 and 1.839 at t = 11, 12 and 13, is 0.1-0.2% below
+0.198x's (1.834, 1.840, 1.843), and its interface area 0.03% above.
 
 ### Starting from a developed flow
 
@@ -911,3 +937,8 @@ and Re (rise speed, d_eq) come from `sherwood.py`. \* Still rising: 0.551,
   by t = 22.1. Nk27's gas core had run as fast as Nk40's (mean u_max 4.4
   and 4.6; Nk60 2.7). Its t = 22 checkpoint and the later rows are in
   Nk27/failed-5779014/.
+
+Each run directory has post.csv and animation.mp4 (`ANIMATE_SPECIES=c4`,
+labelled "Bo = 4, Sc = 4, ..."): c4 on the slice and its MTC and Sh, from
+t = 15. On Nk27 the wake has left the z = 0 slice by t = 21.5, as the path
+turns oblique.
