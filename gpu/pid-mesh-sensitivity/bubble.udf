@@ -142,10 +142,38 @@ static void largestVelocity(double out[5])
     MPI_Bcast(out, 5, MPI_DOUBLE, loc.rank, comm);
 }
 
+/**
+ * The species (see customhooks.hpp): c and the scalars named c<Sc>.
+ */
+static void setupSpecies()
+{
+    for (const auto& name : nrs->scalar->name) {
+        double sc = Sc;
+        if (name != "c") {
+            if (name.size() < 2 || name[0] != 'c' ||
+                name.find_first_not_of("0123456789.", 1) != std::string::npos) {
+                continue;
+            }
+            sc = std::stod(name.substr(1));
+        }
+        species_t s;
+        s.name = name;
+        s.Pe = Re*sc;
+        s.csv = (name == "c") ? "data.csv" : "data-" + name + ".csv";
+        species.push_back(s);
+        if (platform->comm.mpiRank() == 0) {
+            printf("species %s: Sc = %g, Pe = %g, output %s\n", name.c_str(), sc, s.Pe, s.csv.c_str());
+        }
+    }
+    nekrsCheck(species.empty() || species[0].name != "c", platform->comm.mpiComm(), EXIT_FAILURE,
+               "%s\n", "the scalar c must come before the other species");
+}
+
 void UDF_Setup()
 {
     mesh_t *mesh = nrs->meshV;
 
+    setupSpecies();
     nrs->userProperties = &customProperties;
     nrs->userSource = &customSource;
 
@@ -164,11 +192,34 @@ void UDF_Setup()
         // Copy to device memory.
         nrs->scalar->o_solution("tls").copyFrom(phi.data(), phi.size());
 
-        // psi and c from phi. c = psi is smeared over the interface band, as in
-        // gpu/mesh-sensitivity (see ../pid-centering/README.md for why a
-        // saturated start is worse).
+        // psi and the species from phi. c = psi is smeared over the interface
+        // band, as in gpu/mesh-sensitivity (see ../pid-centering/README.md for
+        // why a saturated start is worse).
         lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
-        lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("c"));
+        for (const auto& s : species) {
+            lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution(s.name));
+        }
+    }
+
+    // [CASEDATA] clsFromTls: a run restarted from t = clsFromTls rebuilds psi
+    // from the TLS at this mesh's interface width, as at t = 0 (setup-runs.sh
+    // sets it for an interpolated start). An interpolated restart (startFrom =
+    // <file>+int) from a coarser mesh brings that mesh's wider psi profile,
+    // which inflates the delta function (the interface area read 16% high on
+    // Nk40 from Nk27) until CLSR has sharpened it; at Bo = 4 the gas core of
+    // the finer meshes blew up within 100 steps of that.
+    {
+        double clsFromTls = -1.0, t0 = 0.0, dt0 = 0.0;
+        platform->par->extract("casedata", "clsfromtls", clsFromTls);
+        platform->options.getArgs("START TIME", t0);
+        platform->options.getArgs("DT", dt0);
+        if (clsFromTls >= 0 && !platform->options.getArgs("RESTART FILE NAME").empty() &&
+            std::abs(t0 - clsFromTls) < 0.5*dt0) {
+            lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), nrs->scalar->o_solution("cls"));
+            if (platform->comm.mpiRank() == 0) {
+                printf("clsFromTls: psi rebuilt from the TLS at t = %g\n", t0);
+            }
+        }
     }
 
     // These must be calculated and passed to device kernels as arguments, as the mesh
@@ -221,23 +272,61 @@ void UDF_Setup()
         sampleCount = startTime/sampleInterval + 1;
     }
 
+    // [CASEDATA] speciesStart: a run restarted from t = speciesStart starts
+    // its species afresh there, in the restart's flow, so other Schmidt numbers
+    // or a finer mesh (startFrom = <file>+int) can start from a developed flow
+    // (setup-runs.sh FROM). Later restarts read the species from their
+    // checkpoints as usual. Each species starts
+    // - with [CASEDATA] speciesStartSc, the Schmidt number of the restart's c,
+    //   from that c with its deficit 1 - c scaled by (speciesStartSc/Sc)^1/2,
+    //   the ratio of the transfer coefficients of a thin boundary layer, so
+    //   that the depleted liquid behind the bubble, which renews slowly, starts
+    //   close to its developed state (a species at speciesStartSc continues
+    //   the restart's c);
+    // - otherwise as at t = 0 (c = psi), which leaves Sh too high for several
+    //   time units while that liquid is depleted again (1% after 2 time units
+    //   at Sc = 20 on 0.444x).
+    double speciesStart = -1.0, speciesStartSc = 0.0;
+    platform->par->extract("casedata", "speciesstart", speciesStart);
+    platform->par->extract("casedata", "speciesstartsc", speciesStartSc);
+    if (speciesStart >= 0 && !platform->options.getArgs("RESTART FILE NAME").empty() &&
+        std::abs(startTime - speciesStart) < 0.5*dtStep) {
+        auto o_c0 = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+        o_c0.copyFrom(nrs->scalar->o_solution("c"), mesh->Nlocal);
+        for (const auto& s : species) {
+            occa::memory o_s = nrs->scalar->o_solution(s.name);
+            if (speciesStartSc > 0) {
+                // c = 1 - f (1 - c0) = (1 - f) + f c0
+                const double f = sqrt(speciesStartSc*Re/s.Pe);
+                platform->linAlg->fill(mesh->Nlocal, 1.0 - f, o_s);
+                platform->linAlg->axpby(mesh->Nlocal, f, o_c0, 1.0, o_s);
+                if (platform->comm.mpiRank() == 0) {
+                    printf("speciesStart: %s starts at t = %g from the restart's c (Sc = %g), deficit times %.4f\n",
+                            s.name.c_str(), startTime, speciesStartSc, f);
+                }
+            } else {
+                lvlSet::initHeaviside(nrs->scalar->o_solution("tls"), o_s);
+                if (platform->comm.mpiRank() == 0) {
+                    printf("speciesStart: %s starts afresh (c = psi) at t = %g\n", s.name.c_str(), startTime);
+                }
+            }
+        }
+    }
+
     if (const char* s = getenv("BUBBLE_STOP_AT")) {
         stopAt = atof(s);
     }
 }
 
-// Species budget since the last sample. The interface transfer rate is
+// Species budget since the last sample, for each species (species_t in
+// customhooks.hpp). The interface transfer rate is
 //   removed = integral(net boundary inflow of c) dt - change in integral(c dV),
 // which uses only the stored c and the boundary fluxes. Adding up the c the
 // hard sink zeroes (gpu/mesh-sensitivity's mdot, kept here as mdot_sink for
 // comparison) reads low and depends on the time integrator: with BDF2,
 // zeroing a gas node also zeroes its history, so the node holds only
 // 1/g0 = 2/3 of what flowed into it during the step.
-static double budget_inflow = 0.0;  // time integral of the net boundary inflow of c
-static double budget_C0 = 0.0;      // integral of c dV at the window start
 static double budget_t0 = 0.0;      // window start time
-static double budget_flux = 0.0;    // net boundary inflow rate at the last step
-static double sink_removed = 0.0;   // c zeroed by the hard sink in the window
 static double last_time = 0.0;
 // Gas centroid offset at the window start and the frame displacement
 // integral(U_frame dt) over the window, for the lab-frame bubble velocity.
@@ -271,7 +360,6 @@ void UDF_ExecuteStep(double time, int tstep)
     mesh_t* mesh = nrs->meshV;
     scalar_t* scalar = nrs->scalar.get();
     const occa::memory o_psi = scalar->o_solution("cls");
-    const occa::memory o_c = scalar->o_solution("c");
     MPI_Comm comm = platform->comm.mpiComm();
 
     lvlSet::solve(time);
@@ -333,37 +421,46 @@ void UDF_ExecuteStep(double time, int tstep)
     // Hard sink: remove the species that has reached the gas (psi < 0.5). At
     // tstep 0 this only clears the smeared initial interface band (or nothing,
     // on restart), which is not mass transfer (the budget starts after it).
-    {
+    for (auto& s : species) {
+        const occa::memory o_c = scalar->o_solution(s.name);
         auto o_cSink = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
         hardSink(info, o_c, o_psi, o_cSink);
         const dfloat removed = platform->linAlg->innerProd(mesh->Nlocal, o_cSink, mesh->o_Jw, comm);
         if (tstep > 0) {
-            sink_removed += removed;
+            s.sink_removed += removed;
         }
     }
 
     // Update the PID bubble centering force from the (reinitialized) level set.
     pidUpdate(time, tstep);
 
-    // Species budget (see above).
-    const dfloat C = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, comm);
-    const dfloat flux = speciesInflowRate(o_c);
+    // Species budgets (see above).
+    std::vector<dfloat> C(species.size());
+    for (size_t k = 0; k < species.size(); k++) {
+        species_t& s = species[k];
+        const occa::memory o_c = scalar->o_solution(s.name);
+        C[k] = platform->linAlg->innerProd(mesh->Nlocal, o_c, mesh->o_Jw, comm);
+        const dfloat flux = speciesInflowRate(o_c);
+        if (tstep == 0) {
+            s.budget_C0 = C[k];
+            s.budget_inflow = 0.0;
+            s.sink_removed = 0.0;
+        } else {
+            s.budget_inflow += 0.5*(s.budget_flux + flux)*(time - last_time);
+        }
+        s.budget_flux = flux;
+    }
     if (tstep == 0) {
-        budget_C0 = C;
         budget_t0 = time;
-        budget_inflow = 0.0;
-        sink_removed = 0.0;
         for (int d = 0; d < 3; d++) {
             window_e0[d] = pid.error[d];
             window_frame_shift[d] = 0.0;
         }
     } else {
-        budget_inflow += 0.5*(budget_flux + flux)*(time - last_time);
         for (int d = 0; d < 3; d++) {
             window_frame_shift[d] += 0.5*(last_frame_velocity[d] + pid.frame_velocity[d])*(time - last_time);
         }
     }
-    budget_flux = flux;
     last_time = time;
     for (int d = 0; d < 3; d++) last_frame_velocity[d] = pid.frame_velocity[d];
 
@@ -377,10 +474,6 @@ void UDF_ExecuteStep(double time, int tstep)
     }
     if (tstep > 0 && (regularSample || nrs->lastStep)) {
         const dfloat window = time - budget_t0;
-        // Interface transfer rate from the species budget, and what the hard
-        // sink counted.
-        const dfloat mdot = (budget_inflow - (C - budget_C0))/window;
-        const dfloat mdot_sink = sink_removed/window;
         // Rise velocity: the lab-frame velocity of the level set centroid over
         // the window, its displacement in the frame minus the frame's
         // displacement (u_gas - U_frame would read ~2% low: u_gas misses the
@@ -391,10 +484,7 @@ void UDF_ExecuteStep(double time, int tstep)
             window_e0[d] = pid.error[d];
             window_frame_shift[d] = 0.0;
         }
-        budget_C0 = C;
         budget_t0 = time;
-        budget_inflow = 0.0;
-        sink_removed = 0.0;
         const double far_deficit_max = farDeficitMax;
         const double far_removed = farRemoved;
         const double snap_removed = snapRemoved;
@@ -402,19 +492,9 @@ void UDF_ExecuteStep(double time, int tstep)
         farRemoved = 0.0;
         snapRemoved = 0.0;
 
-        // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
-        auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
-        platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
-        const dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, comm) / info.liquid_volume;
-        const dfloat c_min = platform->linAlg->min(mesh->Nlocal, o_c, comm);
-        const dfloat c_max = platform->linAlg->max(mesh->Nlocal, o_c, comm);
-
         // MTC and Sh, driven by the inflow concentration against c = 0 at the
         // interface (hard sink).
         const dfloat total_area = platform->linAlg->innerProd(mesh->Nlocal, lvlSet::getDeltaFunction(), mesh->o_Jw, comm);
-        const dfloat mtc = mdot / total_area / c_inflow;
-        const dfloat sherwood_no = mtc*Pe;
-        const dfloat sherwood_sink = mdot_sink / total_area / c_inflow * Pe;
 
         // Health of the run: the far-field deficit and the largest velocity.
         auto o_umag = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
@@ -424,13 +504,46 @@ void UDF_ExecuteStep(double time, int tstep)
         if (platform->comm.mpiRank() == 0) {
             printf("----------------------------------------\n");
             printf("Interphase species transport statistics:\n");
-            printf("mdot=%.4g MTC=%.4g Sh=%.4g (hard sink count: Sh=%.4g)\n", mdot, mtc, sherwood_no, sherwood_sink);
-            printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f] gas_volume=%.6g rise=(%.4g, %.4g, %.4g)\n",
-                    total_area, c_bulk, c_min, c_max, pid.gas_volume, rise[0], rise[1], rise[2]);
-            printf("----------------------------------------\n");
+        }
+        for (size_t k = 0; k < species.size(); k++) {
+            species_t& s = species[k];
+            const occa::memory o_c = scalar->o_solution(s.name);
+            // Interface transfer rate from the species budget, and what the
+            // hard sink counted.
+            const dfloat mdot = (s.budget_inflow - (C[k] - s.budget_C0))/window;
+            const dfloat mdot_sink = s.sink_removed/window;
+            s.budget_C0 = C[k];
+            s.budget_inflow = 0.0;
+            s.sink_removed = 0.0;
+
+            // c_bulk = liquid-volume average of c; c range, to show over/undershoots.
+            auto o_cpsi = platform->deviceMemoryPool.reserve<dfloat>(mesh->Nlocal);
+            platform->linAlg->axmyz(mesh->Nlocal, 1.0, o_c, o_psi, o_cpsi); // o_cpsi[i] = o_c[i]*o_psi[i]
+            const dfloat c_bulk = platform->linAlg->innerProd(mesh->Nlocal, o_cpsi, mesh->o_Jw, comm) / info.liquid_volume;
+            const dfloat c_min = platform->linAlg->min(mesh->Nlocal, o_c, comm);
+            const dfloat c_max = platform->linAlg->max(mesh->Nlocal, o_c, comm);
+
+            const dfloat mtc = mdot / total_area / c_inflow;
+            const dfloat sherwood_no = mtc*s.Pe;
+            const dfloat sherwood_sink = mdot_sink / total_area / c_inflow * s.Pe;
+
+            if (platform->comm.mpiRank() != 0) {
+                continue;
+            }
+            // The other species' lines are prefixed with their name, so that
+            // the job scripts' Sh (the last line starting with mdot=) is c's.
+            const std::string prefix = (k == 0) ? "" : s.name + ": ";
+            printf("%smdot=%.4g MTC=%.4g Sh=%.4g (hard sink count: Sh=%.4g)\n", prefix.c_str(),
+                    mdot, mtc, sherwood_no, sherwood_sink);
+            if (k == 0) {
+                printf("total_area=%.4g c_bulk=%.4f c range [%.4f, %.4f] gas_volume=%.6g rise=(%.4g, %.4g, %.4g)\n",
+                        total_area, c_bulk, c_min, c_max, pid.gas_volume, rise[0], rise[1], rise[2]);
+            } else {
+                printf("%sc_bulk=%.4f c range [%.4f, %.4f]\n", prefix.c_str(), c_bulk, c_min, c_max);
+            }
 
             // Write CSV file
-            const std::string filename = "data.csv";
+            const std::string filename = s.csv;
             std::ifstream check_file(filename);
             bool newly_created = !check_file.good();
             check_file.close();
@@ -462,6 +575,9 @@ void UDF_ExecuteStep(double time, int tstep)
             for (int d = 0; d < 3; d++) f << "," << pid.frame_velocity[d];
             f << std::endl;
             f.close();
-        } // if (platform->comm.mpiRank() == 0)
+        } // for species
+        if (platform->comm.mpiRank() == 0) {
+            printf("----------------------------------------\n");
+        }
     } // if (tstep > 0 && (regularSample || nrs->lastStep))
 }

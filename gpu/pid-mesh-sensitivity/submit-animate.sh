@@ -7,7 +7,8 @@
 # into <chunks> pvbatch processes (one CPU core each) for the bubble statistics
 # (post.csv) and again for the frames, which ffmpeg encodes to
 # <run dir>/animation.mp4. Finished chunks and frames are skipped, so a job
-# that runs out of time can simply be resubmitted.
+# that runs out of time can simply be resubmitted. ANIMATE_SPECIES=c<Sc>
+# shows a further species of the runs instead of c (see animate.py).
 set -euo pipefail
 
 : ${PROJ_ID:?PROJ_ID must be set}
@@ -15,6 +16,7 @@ set -euo pipefail
 # Polaris has no ffmpeg: set FFMPEG to a static build with libx264.
 : ${FFMPEG:=ffmpeg}
 : ${PARAVIEW_MODULE:=visualization/paraview/paraview-5.13.1-EGL}
+: ${ANIMATE_SPECIES:=c}
 
 if [ $# -lt 2 ]; then
     echo "Usage: PROJ_ID=<project> QUEUE=<queue> $0 <hh:mm> <run dir>:<chunks>:<label> ..."
@@ -39,6 +41,7 @@ cat > $SFILE <<EOF
 cd \$PBS_O_WORKDIR
 module use /soft/modulefiles
 module load $PARAVIEW_MODULE
+export ANIMATE_SPECIES=$ANIMATE_SPECIES
 script=$script
 ffmpeg=$FFMPEG
 EOF

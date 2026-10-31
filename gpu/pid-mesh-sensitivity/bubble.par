@@ -17,6 +17,9 @@ timeStepper = tombo2
 checkpointControl = simulationTime
 checkpointInterval = 1.0
 
+# c is the species at the Schmidt number of case.hpp. Further species at
+# other Schmidt numbers are scalars named c<Sc> (e.g. c20), each with a
+# [SCALAR C<Sc>] section like [SCALAR C] (setup-runs.sh SPECIES adds them).
 scalars = tls, cls, c
 
 [PROBLEMTYPE]
@@ -108,3 +111,13 @@ sampleInterval = 0.1
 # the TLS is not a distance function, and CLSR slowly amplifies the ~1e-7
 # solver noise in the liquid there into spurious gas.
 psiSnap = 1e-6
+# Start the species afresh when restarting from this time, i.e. from another
+# run's developed flow (setup-runs.sh FROM and START set both): from the
+# restart's c, at Sc = speciesStartSc, with its deficit 1 - c scaled by
+# (speciesStartSc/Sc)^1/2, or without speciesStartSc as at t = 0 (c = psi).
+#speciesStart = 10
+#speciesStartSc = 20
+# Rebuild psi from the TLS at this mesh's interface width when restarting
+# from this time (setup-runs.sh sets it when START interpolates FROM's
+# checkpoint onto another mesh, see bubble.udf).
+#clsFromTls = 10
