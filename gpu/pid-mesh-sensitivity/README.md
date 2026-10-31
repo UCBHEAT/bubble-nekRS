@@ -832,6 +832,10 @@ of their mean (73.70-73.83). The run keeps the default `pressureExtOrder`
 `[CASEDATA] traceVelocity = 8`, which prints where |u| exceeds 8 and was set
 for the second job, never fired.
 
+Nor does the bubble: over t = 10.5-11 its rise speed is within 0.06% of
+0.132x's (0.002% at t = 11), its gas volume within 0.005% and its interface
+area 0.02-0.04% above (data.csv).
+
 ### Starting from a developed flow
 
 Tests on the Sc = 20 meshes (answinter26/restart-tests, debug QOS) chose
