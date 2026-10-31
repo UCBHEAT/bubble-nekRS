@@ -673,7 +673,7 @@ montage/animation-Sc20-meshes.mp4 sets the seven runs' slices side by side,
 one frame per time unit (crops of each run's frames, by montage_sc20.py
 there).
 
-## Sc = 100, with Sc = 20 and 1150 (Frontier, October 2026, in progress)
+## Sc = 100, with Sc = 20 and 1150 (Frontier, October 2026)
 
 At Sc = 100 (Pe = 23,140) the concentration boundary layer, about
 Pe^-1/2 = 0.0066 D thick, is thinner than at Sc = 20 by 5^1/2 = 2.24, almost
@@ -685,7 +685,7 @@ Sc = 100 as the mesh two levels coarser does at Sc = 20:
 | 0.296x        | 1.03                        | 0.667x                     | 99.82               |
 | 0.198x        | 1.55                        | 0.444x                     | 86.80               |
 | 0.132x        | 2.32                        | 0.296x                     | 78.21               |
-| 0.088x        | 3.50                        | 0.198x                     | (running)           |
+| 0.088x        | 3.50                        | 0.198x                     | 75.01               |
 
 The study skips 0.296x and coarser, where the Sc = 20 meshes of the same
 resolution overestimate Sh by 28% and more, and uses 0.198x (Nk = 135),
@@ -723,7 +723,49 @@ species): 0.198x about 3,500 node-hours (54 h on 64 nodes, to t = 15), and
 for 3 time units on 64 nodes 0.132x 33 h, 2,100 node-hours, and 0.088x
 121 h, 7,800 node-hours.
 
-### Results so far
+### Results
+
+Sh over t = 10.5-11, the stretch all three runs share once the finer ones
+have settled. The values come from `mesh_sensitivity_sc100_pid.py` in the
+papers repository, which makes the paper's figures and GCI table from these
+runs' CSVs; `sherwood.py --tmin 10.5 --tmax 11` agrees within 0.01%.
+
+| Species   | 0.198x | 0.132x | 0.088x | observed order | GCI, 0.132x-0.088x | Richardson, p = 2 (observed p) |
+|-----------|--------|--------|--------|----------------|--------------------|--------------------------------|
+| Sc = 20   | 74.89  | 74.02  | 73.74  | 2.78           | 0.38%              | 73.52 (73.61)                  |
+| Sc = 100  | 212.14 | 188.77 | 174.47 | 1.25           | 8.1%               | 163.2 (153.0)                  |
+| Sc = 1150 | 1884   | 1466   | 1124   | 0.54           | 30%                | 855 (-)                        |
+
+- Sc = 20 converges. Richardson extrapolation gives 73.5-73.6, 2.0% below
+  0.198x's t = 10-15 mean (75.01, GCI 4.26% in the Sc = 20 study). That is a
+  little above the Sc = 20 study's extrapolation from the uniformly refined
+  meshes (72.5-73.1).
+- Sc = 100 converges slowly. It falls by 11.0% from 0.198x to 0.132x and by
+  7.6% from 0.132x to 0.088x (GCI 15% with the observed order).
+  - Sc = 20 fell by 9.9% and 4.1% on the meshes that resolve its boundary
+    layer as these resolve Sc = 100's (0.444x, 0.296x, 0.198x). For example,
+    0.088x has 3.5 GLL spacings across Pe^-1/2 at Sc = 100, as 0.198x has at
+    Sc = 20.
+  - So at the same resolution Sc = 100 is further from converged: 0.088x is
+    7-14% above its extrapolated values, while 0.198x is 2% above Sc = 20's.
+- Sc = 1150 does not converge: its boundary layer spans one GLL spacing on
+  0.088x. Sh falls by 22% and then 23%, and on 0.088x it is still about twice
+  the correlations' (Feng and Michaelides 2001: 575 at Re = 264).
+- The apparent exponents (`sc_exponent.py`) fall with refinement:
+  - Between Sc = 20 and 100 they are 0.65, 0.58 and 0.54 on 0.198x, 0.132x
+    and 0.088x. Between the extrapolated values n is 0.50 with p = 2 (0.45
+    with the observed orders); a clean bubble at high Pe has 1/2.
+  - Between Sc = 20 and 1150 they are 0.80, 0.74 and 0.67.
+- At Re = 264 (0.088x's rise speed, 1.139), Feng and Michaelides 2001 gives
+  Sh = 171.0 at Sc = 100 and potential flow 183.2. 0.088x is 2.0% above Feng
+  and Michaelides; the extrapolated 153-163 is 5-11% below it.
+
+Both finer runs had settled by t = 10.5:
+- 0.132x's means over t = 10.5-11 are within 0.05% of its t = 11-13 ones for
+  all three species.
+- 0.088x's samples from t = 10.6 to 11 are within 0.3% of its window means.
+
+### 0.132x
 
 | Species  | 0.198x, t = 10-15 (from t = 0) | 0.198x, t = 11-13 | 0.132x, t = 11-13 | change |
 |----------|--------------------------------|-------------------|-------------------|--------|
@@ -751,6 +793,44 @@ frame per checkpoint) come from its checkpoints cut down by
 `subset-checkpoints.py` (see Running on Frontier). Its bubble's aspect
 ratio, 1.832, 1.836 and 1.839 at t = 11, 12 and 13, is 0.1-0.2% below
 0.198x's (1.834, 1.840, 1.843), and its interface area 0.03% above.
+
+### 0.088x
+
+At 64 nodes 0.088x runs about half a time unit per day. Only the extended
+partition allows 64 nodes for that long (batch allows 2 h), so it ran there
+in two jobs, the first stopped by `BUBBLE_STOP_AT` before its time limit:
+
+| Job     | Dates         | t            | Steps   | Hours | s per step | Node-hours |
+|---------|---------------|--------------|---------|-------|------------|------------|
+| 5696841 | October 19-20 | 10-10.5417   | 346,701 | 23.95 | 0.244      | 1,533      |
+| 5780896 | October 30-31 | 10.5417-11   | 293,299 | 18.55 | 0.224      | 1,187      |
+
+That is 2,720 node-hours for one time unit, against the estimate of 2,600
+above. The second job waited 2.4 days in the queue: extended runs one job per
+user, and jobs of projects with a priority boost went first.
+
+The first job hit a spurious current in the gas:
+- The largest speed in the domain is otherwise 1.87. From t = 10.23 it rose to
+  3.6, 4.9 and 5.4 at t = 10.3, 10.4 and 10.5.
+- The checkpoint's per-element bounds place it, at t = 10.5417, in two
+  elements inside the bubble (psi <= 0.002).
+- The step cost rose in two stages, from 0.22 to 0.25 s and then 0.278 s. The
+  pressure iterations rose from 2 to 3 and then 3.7, and the CFL number spiked
+  to 0.013 from its 0.005.
+- By t = 10.5417 the largest speed had fallen back to 3.0.
+
+The restart re-excited it:
+- The second job began at 0.38 s per step, with 7 pressure iterations and a
+  CFL number of 0.009 (up to 0.016).
+- Over 7,500 steps (0.012 time units) these decayed to 0.22 s, 2 iterations
+  and 0.005.
+- From t = 10.6 on the largest speed was 1.87 again.
+
+Sh shows none of it: Sc = 20's samples from t = 10.2 to 11 stay within 0.1%
+of their mean (73.70-73.83). The run keeps the default `pressureExtOrder`
+(2): unlike the Bo = 4 pilot's (below), this gas core settled by itself.
+`[CASEDATA] traceVelocity = 8`, which prints where |u| exceeds 8 and was set
+for the second job, never fired.
 
 ### Starting from a developed flow
 
