@@ -836,6 +836,22 @@ Nor does the bubble: over t = 10.5-11 its rise speed is within 0.06% of
 0.132x's (0.002% at t = 11), its gas volume within 0.005% and its interface
 area 0.02-0.04% above (data.csv).
 
+`wake.py` on the t = 11 checkpoints (job 5806484, 12 min on one node) shows
+the same bubble and wake:
+- The aspect ratio is 1.824 on 0.088x and 1.830 on 0.132x (whose post.csv
+  gives 1.832), 0.3% lower. 0.088x's front sits 0.0018 D higher, about one of
+  its GLL spacings; the rear and the equatorial radius differ by 0.0006 D or
+  less. At t = 10.5417 it was 1.822: the bubble still flattens slowly, as
+  0.132x's does from t = 11 to 13.
+- On the axis below the bubble the liquid's velocity is within 0.002 u_in of
+  0.132x's at the nine depths both print, from 0.075 to 2.475 D (u_in, the
+  inflow speed, is 1.140 on both). On both meshes its speed is below
+  0.05 u_in to 0.275 D below the rear and below 0.1 u_in to 0.425 D.
+- Just behind the rear the liquid is nearly at rest. 0.075 D below it, it
+  moves up towards the bubble at 0.0016 u_in on 0.088x and 0.0022 u_in on
+  0.132x: a standing eddy only just forming. On 0.088x at t = 10.5417 it
+  moved away at 0.0021 u_in instead. Sh settled regardless (Results).
+
 ### Starting from a developed flow
 
 Tests on the Sc = 20 meshes (answinter26/restart-tests, debug QOS) chose
