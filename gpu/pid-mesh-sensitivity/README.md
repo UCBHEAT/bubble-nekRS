@@ -904,8 +904,19 @@ The bubble of the studies above, one capillary length (3.12 mm, Eo = 1),
 rises with an almost constant shape. To see whether a larger bubble
 oscillates, a pilot ran a bubble of two capillary lengths (6.23 mm, Eo = 4:
 Re = 654.6, We = 10.67, Fr = 1.633 with the same velocity scale; Sc = 1)
-from rest to t = 15 at the 1x resolution, with a larger fine cube and wake
-column for the more deformed bubble (28,750 elements):
+from rest to t = 15 on a mesh named Nk27 (28,750 elements):
+- Its finest elements are the 1x mesh's, h = 4/27 D, so relative to the
+  bubble's size it is as fine as 1x. It is not 1x of this bubble's
+  Kolmogorov scale, which `cpu/common/calc_dimensionless_numbers.py` puts at
+  0.0615 mm, 0.0099 D (0.0215 D at Eo = 1): there dx = h/7 is 2.1 lambda_K.
+  The Bo = 4 meshes are therefore named by Nk (h = 4/Nk D) rather than by a
+  Kolmogorov multiple.
+- Its fine cube and wake column are wider than the Eo = 1 meshes'
+  (`R_IFACE` = `R_WAKE` = 1.0 D instead of 0.75; fine cube 15^3 cells,
+  half-width 1.11, against 1x's 13^3 and 0.963), hence the extra elements
+  (1x has 23,805). The flatter bubble's rim reaches 0.66-0.73 D from its
+  centre (spheroids of the pilot's aspect ratios, 2.3-3.2, below), close to
+  the 0.75 D the Eo = 1 meshes refine; the Eo = 1 bubble's is at 0.61 D.
 
 ```
 RE=654.6 WE=10.67 R_IFACE=1.0 R_WAKE=1.0 END_TIME=15 PYTHON=... GMSH2NEK=... \
@@ -930,8 +941,8 @@ velocities, 2-4 throughout (3-6 times the rise speed), are in the gas core
 and on the gas side of the interface band, while the liquid stays below
 0.95.
 
-**Results**, t = 5-15, against the Eo = 1 bubble at the same resolution
-(Sc = 1 study, 1x), each in its own units (D and 1.633 (g D)^1/2, i.e.
+**Results**, t = 5-15, against the Eo = 1 bubble on the mesh with the same
+h/D (Sc = 1 study, 1x), each in its own units (D and 1.633 (g D)^1/2, i.e.
 10.9 and 15.4 ms per time unit):
 
 | t = 5-15                    | Eo = 1, 3.12 mm   | Eo = 4, 6.23 mm  |
@@ -964,15 +975,28 @@ whose bubble moves as the Sc = 1 run's.
   against 247), so 19.6 is a coarse-mesh value. A Bo = 4 study would need the
   finer meshes and, for the path, longer runs.
 
+The run directory has post.csv and animation.mp4, labelled "Bo = 4, Sc = 1,
+1x Kolmogorov (28750 elements)": 1x there is the 1x mesh's h/D, 2.1 times
+this bubble's Kolmogorov scale.
+
 ### Sc = 4: the Schmidt number exponent
 
 To see how Sh scales with Sc for this bubble, the pilot's flow at t = 15 ran
 on with c (Sc = 1) continuing and a second species at Sc = 4, c4, started
 afresh from c with its deficit halved (`speciesStart`). It ran on the pilot's
-mesh (Nk27) and on two finer ones, Nk40 and Nk60 (80,850 and 212,064
-elements, the fine cube as 0.667x and 0.444x), which start from it
+mesh (Nk27) and on two finer ones, Nk40 and Nk60, which start from it
 interpolated with psi rebuilt (`clsFromTls`, see Starting from a developed
-flow):
+flow). All three have the pilot's wider fine cube and wake column and are
+refined together, as the Eo = 1 meshes are:
+
+| Mesh | h (finest) | Eo = 1 mesh with this h | elements (that mesh's) | fine cube             | dx / this bubble's lambda_K | GLL spacings across the c4 layer | dt     |
+|------|------------|-------------------------|------------------------|-----------------------|-----------------------------|----------------------------------|--------|
+| Nk27 | 4/27       | 1x                      | 28,750 (23,805)        | 15^3, half-width 1.11 | 2.14                        | 1.1                              | 1e-4   |
+| Nk40 | 4/40       | 0.667x                  | 80,850 (52,142)        | 23^3, half-width 1.15 | 1.45                        | 1.7                              | 5e-5   |
+| Nk60 | 4/60       | 0.444x                  | 212,064 (154,652)      | 33^3, half-width 1.10 | 0.96                        | 2.5                              | 2.5e-5 |
+
+The c4 boundary layer is about Pe^-1/2 = 0.024 D thick (Pe = Re Sc = 1760,
+below). The runs were set up by
 
 ```
 SC=1 SPECIES="4" RE=654.6 WE=10.67 R_IFACE=1.0 R_WAKE=1.0 END_TIME=25 \
@@ -1035,10 +1059,11 @@ and Re (rise speed, d_eq) come from `sherwood.py`. \* Still rising: 0.551,
   0.004, 0.29 D from the centre, and grew smoothly, 1.3-1.8 times per 0.1
   time units (not alternating as at t = 9.9). The area went from 3.54 to 5.6
   by t = 22.1. Nk27's gas core had run as fast as Nk40's (mean u_max 4.4
-  and 4.6; Nk60 2.7). Its t = 22 checkpoint and the later rows are in
-  Nk27/failed-5779014/.
+  and 4.6; Nk60 2.7). Its later rows are in Nk27/failed-5779014/ (its
+  t = 22 checkpoint has been deleted).
 
 Each run directory has post.csv and animation.mp4 (`ANIMATE_SPECIES=c4`,
-labelled "Bo = 4, Sc = 4, ..."): c4 on the slice and its MTC and Sh, from
+labelled "Bo = 4, Sc = 4, 1x (28750 elements)", "0.667x" and "0.444x": the
+Eo = 1 mesh with the same h/D): c4 on the slice and its MTC and Sh, from
 t = 15. On Nk27 the wake has left the z = 0 slice by t = 21.5, as the path
 turns oblique.
