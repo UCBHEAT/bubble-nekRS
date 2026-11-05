@@ -378,7 +378,7 @@ with GCI = 1.4% (p = 2, F_s = 1.25) between 0.667x and 0.444x, and Richardson
 extrapolation (p = 2) gives Sh = 17.39. With 1.5x, the observed order of the
 coarser triplet is 0.8, but it depends on the window (1.0 over t = 10-15),
 because the 1.5x Sh drifts with its gas loss. The figures and the GCI table
-are made by 2026-11-nek-cst/data/mesh_sensitivity_sc1_pid.py in
+are made by 2026-12-single-bubble-dns/data/mesh_sensitivity_sc1_pid.py in
 UCBHEAT/papers.
 
 At the Reynolds number of the simulated rise (Re = 263, from the 0.444x rise
@@ -495,7 +495,7 @@ Sh rises steeply up to 0.667x, which overshoots the finest value by 1.8%, and
 converges from above. Over t = 10-30, without the unresolved 2.25x mesh as
 for Sc = 1, the GCI (p = 2, F_s = 1.25) is 0.30% between 0.444x and 0.296x,
 with observed orders of 1.4, 3.0 and 4.0 for the three triplets. The figures
-and the GCI table are made by 2026-11-nek-cst/data/mesh_sensitivity_sc4_pid.py
+and the GCI table are made by 2026-12-single-bubble-dns/data/mesh_sensitivity_sc4_pid.py
 in UCBHEAT/papers. Sh is steady from t = 6 on the two finest meshes, while on
 1x and 0.667x it creeps up with the gas loss as at Sc = 1. The t = 10-15
 averages are within 0.01% of the t = 10-30 means on 0.444x and 0.296x (0.2%
@@ -630,7 +630,7 @@ outside the asymptotic range): the GCI between 0.296x and 0.198x is 4.3%
 (p = 2, F_s = 1.25; 3.2% with the observed order), down from 11% between
 0.444x and 0.296x, and Richardson extrapolation gives Sh = 72.5 (p = 2) or
 73.1 (p = 2.4). The figures and the GCI table are made by
-2026-11-nek-cst/data/mesh_sensitivity_sc20_pid.py in UCBHEAT/papers. On the
+2026-12-single-bubble-dns/data/mesh_sensitivity_sc20_pid.py in UCBHEAT/papers. On the
 finest meshes Sh is steady from t = 6-9: its t = 5-10 and 10-15 averages
 differ by 0.3% on 0.198x, 0.6% on 0.296x and 1.4-1.7% on 0.444x and 0.667x.
 At the Reynolds number of the simulated rise (Re = 264, from the 0.198x rise
@@ -1067,3 +1067,33 @@ labelled "Bo = 4, Sc = 4, 1x (28750 elements)", "0.667x" and "0.444x": the
 Eo = 1 mesh with the same h/D): c4 on the slice and its MTC and Sh, from
 t = 15. On Nk27 the wake has left the z = 0 slice by t = 21.5, as the path
 turns oblique.
+
+## Bo = 20 study: a 13.9 mm bubble (Frontier, November 2026)
+
+A bubble of 20^1/2 = 4.47 capillary lengths (13.94 mm, Eo = 20: Re = 2189,
+We = 53.33, Fr = 1.633 with the same velocity scale), carrying Sc = 1 (c) and
+Sc = 4 (c4), refined until Sh at Sc = 4 has GCI < 5%. Its Kolmogorov length
+is 0.0557 mm (0.0040 D), so Nk60, Nk90 and Nk135 are 2.4, 1.6 and 1.1 times
+it. If it rises at Re ~ 950, near the Davies-Taylor speed of a large bubble
+(0.71 (g D)^1/2, 0.43 times the velocity scale), its Sc = 4 boundary layer
+is about Pe^-1/2 = 0.016 D thick: 1.7, 2.6 and 3.8 GLL spacings on the three
+meshes (at Eo = 1, Sc = 4 and 20 reached GCI < 5% once the finest mesh had
+3.2). Plan: Nk60 from rest to t = 20, then Nk90 and Nk135 (fine cube only,
+the rest as Nk90) from its t = 12 checkpoint to t = 20.
+
+```
+SC=1 SPECIES="4" RE=2189 WE=53.33 R_IFACE=1.25 R_WAKE=1.25 END_TIME=20 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Bo20-pid-prod Nk60:60:2.5e-5:0.5
+```
+
+with `pressureExtOrder = 1` and `traceVelocity = 8` added to [CASEDATA], as
+for Bo = 4. The interface zone and wake column (1.25 D) are a guess for a
+bubble flatter than Bo = 4's, whose rim reached 0.73 D; check the rim's
+distance from the edge of the fine cube (half-width 1.3 on Nk60) in the
+first checkpoints. Nk60 has 278,091 elements (fine cube 39^3); its mesh took
+12 min on a login node, and Nk90 and Nk135 would have 871,563 and 2,026,473.
+Nk60 runs in 24 h extended jobs on 16 nodes (cfd205). Estimated cost, from
+the step-cost model of Running on Frontier times 2-3 for the deforming
+bubble (the Bo = 4 pilot ran at about twice the model): Nk60 400-600
+node-hours, Nk90 900-1,300 and Nk135 3,900-5,900, unless its larger We
+allows a larger time step than the Eo = 1 meshes'.
