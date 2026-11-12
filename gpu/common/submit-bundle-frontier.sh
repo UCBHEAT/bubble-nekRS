@@ -119,15 +119,22 @@ cd $SLURM_SUBMIT_DIR
 echo Jobid: $SLURM_JOB_ID
 echo Running on nodes $SLURM_JOB_NODELIST
 
+# The programming environment nekRS was built with: cpe/24.11 (cray-mpich
+# 8.1.31, PrgEnv-gnu 8.6.0) and ROCm 6.2.4. Since Frontier's November 2026
+# update the defaults are cray-mpich 9.1.0, whose GPU transport layer needs
+# ROCm 7, and ROCm 7.0.2, so the binary would not start. Cray's runtime library
+# path picks the loaded cray-mpich over /opt/cray/pe/lib64, the default's.
 module reset
+module load cpe/24.11
 module load Core/24.07
 module load PrgEnv-gnu
 module load gcc-native/13.2
 module load craype-accel-amd-gfx90a
 module load cray-mpich
-module load rocm
+module load rocm/6.2.4
 module load cmake
 module unload cray-libsci
+export LD_LIBRARY_PATH=$CRAY_LD_LIBRARY_PATH:$LD_LIBRARY_PATH
 module list
 ulimit -s unlimited
 
