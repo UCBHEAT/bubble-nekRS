@@ -1068,6 +1068,50 @@ Eo = 1 mesh with the same h/D): c4 on the slice and its MTC and Sh, from
 t = 15. On Nk27 the wake has left the z = 0 slice by t = 21.5, as the path
 turns oblique.
 
+### Nk90 (November 2026)
+
+Nk90 (h = 4/90, as Eo = 1's 0.296x; 632,949 elements (that mesh's 441,864),
+fine cube 47^3, half-width 1.04; dx = 0.64 lambda_K; the c4 layer across 3.8
+GLL spacings; dt = 1.25e-5) started from the same t = 15 start file as Nk40
+and Nk60 and ran to t = 18:
+
+```
+SC=1 SPECIES="4" RE=654.6 WE=10.67 R_IFACE=1.0 R_WAKE=1.0 END_TIME=18 MAX_MEMORY_GB=24 \
+    PYTHON=... GMSH2NEK=... ./setup-runs.sh ~/answinter26/Bo4-sc4-pilot Nk90:90:1.25e-5:0.5
+```
+
+then by hand, as the pilot's directory is now only on the nfu106 mirror:
+start.fld linked to ../start-Bo4-pid-pilot-Nk27-t15.fld, `startFrom =
+start.fld+int+u+p+s`, `clsFromTls = 15`, `speciesStart = 15`,
+`speciesStartSc = 1`, the pilot's t = 15 row of data.csv, and
+`pressureExtOrder = 1` and `traceVelocity = 8`. It ran on 32 nodes at 0.078
+s per step (1.4 times the step-cost model) in three 2 h batch jobs, 167
+node-hours, and |u| never exceeded 8.
+
+Over the window all four meshes share, t = 16.5-18 (the test matrix's),
+with each mesh's GCI against the one before it, 1.25 |Sh_coarse -
+Sh_fine|/Sh_fine/(1.5^2 - 1) as for Eo = 1 (with r = 1.5 that is the relative
+change):
+
+| Run  | Sh, Sc = 1 | Sh, Sc = 4 | n     | GCI, Sc = 1 | GCI, Sc = 4 | c4 above 1 | area | Re  |
+|------|------------|------------|-------|-------------|-------------|------------|------|-----|
+| Nk27 | 20.93      | 53.25      | 0.674 |             |             | 25%        | 3.77 | 453 |
+| Nk40 | 21.86      | 51.19      | 0.614 | 4.2%        | 4.0%        | 15%        | 4.13 | 436 |
+| Nk60 | 21.88      | 47.38      | 0.557 | 0.1%        | 8.0%        | 8%         | 4.15 | 445 |
+| Nk90 | 22.42      | 47.00      | 0.534 | 2.4%        | 0.8%        | 2%         | 4.07 | 461 |
+
+- At Sc = 4, Nk90 is within 0.8% of Nk60, so Eo = 4 meets the Sc = 4 GCI <
+  5% criterion. n falls on to 0.534, towards the Eo = 1 value (0.487 for the
+  power law fitted to Eo = 1's Richardson extrapolations).
+- Sc = 1 moved by +2.5% instead. Over this window Nk90's rise Reynolds
+  number is 3.6% above Nk60's (461 against 445), which at Sh ~ Re^1/2
+  accounts for most of it: the window is half a period of the shape oscillation (about 3
+  time units), and the runs' oscillations have drifted apart since t = 15,
+  so window means differ by a few percent with the phase as well as with
+  the resolution.
+- c4's overshoot keeps falling with refinement, and c no longer overshoots;
+  at t = 18 no element of Nk90 has c or c4 above 1.1 or below -0.1.
+
 ## Bo = 20 study: a 13.9 mm bubble (Frontier, November 2026)
 
 A bubble of 20^1/2 = 4.47 capillary lengths (13.94 mm, Eo = 20: Re = 2189,
@@ -1078,22 +1122,81 @@ it. If it rises at Re ~ 950, near the Davies-Taylor speed of a large bubble
 (0.71 (g D)^1/2, 0.43 times the velocity scale), its Sc = 4 boundary layer
 is about Pe^-1/2 = 0.016 D thick: 1.7, 2.6 and 3.8 GLL spacings on the three
 meshes (at Eo = 1, Sc = 4 and 20 reached GCI < 5% once the finest mesh had
-3.2). Plan: Nk60 from rest to t = 20, then Nk90 and Nk135 (fine cube only,
-the rest as Nk90) from its t = 12 checkpoint to t = 20.
+3.2).
+
+The plan was Nk60 from rest to t = 20, then Nk90 and Nk135 from its t = 12
+checkpoint. Nk60 blew up at t = 12.34, so Nk90 started from its t = 10
+checkpoint instead and ran to t = 11, and the two are compared over t =
+10.5-11 (method (a) of the test matrix). Nk135 has not run.
 
 ```
 SC=1 SPECIES="4" RE=2189 WE=53.33 R_IFACE=1.25 R_WAKE=1.25 END_TIME=20 PYTHON=... GMSH2NEK=... \
     ./setup-runs.sh ~/answinter26/Bo20-pid-prod Nk60:60:2.5e-5:0.5
+SC=1 SPECIES="4" RE=2189 WE=53.33 R_IFACE=1.25 R_WAKE=1.25 END_TIME=11 \
+    FROM=~/answinter26/Bo20-pid-prod/Nk60 START=10 MAX_MEMORY_GB=24 PYTHON=... GMSH2NEK=... \
+    ./setup-runs.sh ~/answinter26/Bo20-pid-prod Nk90:90:1.25e-5:0.5
 ```
 
 with `pressureExtOrder = 1` and `traceVelocity = 8` added to [CASEDATA], as
-for Bo = 4. The interface zone and wake column (1.25 D) are a guess for a
-bubble flatter than Bo = 4's, whose rim reached 0.73 D; check the rim's
-distance from the edge of the fine cube (half-width 1.3 on Nk60) in the
-first checkpoints. Nk60 has 278,091 elements (fine cube 39^3); its mesh took
-12 min on a login node, and Nk90 and Nk135 would have 871,563 and 2,026,473.
-Nk60 runs in 24 h extended jobs on 16 nodes (cfd205). Estimated cost, from
-the step-cost model of Running on Frontier times 2-3 for the deforming
-bubble (the Bo = 4 pilot ran at about twice the model): Nk60 400-600
-node-hours, Nk90 900-1,300 and Nk135 3,900-5,900, unless its larger We
-allows a larger time step than the Eo = 1 meshes'.
+for Bo = 4. Nk60 has 278,091 elements (fine cube 39^3, half-width 1.30; its
+mesh took 12 min on a login node) and Nk90 871,563 (59^3, half-width 1.31).
+Nk135 would have 2,685,978, or 2,026,473 with only the fine cube refined and
+the rest as Nk90.
+
+### Nk60 from rest
+
+Nk60 ran on 16 nodes at 0.079 s per step, 1.5 times the step-cost model of
+Running on Frontier, far below the 2-3 times estimated beforehand: one
+10.9 h extended job, 174 node-hours, to t = 12.34.
+
+- The bubble never settles. Its area swings between 1.4 and 2.0 times that
+  of the volume-equivalent sphere (t >= 2), its rim sheds small gas
+  fragments from t ~ 4, and it drifts sideways at up to 0.23 (t = 10.6),
+  against a rise speed of about 0.39. The main gas piece reaches 1.0-1.1 D
+  from the centre (t = 10.5-11), inside the fine cube.
+- At t = 12.34 a fragment shed by the rim reached the coarse elements
+  outside the fine cube, and the run blew up. Its checkpoints are in
+  Nk60/part1 (f00000-f00023, t = 0.5-12), and data.csv ends at t = 12.
+- Resetting gas to liquid outside a box just beyond the fine cube
+  (half-width 1.4) did not save it: in a debug test from the t = 12
+  checkpoint (Bo20-pid-tests/Nk60), a fragment straddling the box's face was
+  cut and the velocity blew up within 76 steps. That change was not kept.
+- c and c4 overshoot from t ~ 3, when the bubble starts to deform: c4's
+  c_max averages 1.49 and its c_min -0.43 over t = 10.5-11. The overshoots
+  lie only in elements holding gas or the interface band (psi < 0.99) at
+  the rim and in the fragments, never in the liquid (per-element bounds of
+  the t = 11 checkpoints, Nk60 and Nk90).
+
+### Nk90 from Nk60 at t = 10
+
+Nk90 started from Nk60's t = 10 checkpoint, interpolated, with psi rebuilt
+at its width (`clsFromTls = 10`) and both species continued, and ran to
+t = 11 on 32 nodes at 0.105 s per step (1.5 times the model): 2.3 h of one
+extended job, 75 node-hours. Its bubble follows Nk60's: over t = 10.5-11
+they rise at the same speed and have the same mean interface area within
+0.8%. Over t = 10.5-11:
+
+| Run  | Sh, Sc = 1 | Sh, Sc = 4 | n     | c4 (c) above 1 | area | Re  |
+|------|------------|------------|-------|----------------|------|-----|
+| Nk60 | 36.08      | 93.39      | 0.686 | 49% (14%)      | 4.70 | 972 |
+| Nk90 | 35.04      | 80.77      | 0.603 | 57% (30%)      | 4.66 | 977 |
+
+- GCI (as for Bo = 4): 3.0% at Sc = 1 and 15.6% at Sc = 4, so Eo = 20 has
+  not met the Sc = 4 criterion. With the flow the same on both meshes, the
+  Sc = 4 change is the resolution of its boundary layer (1.7 and 2.6 GLL
+  spacings).
+- Nk90's c4 recovered from the interpolated start by about t = 10.7: its
+  Sh was 0.74-0.78 times Nk60's over t = 10.1-10.5 and 0.86-0.88 times from
+  t = 10.7 on. Over t = 10.7-11 alone the two still differ by 12.5%.
+- |u| exceeded 8 on 29% of Nk90's steps, always in the gas (psi < 0.5; at
+  most 10.3). The samples' u_max averages 7.6 over t = 10.5-11, against 5.8
+  on Nk60.
+- At t = 11 Nk90 has 13 gas pieces (Nk60 3), and one 8-element fragment
+  has already left the fine cube, as Nk60's did before it blew up.
+- Richardson extrapolation of the two meshes with order 2 assumed, an
+  indication only, gives Sh = 34.2 at Sc = 1 and 70.7 at Sc = 4, n = 0.52.
+
+Nk135 from Nk60's t = 10 checkpoint to t = 11, as Nk90 (dt = 6.25e-6,
+scaled from Nk90's measured cost with the step-cost model), would take about
+300 node-hours on 32 nodes with only the fine cube refined (9.5 h), or 390
+with the whole mesh (12 h).
