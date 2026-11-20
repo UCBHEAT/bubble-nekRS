@@ -1,3 +1,21 @@
+// Species: c, at the Schmidt number of case.hpp, and any further scalars
+// named c<Sc> in the .par (e.g. scalars = tls, cls, c, c20, c1150): passive
+// scalars at the Schmidt number in their name, carried by the same flow (c
+// is passive, so the flow does not depend on Sc). Each has its own
+// diffusivity 1/Pe, hard sink, species budget and output: data.csv for c,
+// data-c<Sc>.csv with the same columns for the others (see bubble.udf).
+struct species_t {
+    std::string name;            // scalar name
+    double Pe;                   // Re*Sc
+    std::string csv;             // output file
+    // Species budget since the last sample (see UDF_ExecuteStep).
+    double budget_inflow = 0.0;  // time integral of the net boundary inflow
+    double budget_C0 = 0.0;      // integral of c dV at the window start
+    double budget_flux = 0.0;    // net boundary inflow rate at the last step
+    double sink_removed = 0.0;   // c zeroed by the hard sink in the window
+};
+static std::vector<species_t> species;
+
 void customProperties(double t)
 {
     mesh_t* mesh = nrs->meshV;
@@ -11,12 +29,14 @@ void customProperties(double t)
     // rho = (1.0-psi)/rhoratio + psi
     weightedMixing(info, o_psi, 1.0/rhoratio, 1.0, fluid->o_transportCoeff());
 
-    // Properties for species transport equation: CST is off, so c is a passive
-    // scalar with the liquid diffusivity 1/Pe everywhere (the hard sink in
-    // UDF_ExecuteStep removes it in the gas).
-    platform->linAlg->fill(mesh->Nlocal, 1.0/Pe, scalar->o_diffusionCoeff("c"));
-    // No transport coefficient in c equation.
-    platform->linAlg->fill(mesh->Nlocal, 1.0, scalar->o_transportCoeff("c"));
+    // Properties for the species transport equations: CST is off, so each
+    // species is a passive scalar with the liquid diffusivity 1/Pe everywhere
+    // (the hard sink in UDF_ExecuteStep removes it in the gas).
+    for (const auto& s : species) {
+        platform->linAlg->fill(mesh->Nlocal, 1.0/s.Pe, scalar->o_diffusionCoeff(s.name));
+        // No transport coefficient in the species equations.
+        platform->linAlg->fill(mesh->Nlocal, 1.0, scalar->o_transportCoeff(s.name));
+    }
 
     // nekRS-LS only computes the scalar SVV viscosity when userProperties is
     // unset (nrs_t::evaluateProperties), so compute it here or the [SCALAR *]

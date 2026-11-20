@@ -2,7 +2,7 @@
 """Average the Sherwood number and the bubble's rise over a time window for
 each run directory.
 
-Usage: sherwood.py [--tmin 10] [--tmax 30] [--settle 0.5] [--csv summary.csv] <run dir>...
+Usage: sherwood.py [--tmin 10] [--tmax 30] [--settle 0.5] [--species c20] [--csv summary.csv] <run dir>...
 
 Each data.csv row holds mdot and the rise velocity averaged over the sample
 interval ending at Time, with total_area sampled at Time, so the window
@@ -24,6 +24,9 @@ plateau, which tells how short a run can be (- if Sh still drifts at tmax,
 as on meshes that lose much of their gas). gas is the change of the gas
 volume from the first row to tmax, and snap the part of it the psi snap
 removed (see the README), both in percent of the first row's volume.
+
+--species c<Sc> reads a further species (data-c<Sc>.csv, at the Schmidt
+number in its name) instead of c (data.csv, at the Sc of case.hpp).
 """
 import argparse
 import csv
@@ -52,9 +55,13 @@ def load(path):
     return {k: np.array([float(r[k]) for r in rows]) for k in rows[0]}
 
 
-def summarize(run_dir, tmin, tmax, settle):
+def summarize(run_dir, tmin, tmax, settle, species="c"):
     Re, Sc = case_numbers(run_dir)
-    data = load(os.path.join(run_dir, "data.csv"))
+    if species == "c":
+        data = load(os.path.join(run_dir, "data.csv"))
+    else:
+        Sc = float(species[1:])
+        data = load(os.path.join(run_dir, "data-{}.csv".format(species)))
     t = data["Time"]
     weight = np.diff(t, prepend=0.0)
     interval = np.median(weight)
@@ -116,11 +123,13 @@ def main():
     parser.add_argument("--tmax", type=float, default=30.0)
     parser.add_argument("--settle", type=float, default=0.5,
                         help="tolerance of the settling time in percent (default 0.5)")
+    parser.add_argument("--species", default="c",
+                        help="c (default) or a further species c<Sc>, from data-c<Sc>.csv")
     parser.add_argument("--csv", help="also write the summary to this CSV file")
     parser.add_argument("dirs", nargs="+")
     args = parser.parse_args()
 
-    results = [summarize(d, args.tmin, args.tmax, args.settle) for d in args.dirs]
+    results = [summarize(d, args.tmin, args.tmax, args.settle, args.species) for d in args.dirs]
     print("{:>8} {:>6} {:>9} {:>7} {:>6} {:>6} {:>9} {:>7} {:>7}".format(
         "run", "t_end", "samples", "Sh", "+/-", "std", "Sh(means)", "Sh_sink", "settled"))
     for r in results:

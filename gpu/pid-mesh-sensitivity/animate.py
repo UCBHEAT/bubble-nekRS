@@ -13,6 +13,8 @@ and the rise velocity chart is data.csv's lab-frame rise_v.
       <run dir>/post/post_<first>.csv
   python3 animate.py merge <run dir>
       Join the chunks, unwrap the periodic centroid track -> <run dir>/post.csv
+      (with the liquid statistics of <run dir>/full-domain.csv, if any: see
+      subset-checkpoints.py)
   pvbatch animate.py frames <run dir> <first> <last> <label>
       Render checkpoints first..last-1 -> <run dir>/frames/frame_<i>.png
 
@@ -20,6 +22,11 @@ The look follows answinter26/example/paraview.pvsm: a z = 0 slice colored
 by c, the psi = 0.5 bubble surface, velocity arrows on the slice, and bubble
 rise velocity, MTC and Sh charts with a current time marker. pvbatch needs
 the EGL ParaView on a GPU node.
+
+ANIMATE_SPECIES=c<Sc> shows a further species of the run instead of c: its
+field on the slice and its MTC and Sh (data-c<Sc>.csv) in the charts. The
+charts' time axes start where the run started (data.csv's first row): at 0,
+or at START for a run that setup-runs.sh started FROM another.
 """
 import builtins
 import csv
@@ -30,7 +37,8 @@ import sys
 
 import numpy as np
 
-T_END = 30.0
+T_END = 30.0  # chart time axis when the run's .par has no endTime
+SPECIES = os.environ.get("ANIMATE_SPECIES", "c")
 
 POST_COLUMNS = [
     "Time", "gas_volume", "d_eq", "x_c", "y_c", "z_c",
@@ -74,17 +82,60 @@ def checkpoints(run):
     return sorted(out, key=lambda c: c[1])
 
 
-def chart_max(path, column, default, tmin=1.0):
-    """Chart axis maximum: the default, shared by this study's runs, unless the
-    data after the initial transient peak at more than 2.5 times it or less
-    than a tenth of it (other cases); then a round number just above them."""
-    with open(path) as f:
-        values = [float(r[column]) for r in csv.DictReader(f) if float(r["Time"]) > tmin]
-    top = builtins.max(values) if values else default
-    if 0.1*default <= top <= 2.5*default:
+def end_time(run):
+    """The run's endTime from its .par (T_END if it has none), the end of the
+    chart time axes."""
+    with open(os.path.join(run, case_name(run) + ".par")) as f:
+        for line in f:
+            key, _, value = line.partition("=")
+            if key.strip() == "endTime":
+                return float(value.split("#")[0])
+    return T_END
+
+
+def start_time(run, data="data.csv"):
+    """When the run (or the species of data) started: the time of the data
+    file's first row, rounded down; 0 from rest, START for a run setup-runs.sh
+    started FROM another."""
+    with open(os.path.join(run, data)) as f:
+        first = next(csv.DictReader(f), None)
+    return float(math.floor(float(first["Time"]))) if first else 0.0
+
+
+def species_field(run):
+    """SPECIES's field in the checkpoints, S<n> for the n-th of the .par's
+    scalars (S01 = tls, S02 = cls (psi), S03 = c, then the further species),
+    and its data file."""
+    names = ["tls", "cls", "c"]
+    with open(os.path.join(run, case_name(run) + ".par")) as f:
+        for line in f:
+            key, _, value = line.partition("=")
+            if key.strip() == "scalars":
+                names = [s.strip() for s in value.split("#")[0].split(",")]
+    if SPECIES not in names:
+        sys.exit("{}: no scalar {} in its .par".format(run, SPECIES))
+    data = "data.csv" if SPECIES == "c" else "data-{}.csv".format(SPECIES)
+    return "S{:02d}".format(names.index(SPECIES) + 1), data
+
+
+def chart_max(run, column, default, tmin=1.0, data="data.csv"):
+    """Chart axis maximum, shared by the runs of a study (the run directories
+    next to this one): the default, unless their data after the initial
+    transient (the first tmin time units of each) exceed it, which it would
+    clip, or stay below a fifth of it (another Schmidt number or case); then
+    the round number (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6 or 8 times a power of
+    10) just above 1.1 times their largest value."""
+    top = None
+    for path in glob.glob(os.path.join(os.path.dirname(os.path.abspath(run)), "*", data)):
+        t0 = start_time(os.path.dirname(path), data) + tmin
+        with open(path) as f:
+            values = [float(r[column]) for r in csv.DictReader(f) if float(r["Time"]) > t0]
+        if values:
+            top = builtins.max(values) if top is None else builtins.max([top] + values)
+    if top is None or top <= 0 or 0.2*default <= top <= default:
         return default
-    step = 10.0**math.floor(math.log10(top))
-    return math.ceil(1.1*top/step)*step
+    scale = 10.0**math.floor(math.log10(1.1*top))
+    return builtins.min(m*scale for m in (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10) if m*scale >= 1.1*top)
 
 
 def frame_velocities(run):
@@ -96,10 +147,10 @@ def frame_velocities(run):
     return lambda t: builtins.min(rows, key=lambda row: abs(row[0] - t))[1:]
 
 
-def open_reader(nek):
+def open_reader(nek, field="S03"):
     from paraview.simple import Nek5000Reader
     r = Nek5000Reader(FileName=nek)
-    r.PointArrays = ["Velocity", "S02", "S03"]  # S01 = tls, S02 = cls (psi), S03 = c
+    r.PointArrays = ["Velocity", "S02", field]  # S01 = tls, S02 = cls (psi), S03 = c
     r.UpdatePipelineInformation()
     return r
 
@@ -215,6 +266,21 @@ def merge(run):
         with open(fn) as f:
             rows += [{k: float(v) for k, v in row.items()} for row in csv.DictReader(f)]
     rows.sort(key=lambda row: row["Time"])
+    # A run animated from subset-checkpoints.py's cut-down checkpoints: the
+    # liquid statistics span the whole domain, which the subset lacks.
+    full = os.path.join(run, "full-domain.csv")
+    if os.path.exists(full):
+        with open(full) as f:
+            whole = [{k: float(v) for k, v in row.items()} for row in csv.DictReader(f)]
+        for row in rows:
+            match = [w for w in whole if abs(w["Time"] - row["Time"]) < 1e-9]
+            if len(match) != 1:
+                sys.exit("{}: no single row for t = {}".format(full, row["Time"]))
+            for k in ("u_l", "v_l", "w_l", "max_speed_liquid"):
+                row[k] = match[0][k]
+            row["rise_velocity"] = row["v_b"] - row["v_l"]
+            row["slip_speed"] = math.sqrt(sum((row[b] - row[l])**2 for b, l in
+                                              (("u_b", "u_l"), ("v_b", "v_l"), ("w_b", "w_l"))))
     columns = POST_COLUMNS
     with open(os.path.join(run, "post.csv"), "w") as f:
         w = csv.DictWriter(f, fieldnames=columns, lineterminator="\n")
@@ -229,8 +295,9 @@ def frames(run, first, last, label):
                                  Delete, GetColorTransferFunction, GetScalarBar, Glyph,
                                  ProgrammableSource, SaveScreenshot, Show, Slice, Text)
     cps = checkpoints(run)
+    field, data = species_field(run)
     current = cps[builtins.min(first, len(cps) - 1)][0]
-    r = open_reader(current)
+    r = open_reader(current, field)
     os.makedirs(os.path.join(run, "frames"), exist_ok=True)
 
     rv = CreateView("RenderView")
@@ -257,8 +324,8 @@ def frames(run, first, last, label):
     slc_disp = Show(slc, rv)
     # Unlit, so the oblique slice shows the colormap's own colors.
     slc_disp.Ambient, slc_disp.Diffuse = 1.0, 0.0
-    ColorBy(slc_disp, ("POINTS", "S03"))
-    c_lut = GetColorTransferFunction("S03")
+    ColorBy(slc_disp, ("POINTS", field))
+    c_lut = GetColorTransferFunction(field)
     c_lut.AutomaticRescaleRangeMode = "Never"
     # Light where the liquid is saturated, dark in the depleted wake.
     c_lut.UseLogScale = 0
@@ -266,7 +333,7 @@ def frames(run, first, last, label):
     c_lut.RescaleTransferFunction(0.0, 1.0)
     slc_disp.SetScalarBarVisibility(rv, True)
     c_bar = GetScalarBar(c_lut, rv)
-    c_bar.Title = "c"
+    c_bar.Title = SPECIES
     c_bar.ComponentTitle = ""
     c_bar.WindowLocation = "Lower Right Corner"
 
@@ -316,9 +383,10 @@ def frames(run, first, last, label):
     label_disp.Color = dark
 
     data_csv = CSVReader(FileName=[os.path.join(run, "data.csv")])
-    ymax = {"vel": chart_max(os.path.join(run, "data.csv"), "rise_v", 1.5),
-            "mtc": chart_max(os.path.join(run, "data.csv"), "MTC", 0.2),
-            "sh": chart_max(os.path.join(run, "data.csv"), "Sh", 40.0)}
+    species_csv = data_csv if data == "data.csv" else CSVReader(FileName=[os.path.join(run, data)])
+    ymax = {"vel": chart_max(run, "rise_v", 1.5),
+            "mtc": chart_max(run, "MTC", 0.2, data=data),
+            "sh": chart_max(run, "Sh", 40.0, data=data)}
     marker = ProgrammableSource(OutputDataSetType="vtkTable")
 
     def set_marker(t):
@@ -333,7 +401,9 @@ def frames(run, first, last, label):
     set_marker(0.0)
     marker.UpdatePipeline()
 
-    t_end = builtins.max(T_END, math.ceil(cps[-1][1]))
+    t_start = start_time(run)
+    # The last checkpoint can lie a few steps past endTime (13.000003 on 0.132x).
+    t_end = builtins.max(end_time(run), math.ceil(cps[-1][1] - 1e-3))
 
     def chart(title, src, series, color, ymax, marker_series, bottom_title=""):
         ch = CreateView("XYChartView")
@@ -343,7 +413,7 @@ def frames(run, first, last, label):
         ch.LeftAxisUseCustomRange = 1
         ch.LeftAxisRangeMinimum, ch.LeftAxisRangeMaximum = 0.0, ymax
         ch.BottomAxisUseCustomRange = 1
-        ch.BottomAxisRangeMinimum, ch.BottomAxisRangeMaximum = 0.0, t_end
+        ch.BottomAxisRangeMinimum, ch.BottomAxisRangeMaximum = t_start, t_end
         ch.BottomAxisTitle = bottom_title
         ch.LeftAxisLabelFontSize = ch.BottomAxisLabelFontSize = 20
         ch.BottomAxisTitleFontSize = 22
@@ -363,8 +433,8 @@ def frames(run, first, last, label):
 
     green, red = (0.3, 0.69, 0.29), (0.89, 0.1, 0.11)
     vel_chart = chart("Bubble rise velocity", data_csv, "rise_v", green, ymax["vel"], "vel")
-    mtc_chart = chart("Mass transfer coefficient", data_csv, "MTC", red, ymax["mtc"], "mtc")
-    sh_chart = chart("Sherwood number", data_csv, "Sh", green, ymax["sh"], "sh", "Time")
+    mtc_chart = chart("Mass transfer coefficient", species_csv, "MTC", red, ymax["mtc"], "mtc")
+    sh_chart = chart("Sherwood number", species_csv, "Sh", green, ymax["sh"], "sh", "Time")
 
     # Render view on the left half; the three charts stacked 1:1:2 on the right.
     layout = CreateLayout("animation")
@@ -387,7 +457,7 @@ def frames(run, first, last, label):
         if nek != current:
             # A fresh reader per part: the Nek5000 reader keeps serving the old
             # part's data after a FileName change.
-            old, r = r, open_reader(nek)
+            old, r = r, open_reader(nek, field)
             slc.Input = r
             bubble.Input = r
             Delete(old)

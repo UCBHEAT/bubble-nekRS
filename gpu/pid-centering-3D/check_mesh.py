@@ -487,15 +487,18 @@ def main():
     ap.add_argument("--re2", help="gmsh2nek output to check as well")
     ap.add_argument("--json", help="write the metrics and results here")
     ap.add_argument("--plan", help="read the targets from generate_mesh.py's NAME.plan.json")
-    ap.add_argument("--max_memory_gb", type=float, default=8.0, help="address-space cap (0: none), default 8")
+    ap.add_argument("--max_memory_gb", type=float,
+                    help="address-space cap (0: none), default the plan's max_memory_gb, else 8")
     for k, v in TARGETS.items():
         ap.add_argument(f"--{k}", type=type(v))
     a = ap.parse_args()
-    limit_memory(a.max_memory_gb)
-    t = dict(TARGETS)
+    params = {}
     if a.plan:
         with open(a.plan) as f:
-            t.update({k: v for k, v in json.load(f)["parameters"].items() if k in TARGETS})
+            params = json.load(f)["parameters"]
+    limit_memory(a.max_memory_gb if a.max_memory_gb is not None else params.get("max_memory_gb", 8.0))
+    t = dict(TARGETS)
+    t.update({k: v for k, v in params.items() if k in TARGETS})
     t.update({k: getattr(a, k) for k in TARGETS if getattr(a, k) is not None})
     m = measure(load_msh(a.msh), t)
     res = evaluate(m, t)
